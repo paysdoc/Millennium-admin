@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/validate-command.js"
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "node .cursor/hooks/log-command.js"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "node .cursor/hooks/prevent-env-access.js"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "node .cursor/hooks/quality-gate.js"
+      }
+    ]
+  }
+}
+
+
