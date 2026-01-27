@@ -4,32 +4,34 @@
 
 import * as path from 'path';
 import { GitHubIssue } from './dataTypes';
-import { runClaudeAgent, AgentResult } from './claudeAgent';
-import { getPlanFilePath } from './planAgent';
+import { runClaudeAgent, AgentResult, ProgressCallback } from './claudeAgent';
+import { log } from './utils';
 
 /**
  * Builds the prompt for the Build Agent.
  */
-export function buildImplementPrompt(issue: GitHubIssue, planPath: string): string {
-  return `You are a Build Agent. Your job is to implement the solution based on the implementation plan.
+export function buildImplementPrompt(issue: GitHubIssue, planContent: string): string {
+  return `You are a Build Agent. Your job is to implement the solution based on the implementation plan below.
 
 ## GitHub Issue #${issue.number}
 **Title:** ${issue.title}
 **URL:** ${issue.url}
 
+## Implementation Plan
+${planContent}
+
 ## Instructions
 
-1. Read the implementation plan at: ${planPath}
-2. Follow the plan step-by-step to implement the solution
-3. Run all validation commands from the plan to ensure the implementation is correct
+1. Follow the implementation plan step-by-step
+2. Make all necessary code changes as specified in the plan
+3. Run the validation commands from the plan to verify correctness
 4. Ensure all tests pass and there are no regressions
 
-Use the /implement command with the plan path to execute the implementation.
-
-After implementation is complete, provide a summary of:
+## After Implementation
+Provide a summary of:
 - What was implemented
 - Files changed/created
-- Tests run and their results
+- Validation results
 - Any issues encountered and how they were resolved
 
 IMPORTANT: Follow the plan exactly. Run validation commands to verify the implementation.`;
@@ -40,11 +42,20 @@ IMPORTANT: Follow the plan exactly. Run validation commands to verify the implem
  */
 export async function runBuildAgent(
   issue: GitHubIssue,
-  logsDir: string
+  logsDir: string,
+  planContent: string,
+  onProgress?: ProgressCallback
 ): Promise<AgentResult> {
-  const planPath = getPlanFilePath(issue.number);
-  const prompt = buildImplementPrompt(issue, planPath);
+  const prompt = buildImplementPrompt(issue, planContent);
   const outputFile = path.join(logsDir, 'build-agent.jsonl');
 
-  return runClaudeAgent(prompt, 'Build', outputFile, 'opus');
+  // Log the arguments with which the agent is started
+  log('Build Agent starting with arguments:', 'info');
+  log(`  Issue: #${issue.number} - ${issue.title}`, 'info');
+  log(`  Issue URL: ${issue.url}`, 'info');
+  log(`  Output file: ${outputFile}`, 'info');
+  log(`  Plan content length: ${planContent.length} characters`, 'info');
+  log(`  Model: opus`, 'info');
+
+  return runClaudeAgent(prompt, 'Build', outputFile, 'opus', onProgress);
 }

@@ -17,6 +17,23 @@ export interface AgentResult {
 }
 
 /**
+ * Progress information passed to the progress callback.
+ */
+export interface ProgressInfo {
+  type: 'tool_use' | 'text' | 'summary';
+  toolName?: string;
+  toolInput?: string;
+  text?: string;
+  turnCount?: number;
+  toolCount?: number;
+}
+
+/**
+ * Callback function for progress updates during agent execution.
+ */
+export type ProgressCallback = (info: ProgressInfo) => void;
+
+/**
  * Extracts text content from Claude assistant messages.
  */
 function extractTextFromAssistantMessage(message: any): string {
@@ -32,11 +49,30 @@ function extractTextFromAssistantMessage(message: any): string {
 }
 
 /**
+ * Extracts tool use information from an assistant message.
+ */
+function extractToolUseFromMessage(message: any): { name: string; input: string }[] {
+  const tools: { name: string; input: string }[] = [];
+  if (message?.content) {
+    for (const block of message.content) {
+      if (block.type === 'tool_use') {
+        const inputSummary = typeof block.input === 'object'
+          ? JSON.stringify(block.input).substring(0, 200)
+          : String(block.input).substring(0, 200);
+        tools.push({ name: block.name, input: inputSummary });
+      }
+    }
+  }
+  return tools;
+}
+
+/**
  * Parses JSONL output from Claude and extracts result information.
  */
 function parseJsonlOutput(
   text: string,
-  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string }
+  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number },
+  onProgress?: ProgressCallback
 ): void {
   const lines = text.split('\n').filter(line => line.trim());
 
@@ -49,7 +85,33 @@ function parseJsonlOutput(
       }
 
       if (parsed.type === 'assistant') {
+        state.turnCount++;
         state.fullOutput += extractTextFromAssistantMessage(parsed.message);
+
+        // Extract and report tool usage
+        const toolUses = extractToolUseFromMessage(parsed.message);
+        for (const tool of toolUses) {
+          state.toolCount++;
+          if (onProgress) {
+            onProgress({
+              type: 'tool_use',
+              toolName: tool.name,
+              toolInput: tool.input,
+              turnCount: state.turnCount,
+              toolCount: state.toolCount,
+            });
+          }
+        }
+
+        // Report text content if present (for status updates)
+        const textContent = extractTextFromAssistantMessage(parsed.message).trim();
+        if (textContent && onProgress) {
+          onProgress({
+            type: 'text',
+            text: textContent.substring(0, 500),
+            turnCount: state.turnCount,
+          });
+        }
       }
     } catch {
       state.fullOutput += line + '\n';
@@ -65,7 +127,8 @@ export async function runClaudeAgent(
   prompt: string,
   agentName: string,
   outputFile: string,
-  model: string = 'sonnet'
+  model: string = 'sonnet',
+  onProgress?: ProgressCallback
 ): Promise<AgentResult> {
   return new Promise((resolve) => {
     const args = [
@@ -76,6 +139,10 @@ export async function runClaudeAgent(
     ];
 
     log(`Starting ${agentName} agent...`, 'info');
+    log(`  Command: ${CLAUDE_CODE_PATH} ${args.join(' ')}`, 'info');
+    log(`  Model: ${model}`, 'info');
+    log(`  Output file: ${outputFile}`, 'info');
+    log(`  Prompt length: ${prompt.length} characters`, 'info');
 
     const claude = spawn(CLAUDE_CODE_PATH, args, {
       cwd: process.cwd(),
@@ -88,7 +155,9 @@ export async function runClaudeAgent(
 
     const state = {
       lastResult: null as ClaudeCodeResultMessage | null,
-      fullOutput: ''
+      fullOutput: '',
+      turnCount: 0,
+      toolCount: 0,
     };
 
     const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
@@ -96,7 +165,7 @@ export async function runClaudeAgent(
     claude.stdout.on('data', (data: Buffer) => {
       const text = data.toString();
       outputStream.write(text);
-      parseJsonlOutput(text, state);
+      parseJsonlOutput(text, state, onProgress);
     });
 
     claude.stderr.on('data', (data: Buffer) => {
@@ -108,8 +177,25 @@ export async function runClaudeAgent(
     claude.on('close', (code) => {
       outputStream.end();
 
+      // Log final summary
+      log(`${agentName} agent finished:`, 'info');
+      log(`  Exit code: ${code}`, 'info');
+      log(`  Total turns: ${state.turnCount}`, 'info');
+      log(`  Total tool calls: ${state.toolCount}`, 'info');
+
+      if (onProgress) {
+        onProgress({
+          type: 'summary',
+          turnCount: state.turnCount,
+          toolCount: state.toolCount,
+        });
+      }
+
       if (code === 0 && state.lastResult) {
         log(`${agentName} completed successfully`, 'success');
+        if (state.lastResult.totalCostUsd) {
+          log(`  Cost: $${state.lastResult.totalCostUsd.toFixed(4)}`, 'info');
+        }
         resolve({
           success: !state.lastResult.isError,
           output: state.lastResult.result || state.fullOutput,

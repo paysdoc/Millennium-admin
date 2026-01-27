@@ -159,6 +159,7 @@ export interface ClaudeCodeResultMessage {
  */
 export type WorkflowStage =
   | 'starting'
+  | 'resuming'
   | 'classified'
   | 'branch_created'
   | 'plan_building'
@@ -166,9 +167,28 @@ export type WorkflowStage =
   | 'plan_file_created'
   | 'plan_committing'
   | 'implementing'
+  | 'build_progress'
   | 'implemented'
   | 'implementation_committing'
   | 'pr_creating'
   | 'pr_created'
   | 'completed'
   | 'error';
+
+/**
+ * Recovery state for resuming a workflow from a previous run.
+ */
+export interface RecoveryState {
+  /** The last successfully completed stage */
+  lastCompletedStage: WorkflowStage | null;
+  /** The ADW ID from the previous run (extracted from comments) */
+  adwId: string | null;
+  /** The branch name from previous run */
+  branchName: string | null;
+  /** The plan file path from previous run */
+  planPath: string | null;
+  /** The PR URL if already created */
+  prUrl: string | null;
+  /** Whether recovery is possible */
+  canResume: boolean;
+}
