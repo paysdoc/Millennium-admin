@@ -153,3 +153,22 @@ export interface ClaudeCodeResultMessage {
   sessionId: string;
   totalCostUsd: number;
 }
+
+/**
+ * Workflow stages for ADW progress tracking.
+ */
+export type WorkflowStage =
+  | 'starting'
+  | 'classified'
+  | 'branch_created'
+  | 'plan_building'
+  | 'plan_created'
+  | 'plan_file_created'
+  | 'plan_committing'
+  | 'implementing'
+  | 'implemented'
+  | 'implementation_committing'
+  | 'pr_creating'
+  | 'pr_created'
+  | 'completed'
+  | 'error';

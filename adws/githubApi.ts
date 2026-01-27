@@ -110,11 +110,8 @@ export function commentOnIssue(issueNumber: number, body: string): void {
 
   try {
     execSync(
-      `gh issue comment ${issueNumber} --repo ${owner}/${repo} --body "$(cat <<'EOF'
-${body}
-EOF
-)"`,
-      { encoding: 'utf-8', stdio: 'pipe', shell: '/bin/bash' }
+      `gh issue comment ${issueNumber} --repo ${owner}/${repo} --body-file -`,
+      { encoding: 'utf-8', input: body, stdio: ['pipe', 'pipe', 'pipe'] }
     );
     log(`Commented on issue #${issueNumber}`, 'success');
   } catch (error) {
