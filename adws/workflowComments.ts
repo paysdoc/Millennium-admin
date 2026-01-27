@@ -3,9 +3,188 @@
  * Centralizes all GitHub issue comment templates for ADW workflow stages.
  */
 
-import { WorkflowStage, IssueClassSlashCommand } from './dataTypes';
+import { WorkflowStage, IssueClassSlashCommand, RecoveryState, GitHubComment } from './dataTypes';
 import { commentOnIssue } from './githubApi';
 import { log } from './utils';
+
+/**
+ * Stage order for determining recovery resume point.
+ */
+export const STAGE_ORDER: WorkflowStage[] = [
+  'starting',
+  'resuming',
+  'classified',
+  'branch_created',
+  'plan_building',
+  'plan_created',
+  'plan_file_created',
+  'plan_committing',
+  'implementing',
+  'build_progress',
+  'implemented',
+  'implementation_committing',
+  'pr_creating',
+  'pr_created',
+  'completed',
+];
+
+/**
+ * Maps comment header patterns to workflow stages.
+ */
+const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
+  ':rocket: ADW Workflow Started': 'starting',
+  ':arrows_counterclockwise: ADW Workflow Resuming': 'resuming',
+  ':mag: Issue Classified': 'classified',
+  ':seedling: Branch Created': 'branch_created',
+  ':pencil: Building Implementation Plan': 'plan_building',
+  ':white_check_mark: Implementation Plan Created': 'plan_created',
+  ':page_facing_up: Plan File Created': 'plan_file_created',
+  ':floppy_disk: Committing Plan': 'plan_committing',
+  ':hammer_and_wrench: Implementing Solution': 'implementing',
+  ':white_check_mark: Implementation Complete': 'implemented',
+  ':floppy_disk: Committing Implementation': 'implementation_committing',
+  ':memo: Creating Pull Request': 'pr_creating',
+  ':link: Pull Request Created': 'pr_created',
+  ':tada: ADW Workflow Completed': 'completed',
+  ':x: ADW Workflow Error': 'error',
+};
+
+/**
+ * Parses a workflow stage from a comment body.
+ * Returns null if the comment is not a workflow comment.
+ */
+export function parseWorkflowStageFromComment(commentBody: string): WorkflowStage | null {
+  // Check if this is an ADW workflow comment (starts with ## : and contains ADW ID:)
+  if (!commentBody.includes('ADW ID:')) {
+    return null;
+  }
+
+  // Extract the header line (e.g., "## :rocket: ADW Workflow Started")
+  const headerMatch = commentBody.match(/^## (:[a-z_]+: .+)$/m);
+  if (!headerMatch) {
+    return null;
+  }
+
+  const header = headerMatch[1];
+  return STAGE_HEADER_MAP[header] || null;
+}
+
+/**
+ * Extracts the ADW ID from a comment body.
+ * Pattern: `adw-{timestamp}-{random}`
+ */
+export function extractAdwIdFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`(adw-\d+-[a-z0-9]+)`/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extracts the branch name from a comment body.
+ * Pattern: `feature/issue-{number}-{slug}`
+ */
+export function extractBranchNameFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`(feature\/issue-\d+[a-z0-9-]*)`/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extracts the PR URL from a comment body.
+ */
+export function extractPrUrlFromComment(commentBody: string): string | null {
+  // PR URLs are typically in format: https://github.com/owner/repo/pull/123
+  const match = commentBody.match(/(https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extracts the plan file path from a comment body.
+ * Pattern: `specs/issue-{number}-plan.md`
+ */
+export function extractPlanPathFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`(specs\/issue-\d+-plan\.md)`/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Detects recovery state from GitHub comments.
+ * Returns information about the last completed stage and extracted context.
+ */
+export function detectRecoveryState(comments: GitHubComment[]): RecoveryState {
+  const defaultState: RecoveryState = {
+    lastCompletedStage: null,
+    adwId: null,
+    branchName: null,
+    planPath: null,
+    prUrl: null,
+    canResume: false,
+  };
+
+  // Filter to only ADW workflow comments
+  const adwComments = comments.filter(c => parseWorkflowStageFromComment(c.body) !== null);
+
+  if (adwComments.length === 0) {
+    return defaultState;
+  }
+
+  // Sort by createdAt descending (most recent first)
+  const sortedComments = [...adwComments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  // Get the most recent comment
+  const mostRecentComment = sortedComments[0];
+  const mostRecentStage = parseWorkflowStageFromComment(mostRecentComment.body);
+
+  // If the most recent stage is 'completed', no recovery needed
+  if (mostRecentStage === 'completed') {
+    return defaultState;
+  }
+
+  // If the most recent stage is 'error', find the last successful stage before error
+  let lastCompletedStage: WorkflowStage | null = null;
+  let adwId: string | null = null;
+  let branchName: string | null = null;
+  let planPath: string | null = null;
+  let prUrl: string | null = null;
+
+  // Extract all data from comments (oldest to newest to capture latest values)
+  for (const comment of sortedComments.reverse()) {
+    const stage = parseWorkflowStageFromComment(comment.body);
+    if (!stage || stage === 'error') continue;
+
+    // Track the last completed stage (excluding in-progress stages)
+    const stageIndex = STAGE_ORDER.indexOf(stage);
+    const lastIndex = lastCompletedStage ? STAGE_ORDER.indexOf(lastCompletedStage) : -1;
+    if (stageIndex > lastIndex) {
+      lastCompletedStage = stage;
+    }
+
+    // Extract context data from comments
+    const extractedAdwId = extractAdwIdFromComment(comment.body);
+    if (extractedAdwId) adwId = extractedAdwId;
+
+    const extractedBranch = extractBranchNameFromComment(comment.body);
+    if (extractedBranch) branchName = extractedBranch;
+
+    const extractedPlanPath = extractPlanPathFromComment(comment.body);
+    if (extractedPlanPath) planPath = extractedPlanPath;
+
+    const extractedPrUrl = extractPrUrlFromComment(comment.body);
+    if (extractedPrUrl) prUrl = extractedPrUrl;
+  }
+
+  // Can resume if we have a last completed stage and it's not the final stage
+  const canResume = lastCompletedStage !== null && lastCompletedStage !== 'completed';
+
+  return {
+    lastCompletedStage,
+    adwId,
+    branchName,
+    planPath,
+    prUrl,
+    canResume,
+  };
+}
 
 /**
  * Context information for workflow comments.
@@ -20,6 +199,15 @@ export interface WorkflowContext {
   buildOutput?: string;
   prUrl?: string;
   errorMessage?: string;
+  /** The stage from which the workflow is being resumed (for recovery) */
+  resumeFrom?: WorkflowStage;
+  /** Build progress information */
+  buildProgress?: {
+    turnCount: number;
+    toolCount: number;
+    lastToolName?: string;
+    lastText?: string;
+  };
 }
 
 /**
@@ -143,6 +331,38 @@ Running Build Agent to implement the solution...
 }
 
 /**
+ * Formats the build progress comment.
+ */
+function formatBuildProgressComment(ctx: WorkflowContext): string {
+  const progress = ctx.buildProgress;
+  if (!progress) {
+    return `## :gear: Build Progress
+
+Build in progress...
+
+**ADW ID:** \`${ctx.adwId}\``;
+  }
+
+  const lastAction = progress.lastToolName
+    ? `Last action: \`${progress.lastToolName}\``
+    : '';
+
+  const statusText = progress.lastText
+    ? truncateText(progress.lastText, 300)
+    : '';
+
+  return `## :gear: Build Progress
+
+**Turns completed:** ${progress.turnCount}
+**Tool calls made:** ${progress.toolCount}
+${lastAction}
+
+${statusText ? `**Status:**\n${statusText}` : ''}
+
+**ADW ID:** \`${ctx.adwId}\``;
+}
+
+/**
  * Formats the implemented comment.
  */
 function formatImplementedComment(ctx: WorkflowContext): string {
@@ -227,12 +447,26 @@ Please check the logs for more details.`;
 }
 
 /**
+ * Formats the resuming workflow comment.
+ */
+export function formatResumingComment(ctx: WorkflowContext, resumeFrom: WorkflowStage): string {
+  return `## :arrows_counterclockwise: ADW Workflow Resuming
+
+Resuming automated development workflow from previous run.
+
+**Resuming from:** ${resumeFrom}
+**ADW ID:** \`${ctx.adwId}\``;
+}
+
+/**
  * Formats a workflow comment for the given stage.
  */
 export function formatWorkflowComment(stage: WorkflowStage, ctx: WorkflowContext): string {
   switch (stage) {
     case 'starting':
       return formatStartingComment(ctx);
+    case 'resuming':
+      return formatResumingComment(ctx, ctx.resumeFrom || 'starting');
     case 'classified':
       return formatClassifiedComment(ctx);
     case 'branch_created':
@@ -247,6 +481,8 @@ export function formatWorkflowComment(stage: WorkflowStage, ctx: WorkflowContext
       return formatPlanCommittingComment(ctx);
     case 'implementing':
       return formatImplementingComment(ctx);
+    case 'build_progress':
+      return formatBuildProgressComment(ctx);
     case 'implemented':
       return formatImplementedComment(ctx);
     case 'implementation_committing':

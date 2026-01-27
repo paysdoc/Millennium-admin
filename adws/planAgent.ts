@@ -2,6 +2,7 @@
  * Plan Agent - Generates implementation plans from GitHub issues.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import { GitHubIssue, IssueClassSlashCommand } from './dataTypes';
 import { runClaudeAgent, AgentResult } from './claudeAgent';
@@ -69,6 +70,20 @@ IMPORTANT: Focus only on planning. Do not implement any code changes. Create the
  */
 export function getPlanFilePath(issueNumber: number): string {
   return `specs/issue-${issueNumber}-plan.md`;
+}
+
+/**
+ * Checks if the plan file exists for an issue.
+ * Returns true if the file exists and has content.
+ */
+export function planFileExists(issueNumber: number): boolean {
+  const planPath = getPlanFilePath(issueNumber);
+  try {
+    const stats = fs.statSync(planPath);
+    return stats.isFile() && stats.size > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
