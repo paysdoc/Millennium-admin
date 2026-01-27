@@ -1,3 +1,4 @@
+
 /**
  * Claude Code agent runner for executing AI agents.
  */
@@ -69,9 +70,9 @@ export async function runClaudeAgent(
   return new Promise((resolve) => {
     const args = [
       '--print',
+      '--verbose',
       '--output-format', 'stream-json',
-      '--model', model,
-      '--prompt', prompt
+      '--model', model
     ];
 
     log(`Starting ${agentName} agent...`, 'info');
@@ -80,6 +81,10 @@ export async function runClaudeAgent(
       cwd: process.cwd(),
       env: { ...process.env }
     });
+
+    // Write prompt to stdin and close it
+    claude.stdin.write(prompt);
+    claude.stdin.end();
 
     const state = {
       lastResult: null as ClaudeCodeResultMessage | null,
