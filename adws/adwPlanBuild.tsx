@@ -17,12 +17,76 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
+import * as path from 'path';
 import { log, generateAdwId, ensureLogsDirectory } from './utils';
 import { fetchGitHubIssue, commentOnIssue } from './githubApi';
 import { createFeatureBranch, commitChanges } from './gitOperations';
 import { runPlanAgent, getPlanFilePath } from './planAgent';
 import { runBuildAgent } from './buildAgent';
 import { createPullRequest } from './pullRequestCreator';
+import { runClaudeAgent } from './claudeAgent';
+import { GitHubIssue, IssueClassSlashCommand } from './dataTypes';
+
+/**
+ * Classifies a GitHub issue as feature, bug, or chore using the haiku model.
+ */
+async function classifyIssue(issue: GitHubIssue, logsDir: string): Promise<IssueClassSlashCommand> {
+  const labelsText = issue.labels.map(l => l.name).join(', ') || 'none';
+
+  const prompt = `Based on the Github Issue below, follow the Instructions to select the appropriate command to execute based on the Command Mapping.
+
+## Instructions
+
+- Based on the details in the Github Issue, select the appropriate command to execute.
+- Respond exclusively with '/' followed by the command to execute.
+- Use the command mapping to help you decide which command to respond with.
+- Think hard about the command to execute.
+
+## Command Mapping
+
+- Respond with /chore if the issue is a chore.
+- Respond with /bug if the issue is a bug.
+- Respond with /feature if the issue is a feature.
+- Respond with 0 if the issue isn't any of the above.
+
+## Github Issue
+
+**Title:** ${issue.title}
+**Labels:** ${labelsText}
+
+${issue.body || 'No description provided.'}`;
+
+  const outputFile = path.join(logsDir, 'classifier-agent.jsonl');
+  const result = await runClaudeAgent(prompt, 'Classifier', outputFile, 'haiku');
+
+  if (!result.success) {
+    log('Classification failed, defaulting to /feature', 'info');
+    return '/feature';
+  }
+
+  const output = result.output.trim();
+  const validCommands: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore'];
+
+  for (const cmd of validCommands) {
+    if (output.includes(cmd)) {
+      return cmd;
+    }
+  }
+
+  if (output === '0') {
+    log('Issue classified as unknown type, defaulting to /feature', 'info');
+    return '/feature';
+  }
+
+  log('Could not parse classification result, defaulting to /feature', 'info');
+  return '/feature';
+}
+
+const commitPrefixMap: Record<IssueClassSlashCommand, string> = {
+  '/feature': 'feat:',
+  '/bug': 'fix:',
+  '/chore': 'chore:',
+};
 
 /**
  * Formats a plan completion comment for the GitHub issue.
@@ -167,6 +231,11 @@ async function main(): Promise<void> {
     const issue = await fetchGitHubIssue(issueNumber);
     log(`Fetched issue: ${issue.title}`, 'success');
 
+    // Step 1.5: Classify issue type
+    log('Classifying issue type...', 'info');
+    const issueType = await classifyIssue(issue, logsDir);
+    log(`Issue classified as: ${issueType}`, 'success');
+
     // Step 2: Create feature branch
     log('Creating feature branch...', 'info');
     const branchName = createFeatureBranch(issueNumber, issue.title);
@@ -174,14 +243,14 @@ async function main(): Promise<void> {
 
     // Step 3: Run Plan Agent
     log('Running Plan Agent...', 'info');
-    const planResult = await runPlanAgent(issue, logsDir);
+    const planResult = await runPlanAgent(issue, logsDir, issueType);
 
     if (!planResult.success) {
       throw new Error(`Plan Agent failed: ${planResult.output}`);
     }
 
     // Commit plan
-    const planCommitted = commitChanges(`chore: add implementation plan for #${issueNumber}`);
+    const planCommitted = commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`);
 
     if (planCommitted) {
       const planComment = formatPlanComment(issueNumber, branchName, adwId, planResult.output);

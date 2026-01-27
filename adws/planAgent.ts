@@ -3,7 +3,7 @@
  */
 
 import * as path from 'path';
-import { GitHubIssue } from './dataTypes';
+import { GitHubIssue, IssueClassSlashCommand } from './dataTypes';
 import { runClaudeAgent, AgentResult } from './claudeAgent';
 
 /**
@@ -35,7 +35,7 @@ ${commentsSection}
 /**
  * Builds the prompt for the Plan Agent.
  */
-export function buildPlanPrompt(issue: GitHubIssue): string {
+export function buildPlanPrompt(issue: GitHubIssue, issueType: IssueClassSlashCommand = '/feature'): string {
   const issueContext = formatIssueContext(issue);
 
   return `You are a Plan Agent. Your job is to analyze the following GitHub issue and create a detailed implementation plan.
@@ -48,7 +48,7 @@ ${issueContext}
 2. Research the codebase to understand existing patterns and architecture
 3. Create a comprehensive implementation plan in specs/issue-${issue.number}-plan.md
 
-Use the /feature command format to create the plan. The plan should include:
+Use the ${issueType} command format to create the plan. The plan should include:
 - Feature description
 - User story
 - Problem and solution statements
@@ -76,9 +76,10 @@ export function getPlanFilePath(issueNumber: number): string {
  */
 export async function runPlanAgent(
   issue: GitHubIssue,
-  logsDir: string
+  logsDir: string,
+  issueType: IssueClassSlashCommand = '/feature'
 ): Promise<AgentResult> {
-  const prompt = buildPlanPrompt(issue);
+  const prompt = buildPlanPrompt(issue, issueType);
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
   return runClaudeAgent(prompt, 'Plan', outputFile, 'opus');
