@@ -10,6 +10,14 @@ First, install the dependencies:
 npm install
 ```
 
+Then, copy the environment sample file and fill in your values:
+
+```bash
+cp .env.sample .env
+```
+
+Edit `.env` with your actual credentials (see `.env.sample` for required variables).
+
 Then, run the development server:
 
 ```bash
@@ -20,13 +28,18 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Project Structure
 
-- `app/` - Next.js App Router directory
+- `src/app/` - Next.js App Router directory
   - `layout.tsx` - Root layout component
   - `page.tsx` - Home page
-  - `globals.css` - Global Wikipedia-style styles
+  - `globals.css` - Global styles
   - `pages/` - Pages management
   - `users/` - Users management
   - `settings/` - Settings page
+- `adws/` - AI Developer Workflow Scripts (TypeScript)
+  - Agent orchestration, git operations, GitHub API, PR creation
+- `prompts/` - Coding guidelines
+- `.claude/` - Claude Code configuration (commands, hooks, settings)
+- `.github/workflows/` - CI/CD pipeline
 
 ## Features
 
