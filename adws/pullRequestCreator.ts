@@ -3,6 +3,9 @@
  */
 
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { GitHubIssue } from './dataTypes';
 import { getRepoInfo } from './githubApi';
 import { getCurrentBranch, pushBranch } from './gitOperations';
@@ -56,14 +59,16 @@ export function createPullRequest(
   const prBody = generatePrBody(issue, planSummary, buildSummary);
   const prTitle = generatePrTitle(issue);
 
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adw-pr-'));
+  const tempFilePath = path.join(tempDir, 'pr-body.md');
+
   try {
+    fs.writeFileSync(tempFilePath, prBody, 'utf-8');
+
     pushBranch(branchName);
 
     const prUrl = execSync(
-      `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body "$(cat <<'EOF'
-${prBody}
-EOF
-)" --base ${baseBranch}`,
+      `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body-file "${tempFilePath}" --base ${baseBranch}`,
       { encoding: 'utf-8', shell: '/bin/bash' }
     ).trim();
 
@@ -72,5 +77,12 @@ EOF
   } catch (error) {
     log(`Note: ${error}`, 'info');
     return '';
+  } finally {
+    try {
+      fs.unlinkSync(tempFilePath);
+      fs.rmdirSync(tempDir);
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
