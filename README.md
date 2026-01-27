@@ -37,7 +37,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
   - `settings/` - Settings page
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
   - Agent orchestration, git operations, GitHub API, PR creation
-- `prompts/` - Coding guidelines
+- `guidelines/` - Coding guidelines
 - `.claude/` - Claude Code configuration (commands, hooks, settings)
 - `.github/workflows/` - CI/CD pipeline
 

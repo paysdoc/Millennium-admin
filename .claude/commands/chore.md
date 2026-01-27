@@ -6,7 +6,7 @@ Create a new plan in specs/*.md to resolve the `Chore` using the exact specified
 
 - IMPORTANT: You're writing a plan to resolve a chore based on the `Chore` that will add value to the application.
 - IMPORTANT: The `Chore` describes the chore that will be resolved but remember we're not resolving the chore, we're creating the plan that will be used to resolve the chore based on the `Plan Format` below.
-- IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/prompts`.
+- IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
 - You're writing a plan to resolve a chore, it should be simple but we need to be thorough and precise so we don't miss anything or waste time with any second round of changes.
 - Create the plan in the `specs/*.md` file. Name it appropriately based on the `Chore`.
 - Use the plan format below to create the plan.
@@ -14,7 +14,7 @@ Create a new plan in specs/*.md to resolve the `Chore` using the exact specified
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to accomplish the chore.
 - Use your reasoning model: THINK HARD about the plan and the steps to accomplish the chore.
 - Respect requested files in the `Relevant Files` section.
-- Start your research by reading the `README.md` file and the coding guidelines in `/prompts`.
+- Start your research by reading the `README.md` file and the coding guidelines in `/guidelines`.
 - `adws/*.py` contain astral uv single file python scripts. So if you want to run them use `uv run <script_name>`.
 - When you finish creating the plan for the chore, follow the `Report` section to properly report the results of your work.
 
@@ -22,7 +22,7 @@ Create a new plan in specs/*.md to resolve the `Chore` using the exact specified
 
 Focus on the following files:
 - `README.md` - Contains the project overview and instructions.
-- `prompts/**` - Contains coding guidelines that must be followed.
+- `guidelines/**` - Contains coding guidelines that must be followed.
 - `src/app/**` - Contains Next.js App Router pages, layouts, and route handlers.
 - `src/components/**` - Contains React components.
 - `src/lib/**` - Contains utility functions and shared logic.

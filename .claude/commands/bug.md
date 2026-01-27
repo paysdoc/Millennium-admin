@@ -6,7 +6,7 @@ Create a new plan in specs/*.md to resolve the `Bug` using the exact specified m
 
 - IMPORTANT: You're writing a plan to resolve a bug based on the `Bug` that will add value to the application.
 - IMPORTANT: The `Bug` describes the bug that will be resolved but remember we're not resolving the bug, we're creating the plan that will be used to resolve the bug based on the `Plan Format` below.
-- IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/prompts`.
+- IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
 - You're writing a plan to resolve a bug, it should be thorough and precise so we fix the root cause and prevent regressions.
 - Create the plan in the `specs/*.md` file. Name it appropriately based on the `Bug`.
 - Use the plan format below to create the plan.
@@ -18,13 +18,13 @@ Create a new plan in specs/*.md to resolve the `Bug` using the exact specified m
 - Don't use decorators. Keep it simple.
 - If you need a new library, use `uv add` and be sure to report it in the `Notes` section of the `Plan Format`.
 - Respect requested files in the `Relevant Files` section.
-- Start your research by reading the `README.md` file and the coding guidelines in `/prompts`.
+- Start your research by reading the `README.md` file and the coding guidelines in `/guidelines`.
 
 ## Relevant Files
 
 Focus on the following files:
 - `README.md` - Contains the project overview and instructions.
-- `prompts/**` - Contains coding guidelines that must be followed.
+- `guidelines/**` - Contains coding guidelines that must be followed.
 - `src/app/**` - Contains Next.js App Router pages, layouts, and route handlers.
 - `src/components/**` - Contains React components.
 - `src/lib/**` - Contains utility functions and shared logic.
