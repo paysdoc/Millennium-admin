@@ -2,7 +2,11 @@
  * Configuration constants for ADW Plan & Build workflow.
  */
 
+import * as dotenv from 'dotenv';
 import * as path from 'path';
+
+// Load environment variables from .env file at project root
+dotenv.config();
 
 /** Path to the Claude CLI executable. */
 export const CLAUDE_CODE_PATH = process.env.CLAUDE_CODE_PATH || '/usr/local/bin/claude';
