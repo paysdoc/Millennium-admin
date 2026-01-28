@@ -9,8 +9,10 @@
     "lint": "next lint",
     "adw": "tsx",
     "adw:plan-build": "tsx adws/adwPlanBuild.tsx",
-    "adw:trigger-webhook": "uv run adws/trigger_webhook.py",
-    "adw:trigger-cron": "tsx adws/trigger_cron.ts"
+    "adw:trigger-webhook": "tsx adws/trigger_webhook.ts",
+    "adw:trigger-cron": "tsx adws/trigger_cron.ts",
+    "adw:pr-review": "tsx adws/adwPrReview.tsx",
+    "test": "vitest run"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -25,6 +27,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.5",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^4.0.18"
   }
 }

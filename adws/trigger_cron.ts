@@ -6,11 +6,14 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { getRepoInfo } from './githubApi';
+import { getRepoInfo, fetchPRList } from './githubApi';
+import { hasUnaddressedComments } from './prCommentDetector';
 import { log } from './utils';
 
 const POLL_INTERVAL_MS = 20_000;
+const PR_POLL_INTERVAL_MS = 60_000;
 const processedIssues = new Set<number>();
+const processedPRs = new Set<number>();
 
 interface RawIssue {
   number: number;
@@ -63,6 +66,32 @@ function checkAndTrigger(): void {
   }
 }
 
+function checkPRsForReviewComments(): void {
+  log('Polling for PRs with unaddressed review comments...');
+  const prs = fetchPRList();
+
+  for (const pr of prs) {
+    if (processedPRs.has(pr.number)) continue;
+
+    try {
+      if (hasUnaddressedComments(pr.number)) {
+        processedPRs.add(pr.number);
+        log(`Triggering ADW PR Review for PR #${pr.number}`, 'success');
+
+        const child = spawn('npx', ['tsx', 'adws/adwPrReview.tsx', String(pr.number)], {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      }
+    } catch (error) {
+      log(`Error checking PR #${pr.number}: ${error}`, 'error');
+    }
+  }
+}
+
 log('CRON trigger started');
 checkAndTrigger();
 setInterval(checkAndTrigger, POLL_INTERVAL_MS);
+checkPRsForReviewComments();
+setInterval(checkPRsForReviewComments, PR_POLL_INTERVAL_MS);

@@ -14,7 +14,7 @@ Currently, the ADW workflow must be triggered manually by running `npx tsx adws/
 ## Solution Statement
 Implement two independent trigger scripts:
 
-1. **Webhook trigger** (`adws/trigger_webhook.py`) — A FastAPI server that receives GitHub `issues` webhook events. When a new issue is opened, it immediately responds (within GitHub's 10s timeout) and spawns `adwPlanBuild.tsx` as a background subprocess.
+1. **Webhook trigger** (`adws/trigger_webhook.ts`) — An HTTP server that receives GitHub `issues` webhook events. When a new issue is opened, it immediately responds (within GitHub's 10s timeout) and spawns `adwPlanBuild.tsx` as a background subprocess.
 
 2. **CRON trigger** (`adws/trigger_cron.ts`) — A TypeScript script that polls GitHub every 20 seconds using the `gh` CLI. It detects: (a) new issues without comments, or (b) issues where the latest comment body contains the keyword `adw`. When a qualifying issue is found, it launches the ADW workflow.
 
@@ -33,7 +33,7 @@ Use these files to implement the feature:
 - `.env.sample` — Environment variable documentation; will add PORT variable.
 
 ### New Files
-- `adws/trigger_webhook.py` — FastAPI webhook server (Python, run with `uv run`).
+- `adws/trigger_webhook.ts` — HTTP webhook server (TypeScript, run with `npx tsx`).
 - `adws/trigger_cron.ts` — CRON polling trigger (TypeScript, run with `npx tsx`).
 
 ## Implementation Plan
@@ -63,9 +63,9 @@ Create a TypeScript polling script that:
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### 1. Create the Webhook Trigger (`adws/trigger_webhook.py`)
-- Create `adws/trigger_webhook.py` with the following structure:
-  - Import FastAPI, uvicorn, subprocess, os, sys
+### 1. Create the Webhook Trigger (`adws/trigger_webhook.ts`)
+- Create `adws/trigger_webhook.ts` with the following structure:
+  - Import http, child_process, utils
   - Read PORT from environment (default 8001)
   - Define a POST `/webhook` endpoint
   - Parse the JSON body; check `X-GitHub-Event` header equals `issues`
@@ -102,7 +102,7 @@ IMPORTANT: Execute every step in order, top to bottom.
 
 ### 3. Add npm Scripts to `package.json`
 - Add the following scripts to the `scripts` section of `package.json`:
-  - `"adw:trigger-webhook": "uv run adws/trigger_webhook.py"` — Start the webhook trigger
+  - `"adw:trigger-webhook": "tsx adws/trigger_webhook.ts"` — Start the webhook trigger
   - `"adw:trigger-cron": "tsx adws/trigger_cron.ts"` — Start the CRON trigger
 
 ### 4. Update `.env.sample` with PORT Variable
@@ -128,7 +128,7 @@ IMPORTANT: Execute every step in order, top to bottom.
 - Multiple issues created simultaneously (both triggers should handle concurrent spawns)
 
 ## Acceptance Criteria
-- [ ] `adws/trigger_webhook.py` exists and can be started with `uv run adws/trigger_webhook.py`
+- [ ] `adws/trigger_webhook.ts` exists and can be started with `npx tsx adws/trigger_webhook.ts`
 - [ ] Webhook trigger responds to GitHub issue `opened` events by spawning `adwPlanBuild.tsx` in the background
 - [ ] Webhook trigger returns HTTP response immediately (within 10s timeout)
 - [ ] `adws/trigger_cron.ts` exists and can be started with `npx tsx adws/trigger_cron.ts`
@@ -146,12 +146,11 @@ Execute every command to validate the feature works correctly with zero regressi
 
 - `npm run lint` — Run linter to check for code quality issues
 - `npm run build` — Build the application to verify no build errors
-- `python -c "import ast; ast.parse(open('adws/trigger_webhook.py').read()); print('Python syntax OK')"` — Verify Python syntax is valid
+- `npx tsc --noEmit adws/trigger_webhook.ts` — Verify TypeScript compiles
 - `npx tsx --eval "import './adws/trigger_cron'"` — Verify TypeScript trigger compiles (will start polling, Ctrl+C to stop)
 
 ## Notes
-- **No new npm dependencies needed**: The CRON trigger uses `child_process` (Node built-in) and existing `adws/` modules.
-- **Python dependency management**: The webhook uses `uv run` with PEP 723 inline script metadata, so `fastapi` and `uvicorn` are installed automatically — no `requirements.txt` or `pyproject.toml` needed.
+- **No new npm dependencies needed**: Both triggers use `child_process` (Node built-in) and existing `adws/` modules.
 - **Security**: The webhook does not implement GitHub webhook secret validation. For production use, HMAC signature verification should be added. This is acceptable for local development use.
 - **Process management**: Both triggers spawn `adwPlanBuild.tsx` as fully detached processes. If the trigger is stopped, already-spawned workflows continue running.
 - **PORT**: The webhook defaults to port 8001 to avoid conflicting with the Next.js dev server on port 3000.
