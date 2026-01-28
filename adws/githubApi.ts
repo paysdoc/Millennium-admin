@@ -3,7 +3,7 @@
  */
 
 import { execSync } from 'child_process';
-import { GitHubIssue } from './dataTypes';
+import { GitHubIssue, PRDetails, PRReviewComment, PRListItem } from './dataTypes';
 import { log } from './utils';
 
 export interface RepoInfo {
@@ -99,6 +99,112 @@ export async function fetchGitHubIssue(issueNumber: number): Promise<GitHubIssue
     return transformIssueResponse(rawIssue);
   } catch (error) {
     throw new Error(`Failed to fetch issue #${issueNumber}: ${error}`);
+  }
+}
+
+/**
+ * Fetches PR details using the gh CLI.
+ */
+export function fetchPRDetails(prNumber: number): PRDetails {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    const json = execSync(
+      `gh pr view ${prNumber} --repo ${owner}/${repo} --json number,title,body,state,headRefName,baseRefName,url`,
+      { encoding: 'utf-8' }
+    );
+    const raw = JSON.parse(json);
+
+    // Extract issue number from PR body (e.g., "Implements #12")
+    const issueMatch = raw.body?.match(/Implements #(\d+)/);
+    const issueNumber = issueMatch ? parseInt(issueMatch[1], 10) : null;
+
+    return {
+      number: raw.number,
+      title: raw.title,
+      body: raw.body || '',
+      state: raw.state,
+      headBranch: raw.headRefName,
+      baseBranch: raw.baseRefName,
+      url: raw.url,
+      issueNumber,
+      reviewComments: [],
+    };
+  } catch (error) {
+    throw new Error(`Failed to fetch PR #${prNumber}: ${error}`);
+  }
+}
+
+/**
+ * Fetches PR review comments (line-level comments) using the GitHub API.
+ */
+export function fetchPRReviewComments(prNumber: number): PRReviewComment[] {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    const json = execSync(
+      `gh api repos/${owner}/${repo}/pulls/${prNumber}/comments --paginate`,
+      { encoding: 'utf-8' }
+    );
+    const raw = JSON.parse(json);
+
+    return (raw as any[]).map((c: any) => ({
+      id: c.id,
+      author: {
+        login: c.user?.login || 'unknown',
+        name: null,
+        isBot: c.user?.type === 'Bot',
+      },
+      body: c.body,
+      path: c.path || '',
+      line: c.line || c.original_line || null,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+    }));
+  } catch (error) {
+    log(`Failed to fetch PR review comments: ${error}`, 'error');
+    return [];
+  }
+}
+
+/**
+ * Posts a comment on a PR.
+ */
+export function commentOnPR(prNumber: number, body: string): void {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    execSync(
+      `gh pr comment ${prNumber} --repo ${owner}/${repo} --body-file -`,
+      { encoding: 'utf-8', input: body, stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+    log(`Commented on PR #${prNumber}`, 'success');
+  } catch (error) {
+    log(`Failed to comment on PR: ${error}`, 'error');
+  }
+}
+
+/**
+ * Fetches open PRs for CRON trigger polling.
+ */
+export function fetchPRList(): PRListItem[] {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    const json = execSync(
+      `gh pr list --repo ${owner}/${repo} --state open --json number,headRefName,updatedAt`,
+      { encoding: 'utf-8' }
+    );
+    const raw = JSON.parse(json);
+
+    return (raw as any[]).map((pr: any) => ({
+      number: pr.number,
+      headBranch: pr.headRefName,
+      updatedAt: pr.updatedAt,
+    }));
+  } catch (error) {
+    log(`Failed to fetch PR list: ${error}`, 'error');
+    return [];
   }
 }
 

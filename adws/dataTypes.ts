@@ -176,6 +176,58 @@ export type WorkflowStage =
   | 'error';
 
 /**
+ * PR review comment from GitHub API.
+ */
+export interface PRReviewComment {
+  id: number;
+  author: GitHubUser;
+  body: string;
+  path: string;
+  line: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * PR details from GitHub API.
+ */
+export interface PRDetails {
+  number: number;
+  title: string;
+  body: string;
+  state: string;
+  headBranch: string;
+  baseBranch: string;
+  url: string;
+  /** Extracted from PR body (e.g., "Implements #12") */
+  issueNumber: number | null;
+  reviewComments: PRReviewComment[];
+}
+
+/**
+ * PR list item for CRON trigger polling.
+ */
+export interface PRListItem {
+  number: number;
+  headBranch: string;
+  updatedAt: string;
+}
+
+/**
+ * Workflow stages for PR review progress tracking.
+ */
+export type PRReviewWorkflowStage =
+  | 'pr_review_starting'
+  | 'pr_review_planning'
+  | 'pr_review_planned'
+  | 'pr_review_implementing'
+  | 'pr_review_implemented'
+  | 'pr_review_committing'
+  | 'pr_review_pushed'
+  | 'pr_review_completed'
+  | 'pr_review_error';
+
+/**
  * Recovery state for resuming a workflow from a previous run.
  */
 export interface RecoveryState {

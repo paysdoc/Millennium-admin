@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { GitHubIssue, IssueClassSlashCommand } from './dataTypes';
+import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from './dataTypes';
 import { runClaudeAgent, AgentResult } from './claudeAgent';
 
 /**
@@ -84,6 +84,70 @@ export function planFileExists(issueNumber: number): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Formats PR review comments for inclusion in a prompt.
+ */
+function formatPrReviewComments(comments: PRReviewComment[]): string {
+  return comments
+    .map(c => {
+      const location = c.path
+        ? `**File:** \`${c.path}\`${c.line ? ` (line ${c.line})` : ''}`
+        : '**General comment**';
+      return `${location}\n**Author:** ${c.author.login}\n**Comment:** ${c.body}`;
+    })
+    .join('\n\n---\n\n');
+}
+
+/**
+ * Builds the prompt for the Plan Agent to address PR review comments.
+ */
+export function buildPrReviewPlanPrompt(
+  prDetails: PRDetails,
+  comments: PRReviewComment[],
+  existingPlanContent: string
+): string {
+  const commentsSection = formatPrReviewComments(comments);
+
+  return `You are a Plan Agent. Your job is to create a revision plan to address PR review comments.
+
+## PR #${prDetails.number}: ${prDetails.title}
+**URL:** ${prDetails.url}
+**Branch:** ${prDetails.headBranch}
+
+## Original Implementation Plan
+${existingPlanContent}
+
+## PR Review Comments to Address
+${commentsSection}
+
+## Instructions
+
+1. Analyze each review comment carefully
+2. Research the codebase to understand the context of each comment
+3. Create a revision plan that addresses ALL review comments
+4. The revision plan should be specific about what files to change and how
+5. Include validation commands to verify the changes
+
+Output the revision plan as markdown. Focus only on the changes needed to address the review comments — do not re-implement the entire feature.
+
+IMPORTANT: Focus only on planning. Do not implement any code changes.`;
+}
+
+/**
+ * Runs the Plan Agent to create a revision plan for PR review comments.
+ */
+export async function runPrReviewPlanAgent(
+  prDetails: PRDetails,
+  comments: PRReviewComment[],
+  existingPlanContent: string,
+  logsDir: string
+): Promise<AgentResult> {
+  const prompt = buildPrReviewPlanPrompt(prDetails, comments, existingPlanContent);
+  const outputFile = path.join(logsDir, 'pr-review-plan-agent.jsonl');
+
+  return runClaudeAgent(prompt, 'PR Review Plan', outputFile, 'opus');
 }
 
 /**

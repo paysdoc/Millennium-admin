@@ -47,6 +47,19 @@ export function createFeatureBranch(issueNumber: number, title: string): string 
 }
 
 /**
+ * Checks out an existing branch and pulls the latest changes.
+ */
+export function checkoutBranch(branchName: string): void {
+  try {
+    execSync(`git checkout ${branchName}`, { stdio: 'pipe' });
+    execSync(`git pull origin ${branchName}`, { stdio: 'pipe' });
+    log(`Checked out and pulled latest for branch: ${branchName}`, 'success');
+  } catch (error) {
+    throw new Error(`Failed to checkout branch ${branchName}: ${error}`);
+  }
+}
+
+/**
  * Stages all changes and commits with the given message.
  * @returns True if changes were committed, false if no changes to commit.
  */

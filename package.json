@@ -10,7 +10,8 @@
     "adw": "tsx",
     "adw:plan-build": "tsx adws/adwPlanBuild.tsx",
     "adw:trigger-webhook": "uv run adws/trigger_webhook.py",
-    "adw:trigger-cron": "tsx adws/trigger_cron.ts"
+    "adw:trigger-cron": "tsx adws/trigger_cron.ts",
+    "adw:pr-review": "tsx adws/adwPrReview.tsx"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

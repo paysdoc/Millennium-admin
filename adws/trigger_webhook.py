@@ -28,6 +28,29 @@ def log(message: str) -> None:
 async def webhook(request: Request, x_github_event: str = Header(default="")):
     body = await request.json()
 
+    # Handle PR review comment events
+    if x_github_event in ("pull_request_review_comment", "pull_request_review"):
+        pr_number = body.get("pull_request", {}).get("number")
+        if pr_number is None:
+            log("No PR number found in payload")
+            return {"status": "ignored"}
+
+        action = body.get("action", "")
+        if action not in ("created", "submitted"):
+            log(f"Ignored PR review action: {action}")
+            return {"status": "ignored"}
+
+        log(f"PR review comment on PR #{pr_number}, triggering ADW PR Review")
+
+        subprocess.Popen(
+            ["npx", "tsx", "adws/adwPrReview.tsx", str(pr_number)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        return {"status": "triggered", "pr": pr_number}
+
     if x_github_event != "issues":
         log(f"Ignored event: {x_github_event}")
         return {"status": "ignored"}
