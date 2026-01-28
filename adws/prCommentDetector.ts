@@ -53,25 +53,33 @@ export function getLastAdwCommitTimestamp(branchName: string): Date | null {
  * If no ADW commits are found, all non-bot comments are considered unaddressed.
  */
 export function getUnaddressedComments(prNumber: number): PRReviewComment[] {
+  log(`Fetching unaddressed comments for PR #${prNumber}`);
   const prDetails = fetchPRDetails(prNumber);
   const comments = fetchPRReviewComments(prNumber);
+  log(`Found ${comments.length} total comments on PR #${prNumber}`);
 
   // Filter out bot comments
   const humanComments = comments.filter(c => !c.author.isBot);
+  log(`Found ${humanComments.length} human comments (filtered ${comments.length - humanComments.length} bot comments)`);
 
   if (humanComments.length === 0) {
+    log(`No human comments found on PR #${prNumber}, returning empty`);
     return [];
   }
 
   const lastAdwCommit = getLastAdwCommitTimestamp(prDetails.headBranch);
+  log(`Last ADW commit timestamp for branch ${prDetails.headBranch}: ${lastAdwCommit ?? 'none'}`);
 
   if (!lastAdwCommit) {
     // No ADW commits found — treat all human comments as unaddressed
+    log(`No ADW commits found, treating all ${humanComments.length} human comments as unaddressed`);
     return humanComments;
   }
 
   // Return comments created after the last ADW commit
-  return humanComments.filter(c => new Date(c.createdAt) > lastAdwCommit);
+  const unaddressed = humanComments.filter(c => new Date(c.createdAt) > lastAdwCommit);
+  log(`Found ${unaddressed.length} unaddressed comments (after ${lastAdwCommit.toISOString()})`);
+  return unaddressed;
 }
 
 /**

@@ -25,7 +25,7 @@ Use these files to implement the feature:
 
 ### Existing Files (Modify)
 - `adws/trigger_cron.ts` — Add polling for open PRs with unaddressed review comments.
-- `adws/trigger_webhook.py` — Add handler for `pull_request_review_comment` and `pull_request_review` webhook events.
+- `adws/trigger_webhook.ts` — Add handler for `pull_request_review_comment` and `pull_request_review` webhook events.
 - `adws/buildAgent.ts` — Add a new prompt builder for PR review changes (reuse `runClaudeAgent`).
 - `adws/planAgent.ts` — Add a new prompt builder for PR review planning (reuse `runClaudeAgent`).
 - `adws/dataTypes.ts` — Add new types for PR comments and PR review workflow stages.
@@ -132,7 +132,7 @@ IMPORTANT: Execute every step in order, top to bottom.
 - Call `checkPRsForReviewComments()` in the existing `checkAndTrigger()` function or as a separate interval
 - Use a longer poll interval for PR checks (60 seconds) since PR reviews are less time-sensitive
 
-### 10. Update Webhook Trigger (`adws/trigger_webhook.py`)
+### 10. Update Webhook Trigger (`adws/trigger_webhook.ts`)
 - Add handling for `X-GitHub-Event: pull_request_review_comment` events
 - Extract `pull_request.number` from the payload
 - Spawn `npx tsx adws/adwPrReview.tsx <pr-number>` as a detached background process

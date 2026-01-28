@@ -136,11 +136,46 @@ export function fetchPRDetails(prNumber: number): PRDetails {
 }
 
 /**
- * Fetches PR review comments (line-level comments) using the GitHub API.
+ * Fetches PR review-body comments (top-level review submissions) using the GitHub API.
+ * These are comments submitted via the "Submit review" dialog, not attached to specific code lines.
+ */
+export function fetchPRReviews(owner: string, repo: string, prNumber: number): PRReviewComment[] {
+  try {
+    const json = execSync(
+      `gh api repos/${owner}/${repo}/pulls/${prNumber}/reviews --paginate`,
+      { encoding: 'utf-8' }
+    );
+    const raw = JSON.parse(json);
+
+    return (raw as any[])
+      .filter((r: any) => r.state !== 'PENDING' && ((r.body && r.body.trim() !== '') || r.state === 'CHANGES_REQUESTED'))
+      .map((r: any) => ({
+        id: r.id,
+        author: {
+          login: r.user?.login || 'unknown',
+          name: null,
+          isBot: r.user?.type === 'Bot',
+        },
+        body: (r.body && r.body.trim() !== '') ? r.body : `[Review submitted: ${r.state}]`,
+        path: '',
+        line: null,
+        createdAt: r.submitted_at,
+        updatedAt: r.submitted_at,
+      }));
+  } catch (error) {
+    log(`Failed to fetch PR reviews: ${error}`, 'error');
+    return [];
+  }
+}
+
+/**
+ * Fetches all PR review comments: both line-level comments and review-body comments.
  */
 export function fetchPRReviewComments(prNumber: number): PRReviewComment[] {
   const { owner, repo } = getRepoInfo();
+  log(`Fetching PR review comments for ${owner}/${repo}#${prNumber}`);
 
+  let lineComments: PRReviewComment[] = [];
   try {
     const json = execSync(
       `gh api repos/${owner}/${repo}/pulls/${prNumber}/comments --paginate`,
@@ -148,7 +183,7 @@ export function fetchPRReviewComments(prNumber: number): PRReviewComment[] {
     );
     const raw = JSON.parse(json);
 
-    return (raw as any[]).map((c: any) => ({
+    lineComments = (raw as any[]).map((c: any) => ({
       id: c.id,
       author: {
         login: c.user?.login || 'unknown',
@@ -163,8 +198,16 @@ export function fetchPRReviewComments(prNumber: number): PRReviewComment[] {
     }));
   } catch (error) {
     log(`Failed to fetch PR review comments: ${error}`, 'error');
-    return [];
   }
+
+  log(`Fetched ${lineComments.length} line-level comments for ${owner}/${repo}#${prNumber}`);
+
+  const reviewBodyComments = fetchPRReviews(owner, repo, prNumber);
+  log(`Fetched ${reviewBodyComments.length} review-body comments for ${owner}/${repo}#${prNumber}`);
+
+  const allComments = [...lineComments, ...reviewBodyComments];
+  log(`Total: ${allComments.length} comments for ${owner}/${repo}#${prNumber}`);
+  return allComments;
 }
 
 /**
