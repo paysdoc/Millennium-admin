@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "adw": "tsx",
-    "adw:plan-build": "tsx adws/adwPlanBuild.tsx"
+    "adw:plan-build": "tsx adws/adwPlanBuild.tsx",
+    "adw:trigger-webhook": "uv run adws/trigger_webhook.py",
+    "adw:trigger-cron": "tsx adws/trigger_cron.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
