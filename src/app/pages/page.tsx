@@ -7,7 +7,7 @@ export default function Pages() {
         <div className="container">
           <div className="header-content">
             <Link href="/" className="logo">
-              Millennium Admin
+              Millennium Characters
             </Link>
             <nav>
               <ul className="nav-links">

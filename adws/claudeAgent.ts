@@ -134,6 +134,7 @@ export async function runClaudeAgent(
     const args = [
       '--print',
       '--verbose',
+      '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
       '--model', model
     ];
