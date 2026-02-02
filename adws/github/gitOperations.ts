@@ -145,6 +145,7 @@ export function getDefaultBranch(): string {
  * Maps branch prefixes to issue classification:
  *   - bugfix/ -> /bug
  *   - chore/ -> /chore
+ *   - review/ -> /pr_review
  *   - feature/ (or unknown) -> /feature
  *
  * @param branchName - The branch name to parse (e.g., "bugfix/issue-123-fix-login")
@@ -156,6 +157,9 @@ export function inferIssueTypeFromBranch(branchName: string): IssueClassSlashCom
   }
   if (branchName.startsWith('chore/')) {
     return '/chore';
+  }
+  if (branchName.startsWith('review/')) {
+    return '/pr_review';
   }
   // Default to feature for feature/ prefix or unknown prefixes
   return '/feature';
