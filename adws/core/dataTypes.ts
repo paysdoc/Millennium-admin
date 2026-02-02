@@ -10,6 +10,26 @@
 export type IssueClassSlashCommand = '/chore' | '/bug' | '/feature';
 
 /**
+ * Maps issue classification to commit message prefixes.
+ * Following conventional commits specification.
+ */
+export const commitPrefixMap: Record<IssueClassSlashCommand, string> = {
+  '/feature': 'feat:',
+  '/bug': 'fix:',
+  '/chore': 'chore:',
+};
+
+/**
+ * Maps issue classification to branch name prefixes.
+ * Following common Git branching conventions.
+ */
+export const branchPrefixMap: Record<IssueClassSlashCommand, string> = {
+  '/feature': 'feature',
+  '/bug': 'bugfix',
+  '/chore': 'chore',
+};
+
+/**
  * All slash commands used in the ADW system.
  * Includes issue classification commands and ADW-specific commands.
  */

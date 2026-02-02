@@ -79,10 +79,11 @@ export function extractAdwIdFromComment(commentBody: string): string | null {
 
 /**
  * Extracts the branch name from a comment body.
- * Pattern: `feature/issue-{number}-{slug}`
+ * Supports all branch prefixes: feature/, bugfix/, chore/
+ * Pattern: `{prefix}/issue-{number}-{slug}`
  */
 export function extractBranchNameFromComment(commentBody: string): string | null {
-  const match = commentBody.match(/`(feature\/issue-\d+[a-z0-9-]*)`/);
+  const match = commentBody.match(/`((feature|bugfix|chore)\/issue-\d+[a-z0-9-]*)`/);
   return match ? match[1] : null;
 }
 

@@ -28,6 +28,7 @@ import {
   IssueClassSlashCommand,
   WorkflowStage,
   RecoveryState,
+  commitPrefixMap,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -105,11 +106,7 @@ ${issue.body || 'No description provided.'}`;
   return '/feature';
 }
 
-const commitPrefixMap: Record<IssueClassSlashCommand, string> = {
-  '/feature': 'feat:',
-  '/bug': 'fix:',
-  '/chore': 'chore:',
-};
+// commitPrefixMap is now imported from ./core
 
 /**
  * Determines if a stage should be executed based on recovery state.
@@ -301,10 +298,10 @@ async function main(): Promise<void> {
       ctx.issueType = issueType;
     }
 
-    // Step 2: Create feature branch
+    // Step 2: Create branch with appropriate prefix based on issue type
     if (shouldExecuteStage('branch_created', recoveryState)) {
-      log('Creating feature branch...', 'info');
-      branchName = createFeatureBranch(issueNumber, issue.title);
+      log('Creating branch...', 'info');
+      branchName = createFeatureBranch(issueNumber, issue.title, issueType);
       log(`On branch: ${branchName}`, 'success');
       ctx.branchName = branchName;
       postWorkflowComment(issueNumber, 'branch_created', ctx);
@@ -312,7 +309,7 @@ async function main(): Promise<void> {
       log('Skipping branch creation (already completed)', 'info');
       // If we have a branch from recovery state, check it out
       if (recoveryState.branchName) {
-        branchName = createFeatureBranch(issueNumber, issue.title);
+        branchName = createFeatureBranch(issueNumber, issue.title, issueType);
         ctx.branchName = branchName;
       }
     }
@@ -400,7 +397,7 @@ async function main(): Promise<void> {
     // Commit implementation (only if there are changes)
     if (shouldExecuteStage('implementation_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'implementation_committing', ctx);
-      commitChanges(`feat: implement #${issueNumber} - ${issue.title}`);
+      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`);
     } else {
       log('Skipping implementation commit (already completed)', 'info');
     }

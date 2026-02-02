@@ -18,6 +18,7 @@ export {
 // Git Operations
 export {
   getCurrentBranch,
+  generateBranchName,
   generateFeatureBranchName,
   createFeatureBranch,
   checkoutBranch,
@@ -25,6 +26,7 @@ export {
   pushBranch,
   getDefaultBranch,
   checkoutDefaultBranch,
+  inferIssueTypeFromBranch,
 } from './gitOperations';
 
 // Pull Request Creator

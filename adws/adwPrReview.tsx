@@ -17,7 +17,7 @@
  */
 
 import * as fs from 'fs';
-import { log, generateAdwId, ensureLogsDirectory } from './core';
+import { log, generateAdwId, ensureLogsDirectory, commitPrefixMap } from './core';
 import {
   fetchPRDetails,
   checkoutBranch,
@@ -26,6 +26,7 @@ import {
   postPRWorkflowComment,
   PRReviewWorkflowContext,
   getUnaddressedComments,
+  inferIssueTypeFromBranch,
 } from './github';
 import {
   runPrReviewPlanAgent,
@@ -152,11 +153,13 @@ async function main(): Promise<void> {
     ctx.revisionBuildOutput = buildResult.output;
     postPRWorkflowComment(prNumber, 'pr_review_implemented', ctx);
 
-    // Step 9: Commit changes
+    // Step 9: Commit changes with correct prefix based on branch type
     postPRWorkflowComment(prNumber, 'pr_review_committing', ctx);
+    const issueType = inferIssueTypeFromBranch(prDetails.headBranch);
+    const commitPrefix = commitPrefixMap[issueType];
     const commitMsg = issueNumber
-      ? `feat: address PR review comments for #${issueNumber}`
-      : `feat: address PR review comments`;
+      ? `${commitPrefix} address PR review comments for #${issueNumber}`
+      : `${commitPrefix} address PR review comments`;
     commitChanges(commitMsg);
 
     // Step 10: Push to the PR branch

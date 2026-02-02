@@ -3,7 +3,7 @@
  */
 
 import { execSync } from 'child_process';
-import { log, slugify } from '../core';
+import { log, slugify, IssueClassSlashCommand, branchPrefixMap } from '../core';
 
 /**
  * Gets the current git branch name.
@@ -13,21 +13,49 @@ export function getCurrentBranch(): string {
 }
 
 /**
+ * Generates a branch name from issue number, title, and type.
+ * Format: {prefix}/issue-{number}-{slugified-title}
+ *
+ * @param issueNumber - The GitHub issue number
+ * @param title - The issue title (will be slugified)
+ * @param issueType - The issue classification (defaults to '/feature')
+ * @returns Branch name with appropriate prefix based on issue type
+ */
+export function generateBranchName(
+  issueNumber: number,
+  title: string,
+  issueType: IssueClassSlashCommand = '/feature'
+): string {
+  const slug = slugify(title);
+  const prefix = branchPrefixMap[issueType];
+  return `${prefix}/issue-${issueNumber}-${slug}`;
+}
+
+/**
+ * @deprecated Use generateBranchName instead. This function is kept for backwards compatibility.
  * Generates a feature branch name from issue number and title.
  * Format: feature/issue-{number}-{slugified-title}
  */
 export function generateFeatureBranchName(issueNumber: number, title: string): string {
-  const slug = slugify(title);
-  return `feature/issue-${issueNumber}-${slug}`;
+  return generateBranchName(issueNumber, title, '/feature');
 }
 
 /**
- * Creates and checks out a feature branch for the given issue.
+ * Creates and checks out a branch for the given issue.
+ * The branch prefix is determined by the issue type (feature/, bugfix/, chore/).
  * If the branch already exists, checks it out instead.
+ *
+ * @param issueNumber - The GitHub issue number
+ * @param title - The issue title (will be slugified for branch name)
+ * @param issueType - The issue classification (defaults to '/feature')
  * @returns The branch name.
  */
-export function createFeatureBranch(issueNumber: number, title: string): string {
-  const branchName = generateFeatureBranchName(issueNumber, title);
+export function createFeatureBranch(
+  issueNumber: number,
+  title: string,
+  issueType: IssueClassSlashCommand = '/feature'
+): string {
+  const branchName = generateBranchName(issueNumber, title, issueType);
 
   try {
     const existingBranches = execSync('git branch -a', { encoding: 'utf-8' });
@@ -42,7 +70,7 @@ export function createFeatureBranch(issueNumber: number, title: string): string 
 
     return branchName;
   } catch (error) {
-    throw new Error(`Failed to create feature branch: ${error}`);
+    throw new Error(`Failed to create branch: ${error}`);
   }
 }
 
@@ -110,6 +138,27 @@ export function getDefaultBranch(): string {
   } catch (error) {
     throw new Error(`Failed to get default branch: ${error}`);
   }
+}
+
+/**
+ * Infers the issue type from a branch name by examining its prefix.
+ * Maps branch prefixes to issue classification:
+ *   - bugfix/ -> /bug
+ *   - chore/ -> /chore
+ *   - feature/ (or unknown) -> /feature
+ *
+ * @param branchName - The branch name to parse (e.g., "bugfix/issue-123-fix-login")
+ * @returns The inferred issue type classification
+ */
+export function inferIssueTypeFromBranch(branchName: string): IssueClassSlashCommand {
+  if (branchName.startsWith('bugfix/')) {
+    return '/bug';
+  }
+  if (branchName.startsWith('chore/')) {
+    return '/chore';
+  }
+  // Default to feature for feature/ prefix or unknown prefixes
+  return '/feature';
 }
 
 /**
