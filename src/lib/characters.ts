@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getSupabaseClient } from './supabase'
 import {
   Character,
   CategoryKey,
@@ -7,6 +7,7 @@ import {
 } from '@/types/character'
 
 export async function fetchAllCharacters(): Promise<Character[]> {
+  const supabase = getSupabaseClient()
   const { data, error } = await supabase
     .from('characters')
     .select('id, name, category')
