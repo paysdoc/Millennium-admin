@@ -207,4 +207,104 @@ a:visited {
   font-size: 13px;
 }
 
+/* Wikipedia-style table of contents */
+.toc {
+  background-color: #f8f9fa;
+  border: 1px solid #a7d7f9;
+  padding: 15px 20px;
+  margin-bottom: 20px;
+  display: inline-block;
+  min-width: 200px;
+}
+
+.toc-title {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.toc-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.toc-list li {
+  margin-bottom: 5px;
+}
+
+.toc-list a {
+  color: #0645ad;
+  text-decoration: none;
+}
+
+.toc-list a:hover {
+  text-decoration: underline;
+}
+
+/* Category sections */
+.category-section {
+  margin-bottom: 30px;
+}
+
+.category-heading {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 24px;
+  font-weight: normal;
+  border-bottom: 1px solid #a7d7f9;
+  padding-bottom: 5px;
+  margin-bottom: 15px;
+}
+
+/* Character list */
+.character-list {
+  list-style: none;
+  padding-left: 0;
+  column-count: 3;
+  column-gap: 30px;
+}
+
+.character-item {
+  margin-bottom: 8px;
+  break-inside: avoid;
+}
+
+.back-to-top {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.back-to-top a {
+  color: #0645ad;
+}
+
+/* Overview content area */
+.overview-content {
+  background-color: #fff;
+  border: 1px solid #a7d7f9;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #54595d;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .character-list {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 480px) {
+  .character-list {
+    column-count: 1;
+  }
+}
+
 
