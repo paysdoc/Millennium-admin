@@ -25,3 +25,16 @@ export {
   runPrReviewBuildAgent,
   runBuildAgent,
 } from './buildAgent';
+
+// Test Agent
+export {
+  runTestAgent,
+  runE2ETestAgent,
+  runResolveTestAgent,
+  runResolveE2ETestAgent,
+  discoverE2ETestFiles,
+  type TestResult,
+  type E2ETestResult,
+  type TestAgentResult,
+  type E2ETestAgentResult,
+} from './testAgent';

@@ -22,3 +22,6 @@ export const SPECS_DIR = path.join(process.cwd(), 'specs');
 
 /** Directory for storing agent state files. */
 export const AGENTS_STATE_DIR = path.join(process.cwd(), 'agents');
+
+/** Maximum number of retry attempts for test resolution. */
+export const MAX_TEST_RETRY_ATTEMPTS = parseInt(process.env.MAX_TEST_RETRY_ATTEMPTS || '5', 10);
