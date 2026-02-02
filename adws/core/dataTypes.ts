@@ -7,7 +7,7 @@
  * Supported slash commands for issue classification.
  * These should align with your custom slash commands in .claude/commands that you want to run.
  */
-export type IssueClassSlashCommand = '/chore' | '/bug' | '/feature';
+export type IssueClassSlashCommand = '/chore' | '/bug' | '/feature' | '/pr_review';
 
 /**
  * Maps issue classification to commit message prefixes.
@@ -17,6 +17,7 @@ export const commitPrefixMap: Record<IssueClassSlashCommand, string> = {
   '/feature': 'feat:',
   '/bug': 'fix:',
   '/chore': 'chore:',
+  '/pr_review': 'review:',
 };
 
 /**
@@ -27,6 +28,7 @@ export const branchPrefixMap: Record<IssueClassSlashCommand, string> = {
   '/feature': 'feature',
   '/bug': 'bugfix',
   '/chore': 'chore',
+  '/pr_review': 'review',
 };
 
 /**
@@ -38,6 +40,7 @@ export type SlashCommand =
   | '/chore'
   | '/bug'
   | '/feature'
+  | '/pr_review'
   // ADW workflow commands
   | '/classify_issue'
   | '/find_plan_file'

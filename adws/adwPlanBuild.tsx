@@ -77,6 +77,7 @@ async function classifyIssue(
 - Respond with /chore if the issue is a chore.
 - Respond with /bug if the issue is a bug.
 - Respond with /feature if the issue is a feature.
+- Respond with /pr_review if the issue is requesting a PR review, code review, or review-related changes.
 - Respond with 0 if the issue isn't any of the above.
 
 ## Github Issue
@@ -95,7 +96,7 @@ ${issue.body || 'No description provided.'}`;
   }
 
   const output = result.output.trim();
-  const validCommands: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore'];
+  const validCommands: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore', '/pr_review'];
 
   for (const cmd of validCommands) {
     if (output.includes(cmd)) {
