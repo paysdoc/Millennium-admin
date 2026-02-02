@@ -34,13 +34,25 @@ const LOG_PREFIXES: Record<LogLevel, string> = {
   success: '\u{2705}'
 };
 
+// ANSI color codes
+const COLORS = {
+  red: '\x1b[31m',
+  reset: '\x1b[0m'
+};
+
 /**
  * Logs a message with timestamp and emoji prefix.
+ * Error messages are displayed in red.
  */
 export function log(message: string, level: LogLevel = 'info'): void {
   const timestamp = new Date().toISOString();
   const prefix = LOG_PREFIXES[level];
-  console.log(`${prefix} [${timestamp}] ${message}`);
+  const text = `${prefix} [${timestamp}] ${message}`;
+  if (level === 'error') {
+    console.log(`${COLORS.red}${text}${COLORS.reset}`);
+  } else {
+    console.log(text);
+  }
 }
 
 /**
