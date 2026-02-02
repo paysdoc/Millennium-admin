@@ -5,13 +5,15 @@
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
-import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log } from '../core';
+import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log, AgentStateManager } from '../core';
 
 export interface AgentResult {
   success: boolean;
   output: string;
   sessionId?: string;
   totalCostUsd?: number;
+  /** The state path if state tracking was enabled */
+  statePath?: string;
 }
 
 /**
@@ -70,13 +72,19 @@ function extractToolUseFromMessage(message: any): { name: string; input: string 
 function parseJsonlOutput(
   text: string,
   state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number },
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  statePath?: string
 ): void {
   const lines = text.split('\n').filter(line => line.trim());
 
   for (const line of lines) {
     try {
       const parsed = JSON.parse(line);
+
+      // Write raw JSONL to state output file if statePath provided
+      if (statePath) {
+        AgentStateManager.writeRawOutput(statePath, 'output.jsonl', parsed, true);
+      }
 
       if (parsed.type === 'result') {
         state.lastResult = parsed as ClaudeCodeResultMessage;
@@ -99,6 +107,10 @@ function parseJsonlOutput(
               toolCount: state.toolCount,
             });
           }
+          // Log tool usage to state
+          if (statePath) {
+            AgentStateManager.appendLog(statePath, `[Turn ${state.turnCount}] Tool: ${tool.name}`);
+          }
         }
 
         // Report text content if present (for status updates)
@@ -120,14 +132,28 @@ function parseJsonlOutput(
 /**
  * Runs a Claude Code agent with the given prompt.
  * Streams output to a log file and returns the result.
+ *
+ * @param prompt - The prompt to send to the agent
+ * @param agentName - Human-readable name for logging
+ * @param outputFile - Path to write JSONL output
+ * @param model - The model to use (default: 'sonnet')
+ * @param onProgress - Optional callback for progress updates
+ * @param statePath - Optional path to agent's state directory for state tracking
  */
 export async function runClaudeAgent(
   prompt: string,
   agentName: string,
   outputFile: string,
   model: string = 'sonnet',
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  statePath?: string
 ): Promise<AgentResult> {
+  // Write initial state if state path provided
+  if (statePath) {
+    AgentStateManager.appendLog(statePath, `Starting ${agentName} agent`, prompt);
+    AgentStateManager.appendLog(statePath, `Model: ${model}`);
+  }
+
   return new Promise((resolve) => {
     const args = [
       '--print',
@@ -164,7 +190,7 @@ export async function runClaudeAgent(
     claude.stdout.on('data', (data: Buffer) => {
       const text = data.toString();
       outputStream.write(text);
-      parseJsonlOutput(text, state, onProgress);
+      parseJsonlOutput(text, state, onProgress, statePath);
     });
 
     claude.stderr.on('data', (data: Buffer) => {
@@ -190,6 +216,14 @@ export async function runClaudeAgent(
         });
       }
 
+      // Write final state summary if statePath provided
+      if (statePath) {
+        AgentStateManager.appendLog(
+          statePath,
+          `Completed: exit code ${code}, turns: ${state.turnCount}, tools: ${state.toolCount}`
+        );
+      }
+
       if (code === 0 && state.lastResult) {
         log(`${agentName} completed successfully`, 'success');
         if (state.lastResult.totalCostUsd) {
@@ -199,18 +233,21 @@ export async function runClaudeAgent(
           success: !state.lastResult.isError,
           output: state.lastResult.result || state.fullOutput,
           sessionId: state.lastResult.sessionId,
-          totalCostUsd: state.lastResult.totalCostUsd
+          totalCostUsd: state.lastResult.totalCostUsd,
+          statePath
         });
       } else if (code === 0) {
         resolve({
           success: true,
-          output: state.fullOutput
+          output: state.fullOutput,
+          statePath
         });
       } else {
         log(`${agentName} exited with code ${code}`, 'error');
         resolve({
           success: false,
-          output: state.fullOutput || 'Agent failed without output'
+          output: state.fullOutput || 'Agent failed without output',
+          statePath
         });
       }
     });
@@ -218,9 +255,14 @@ export async function runClaudeAgent(
     claude.on('error', (error) => {
       outputStream.end();
       log(`${agentName} error: ${error.message}`, 'error');
+      // Log error to state if statePath provided
+      if (statePath) {
+        AgentStateManager.appendLog(statePath, `Error: ${error.message}`);
+      }
       resolve({
         success: false,
-        output: error.message
+        output: error.message,
+        statePath
       });
     });
   });

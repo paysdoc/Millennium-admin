@@ -4,7 +4,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { LOGS_DIR } from './config';
+import { LOGS_DIR, AGENTS_STATE_DIR } from './config';
+import { AgentIdentifier } from './dataTypes';
 
 /**
  * Generates a unique ADW session identifier.
@@ -66,4 +67,54 @@ export function ensureLogsDirectory(adwId: string): string {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
   return sessionDir;
+}
+
+/**
+ * Ensures the agent state directory exists for a given agent.
+ * Creates the directory structure: agents/{adwId}/{agentIdentifier}/
+ * For nested agents: {parentPath}/{agentIdentifier}/
+ *
+ * @param adwId - The ADW session identifier
+ * @param agentIdentifier - The agent's identifier
+ * @param parentPath - Optional parent agent's state path for nested agents
+ * @returns The path to the agent's state directory.
+ */
+export function ensureAgentStateDirectory(
+  adwId: string,
+  agentIdentifier: AgentIdentifier,
+  parentPath?: string
+): string {
+  let statePath: string;
+
+  if (parentPath) {
+    statePath = path.join(parentPath, agentIdentifier);
+  } else {
+    statePath = path.join(AGENTS_STATE_DIR, adwId, agentIdentifier);
+  }
+
+  if (!fs.existsSync(statePath)) {
+    fs.mkdirSync(statePath, { recursive: true });
+  }
+
+  return statePath;
+}
+
+/**
+ * Gets the agent state path without creating directories.
+ * Useful for reading state from a path.
+ *
+ * @param adwId - The ADW session identifier
+ * @param agentIdentifier - The agent's identifier
+ * @param parentPath - Optional parent agent's state path for nested agents
+ * @returns The path to the agent's state directory.
+ */
+export function getAgentStatePath(
+  adwId: string,
+  agentIdentifier: AgentIdentifier,
+  parentPath?: string
+): string {
+  if (parentPath) {
+    return path.join(parentPath, agentIdentifier);
+  }
+  return path.join(AGENTS_STATE_DIR, adwId, agentIdentifier);
 }

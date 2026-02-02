@@ -17,6 +17,7 @@
 
 # misc
 /logs
+/agents
 .DS_Store
 *.pem
 healthcheck.json*

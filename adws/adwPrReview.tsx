@@ -17,7 +17,7 @@
  */
 
 import * as fs from 'fs';
-import { log, generateAdwId, ensureLogsDirectory, commitPrefixMap } from './core';
+import { log, generateAdwId, ensureLogsDirectory, commitPrefixMap, AgentStateManager, AgentState } from './core';
 import {
   fetchPRDetails,
   checkoutBranch,
@@ -79,6 +79,25 @@ async function main(): Promise<void> {
 
   const issueNumber = prDetails.issueNumber;
 
+  // Initialize orchestrator state directory
+  const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'orchestrator');
+  log(`State: ${orchestratorStatePath}`, 'info');
+
+  // Write initial orchestrator state
+  const initialOrchestratorState: Partial<AgentState> = {
+    adwId,
+    issueNumber: issueNumber || 0,
+    branchName: prDetails.headBranch,
+    agentName: 'orchestrator',
+    execution: AgentStateManager.createExecutionState('running'),
+    metadata: {
+      prNumber,
+      reviewComments: unaddressedComments.length,
+    },
+  };
+  AgentStateManager.writeState(orchestratorStatePath, initialOrchestratorState);
+  AgentStateManager.appendLog(orchestratorStatePath, `Starting PR Review workflow for PR #${prNumber}`);
+
   const ctx: PRReviewWorkflowContext = {
     issueNumber: issueNumber || 0,
     adwId,
@@ -114,16 +133,49 @@ async function main(): Promise<void> {
     postPRWorkflowComment(prNumber, 'pr_review_planning', ctx);
     log('Running PR Review Plan Agent...', 'info');
 
+    // Initialize plan agent state
+    const planAgentStatePath = AgentStateManager.initializeState(adwId, 'pr-review-plan-agent', orchestratorStatePath);
+    AgentStateManager.writeState(planAgentStatePath, {
+      adwId,
+      issueNumber: issueNumber || 0,
+      branchName: prDetails.headBranch,
+      agentName: 'pr-review-plan-agent',
+      parentAgent: 'orchestrator',
+      execution: AgentStateManager.createExecutionState('running'),
+      metadata: {
+        prNumber,
+        reviewComments: unaddressedComments.length,
+      },
+    });
+
     const planResult = await runPrReviewPlanAgent(
       prDetails,
       unaddressedComments,
       existingPlanContent,
-      logsDir
+      logsDir,
+      planAgentStatePath
     );
 
     if (!planResult.success) {
+      AgentStateManager.writeState(planAgentStatePath, {
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          false,
+          planResult.output
+        ),
+      });
       throw new Error(`PR Review Plan Agent failed: ${planResult.output}`);
     }
+
+    // Update plan agent state with result
+    AgentStateManager.writeState(planAgentStatePath, {
+      output: planResult.output.substring(0, 1000),
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        true
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, 'PR Review Plan completed');
 
     ctx.revisionPlanOutput = planResult.output;
     postPRWorkflowComment(prNumber, 'pr_review_planned', ctx);
@@ -131,6 +183,21 @@ async function main(): Promise<void> {
     // Step 8: Run PR Review Build Agent
     postPRWorkflowComment(prNumber, 'pr_review_implementing', ctx);
     log('Running PR Review Build Agent...', 'info');
+
+    // Initialize build agent state
+    const buildAgentStatePath = AgentStateManager.initializeState(adwId, 'pr-review-build-agent', orchestratorStatePath);
+    AgentStateManager.writeState(buildAgentStatePath, {
+      adwId,
+      issueNumber: issueNumber || 0,
+      branchName: prDetails.headBranch,
+      agentName: 'pr-review-build-agent',
+      parentAgent: 'orchestrator',
+      execution: AgentStateManager.createExecutionState('running'),
+      metadata: {
+        prNumber,
+        reviewComments: unaddressedComments.length,
+      },
+    });
 
     const buildProgressCallback: ProgressCallback = (info: ProgressInfo) => {
       if (info.type === 'tool_use') {
@@ -143,12 +210,30 @@ async function main(): Promise<void> {
       unaddressedComments,
       planResult.output,
       logsDir,
-      buildProgressCallback
+      buildProgressCallback,
+      buildAgentStatePath
     );
 
     if (!buildResult.success) {
+      AgentStateManager.writeState(buildAgentStatePath, {
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          false,
+          buildResult.output
+        ),
+      });
       throw new Error(`PR Review Build Agent failed: ${buildResult.output}`);
     }
+
+    // Update build agent state with result
+    AgentStateManager.writeState(buildAgentStatePath, {
+      output: buildResult.output.substring(0, 1000),
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        true
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, 'PR Review Build completed');
 
     ctx.revisionBuildOutput = buildResult.output;
     postPRWorkflowComment(prNumber, 'pr_review_implemented', ctx);
@@ -169,6 +254,15 @@ async function main(): Promise<void> {
     // Step 11: Post completed comment
     postPRWorkflowComment(prNumber, 'pr_review_completed', ctx);
 
+    // Update final orchestrator state
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        true
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, 'PR Review workflow completed successfully');
+
     log('ADW PR Review workflow completed!', 'success');
     log(`PR: ${prDetails.url}`, 'info');
     log(`Comments addressed: ${unaddressedComments.length}`, 'info');
@@ -176,6 +270,17 @@ async function main(): Promise<void> {
   } catch (error) {
     ctx.errorMessage = String(error);
     postPRWorkflowComment(prNumber, 'pr_review_error', ctx);
+
+    // Update orchestrator state with error
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        false,
+        String(error)
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, `PR Review workflow failed: ${error}`);
+
     log(`PR Review workflow failed: ${error}`, 'error');
     process.exit(1);
   }
