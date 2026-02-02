@@ -318,7 +318,8 @@ export async function runClaudeAgentWithCommand(
 
     const claude = spawn(CLAUDE_CODE_PATH, cliArgs, {
       cwd: process.cwd(),
-      env: { ...process.env }
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
     const state = {
