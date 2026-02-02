@@ -8,6 +8,7 @@
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
 import { getRepoInfo, fetchPRList, hasUnaddressedComments } from '../github';
+import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
 const PR_POLL_INTERVAL_MS = 60_000;
@@ -42,7 +43,7 @@ function isQualifyingIssue(issue: RawIssue): boolean {
   return /adw/i.test(latestComment.body);
 }
 
-function checkAndTrigger(): void {
+async function checkAndTrigger(): Promise<void> {
   log('Polling for new issues...');
   const issues = fetchOpenIssues();
   const qualifying = issues.filter(
@@ -51,9 +52,17 @@ function checkAndTrigger(): void {
 
   for (const issue of qualifying) {
     processedIssues.add(issue.number);
-    log(`Triggering ADW workflow for issue #${issue.number}`, 'success');
 
-    const child = spawn('npx', ['tsx', 'adws/adwPlanBuild.tsx', String(issue.number)], {
+    // Classify the issue to determine which workflow to spawn
+    const classification = await classifyIssueForTrigger(issue.number);
+    const workflowScript = getWorkflowScript(classification.issueType);
+
+    log(
+      `Triggering ADW workflow for issue #${issue.number} (${classification.issueType} -> ${workflowScript})`,
+      'success'
+    );
+
+    const child = spawn('npx', ['tsx', workflowScript, String(issue.number)], {
       detached: true,
       stdio: 'ignore',
     });
@@ -90,7 +99,7 @@ function checkPRsForReviewComments(): void {
 }
 
 log('CRON trigger started');
-checkAndTrigger();
-setInterval(checkAndTrigger, POLL_INTERVAL_MS);
+void checkAndTrigger();
+setInterval(() => void checkAndTrigger(), POLL_INTERVAL_MS);
 checkPRsForReviewComments();
 setInterval(checkPRsForReviewComments, PR_POLL_INTERVAL_MS);

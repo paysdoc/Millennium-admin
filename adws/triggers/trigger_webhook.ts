@@ -14,6 +14,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
+import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const port = parseInt(process.env.PORT || '8001', 10);
 
@@ -193,9 +194,25 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    log(`New issue #${issueNumber} detected, triggering ADW workflow`);
-    spawnDetached('npx', ['tsx', 'adws/adwPlanBuild.tsx', String(issueNumber)]);
-    jsonResponse(res, 200, { status: 'triggered', issue: issueNumber });
+    log(`New issue #${issueNumber} detected, classifying and triggering ADW workflow`);
+
+    // Classify the issue and spawn the appropriate workflow asynchronously
+    // Respond quickly to avoid GitHub timeout
+    classifyIssueForTrigger(issueNumber)
+      .then((classification) => {
+        const workflowScript = getWorkflowScript(classification.issueType);
+        log(
+          `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
+          'success'
+        );
+        spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
+      })
+      .catch((error) => {
+        log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');
+        spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
+      });
+
+    jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
   });
 });
 
