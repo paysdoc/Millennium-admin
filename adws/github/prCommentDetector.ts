@@ -22,10 +22,20 @@ export function getLastAdwCommitTimestamp(branchName: string): Date | null {
       { encoding: 'utf-8' }
     );
 
+    // ADW commit patterns for all issue types (feat/fix/chore)
     const adwPatterns = [
+      // Implementation commits
       /feat: implement #/,
+      /fix: implement #/,
+      /chore: implement #/,
+      // PR review commits
       /feat: address PR review/,
+      /fix: address PR review/,
+      /chore: address PR review/,
+      // Implementation plan commits
       /feat: add implementation plan for #/,
+      /fix: add implementation plan for #/,
+      /chore: add implementation plan for #/,
     ];
 
     for (const line of output.split('\n')) {

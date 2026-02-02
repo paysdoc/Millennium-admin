@@ -27,6 +27,9 @@ export type {
   RecoveryState,
 } from './dataTypes';
 
+// Prefix maps for consistent branch naming and commit messages
+export { commitPrefixMap, branchPrefixMap } from './dataTypes';
+
 // Utilities
 export {
   generateAdwId,
