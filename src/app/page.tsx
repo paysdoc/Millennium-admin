@@ -33,8 +33,9 @@ export default function Home() {
         <main className="main-content">
           <h1 className="page-title">Welcome to Millennium Admin</h1>
           <p>
-            This is your admin interface built with Next.js in a Wikipedia-style
-            design.
+            Here you can add, edit and delete millennium characters, update
+            character images, select which area of an image to use, and create,
+            edit and delete connections between characters.
           </p>
 
           <h2>Quick Links</h2>
