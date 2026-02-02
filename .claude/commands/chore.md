@@ -15,7 +15,7 @@ Create a new plan in specs/*.md to resolve the `Chore` using the exact specified
 - Use your reasoning model: THINK HARD about the plan and the steps to accomplish the chore.
 - Respect requested files in the `Relevant Files` section.
 - Start your research by reading the `README.md` file and the coding guidelines in `/guidelines`.
-- `adws/*.py` contain astral uv single file python scripts. So if you want to run them use `uv run <script_name>`.
+- `adws/*.tsx` contain node tsx single file typescript scripts. So if you want to run them use `npx tsx <script_name>`.
 - When you finish creating the plan for the chore, follow the `Report` section to properly report the results of your work.
 
 ## Relevant Files
