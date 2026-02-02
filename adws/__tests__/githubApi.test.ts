@@ -4,12 +4,12 @@ vi.mock('child_process', () => ({
   execSync: vi.fn(),
 }));
 
-vi.mock('../utils', () => ({
+vi.mock('../core/utils', () => ({
   log: vi.fn(),
 }));
 
 import { execSync } from 'child_process';
-import { fetchPRReviews } from '../githubApi';
+import { fetchPRReviews } from '../github/githubApi';
 
 function makeReview(overrides: Record<string, any> = {}) {
   return {

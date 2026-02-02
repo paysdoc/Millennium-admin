@@ -19,22 +19,35 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { log, generateAdwId, ensureLogsDirectory } from './utils';
-import { fetchGitHubIssue } from './githubApi';
-import { createFeatureBranch, commitChanges, getCurrentBranch } from './gitOperations';
-import { runPlanAgent, getPlanFilePath, planFileExists } from './planAgent';
-import { runBuildAgent } from './buildAgent';
-import { ProgressCallback, ProgressInfo } from './claudeAgent';
-import { createPullRequest } from './pullRequestCreator';
-import { runClaudeAgent } from './claudeAgent';
-import { GitHubIssue, IssueClassSlashCommand, WorkflowStage, RecoveryState } from './dataTypes';
+import { execSync } from 'child_process';
 import {
+  log,
+  generateAdwId,
+  ensureLogsDirectory,
+  GitHubIssue,
+  IssueClassSlashCommand,
+  WorkflowStage,
+  RecoveryState,
+} from './core';
+import {
+  fetchGitHubIssue,
+  createFeatureBranch,
+  commitChanges,
+  createPullRequest,
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
   STAGE_ORDER,
-} from './workflowComments';
-import { execSync } from 'child_process';
+} from './github';
+import {
+  runPlanAgent,
+  getPlanFilePath,
+  planFileExists,
+  runBuildAgent,
+  runClaudeAgent,
+  ProgressCallback,
+  ProgressInfo,
+} from './agents';
 
 /**
  * Classifies a GitHub issue as feature, bug, or chore using the haiku model.

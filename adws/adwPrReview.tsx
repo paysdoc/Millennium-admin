@@ -17,17 +17,23 @@
  */
 
 import * as fs from 'fs';
-import { log, generateAdwId, ensureLogsDirectory } from './utils';
-import { fetchPRDetails, fetchPRReviewComments } from './githubApi';
-import { checkoutBranch, commitChanges, pushBranch } from './gitOperations';
-import { runPrReviewPlanAgent, getPlanFilePath } from './planAgent';
-import { runPrReviewBuildAgent } from './buildAgent';
-import { ProgressCallback, ProgressInfo } from './claudeAgent';
+import { log, generateAdwId, ensureLogsDirectory } from './core';
 import {
+  fetchPRDetails,
+  checkoutBranch,
+  commitChanges,
+  pushBranch,
   postPRWorkflowComment,
   PRReviewWorkflowContext,
-} from './workflowComments';
-import { getUnaddressedComments } from './prCommentDetector';
+  getUnaddressedComments,
+} from './github';
+import {
+  runPrReviewPlanAgent,
+  getPlanFilePath,
+  runPrReviewBuildAgent,
+  ProgressCallback,
+  ProgressInfo,
+} from './agents';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

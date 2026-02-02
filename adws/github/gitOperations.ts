@@ -3,7 +3,7 @@
  */
 
 import { execSync } from 'child_process';
-import { log, slugify } from './utils';
+import { log, slugify } from '../core';
 
 /**
  * Gets the current git branch name.

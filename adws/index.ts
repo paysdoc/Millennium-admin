@@ -4,63 +4,91 @@
  * This file provides a centralized export point for all ADW modules.
  */
 
-// Configuration
-export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR } from './config';
-
-// Utilities
+// Core module - Configuration, types, and utilities
 export {
+  // Configuration
+  CLAUDE_CODE_PATH,
+  GITHUB_PAT,
+  LOGS_DIR,
+  SPECS_DIR,
+  // Utilities
   generateAdwId,
   slugify,
   log,
   ensureLogsDirectory,
-  type LogLevel
-} from './utils';
+  type LogLevel,
+  // Data types
+  type IssueClassSlashCommand,
+  type SlashCommand,
+  type GitHubUser,
+  type GitHubLabel,
+  type GitHubMilestone,
+  type GitHubComment,
+  type GitHubIssueListItem,
+  type GitHubIssue,
+  type AgentPromptRequest,
+  type AgentPromptResponse,
+  type AgentTemplateRequest,
+  type ClaudeCodeResultMessage,
+  type WorkflowStage,
+  type PRReviewComment,
+  type PRDetails,
+  type PRListItem,
+  type PRReviewWorkflowStage,
+  type RecoveryState,
+} from './core';
 
-// GitHub API
+// Agents module - Claude Code agent runners
+export {
+  runClaudeAgent,
+  type AgentResult,
+  type ProgressInfo,
+  type ProgressCallback,
+  buildPlanPrompt,
+  getPlanFilePath,
+  planFileExists,
+  buildPrReviewPlanPrompt,
+  runPrReviewPlanAgent,
+  runPlanAgent,
+  buildImplementPrompt,
+  buildPrReviewImplementPrompt,
+  runPrReviewBuildAgent,
+  runBuildAgent,
+} from './agents';
+
+// GitHub module - GitHub API and git operations
 export {
   getRepoInfo,
   fetchGitHubIssue,
+  fetchPRDetails,
+  fetchPRReviews,
+  fetchPRReviewComments,
+  commentOnPR,
+  fetchPRList,
   commentOnIssue,
-  type RepoInfo
-} from './githubApi';
-
-// Git Operations
-export {
+  type RepoInfo,
   getCurrentBranch,
   generateFeatureBranchName,
   createFeatureBranch,
+  checkoutBranch,
   commitChanges,
-  pushBranch
-} from './gitOperations';
-
-// Claude Agent
-export {
-  runClaudeAgent,
-  type AgentResult
-} from './claudeAgent';
-
-// Plan Agent
-export {
-  buildPlanPrompt,
-  getPlanFilePath,
-  runPlanAgent
-} from './planAgent';
-
-// Build Agent
-export {
-  buildImplementPrompt,
-  runBuildAgent
-} from './buildAgent';
-
-// Pull Request
-export { createPullRequest } from './pullRequestCreator';
-
-// Data Types (re-export for convenience)
-export type {
-  GitHubIssue,
-  GitHubUser,
-  GitHubLabel,
-  GitHubMilestone,
-  GitHubComment,
-  ClaudeCodeResultMessage
-} from './dataTypes';
+  pushBranch,
+  createPullRequest,
+  getLastAdwCommitTimestamp,
+  getUnaddressedComments,
+  hasUnaddressedComments,
+  STAGE_ORDER,
+  parseWorkflowStageFromComment,
+  extractAdwIdFromComment,
+  extractBranchNameFromComment,
+  extractPrUrlFromComment,
+  extractPlanPathFromComment,
+  detectRecoveryState,
+  formatResumingComment,
+  formatWorkflowComment,
+  postWorkflowComment,
+  formatPRReviewWorkflowComment,
+  postPRWorkflowComment,
+  type WorkflowContext,
+  type PRReviewWorkflowContext,
+} from './github';

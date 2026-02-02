@@ -3,8 +3,7 @@
  */
 
 import { execSync } from 'child_process';
-import { GitHubIssue, PRDetails, PRReviewComment, PRListItem } from './dataTypes';
-import { log } from './utils';
+import { GitHubIssue, PRDetails, PRReviewComment, PRListItem, log } from '../core';
 
 export interface RepoInfo {
   owner: string;

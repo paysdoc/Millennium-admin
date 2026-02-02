@@ -12,7 +12,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { log } from '../utils';
+import { log } from '../core';
 
 const port = parseInt(process.env.PORT || '8001', 10);
 

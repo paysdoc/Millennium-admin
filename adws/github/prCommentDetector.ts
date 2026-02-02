@@ -6,9 +6,8 @@
  */
 
 import { execSync } from 'child_process';
-import { PRReviewComment } from './dataTypes';
+import { PRReviewComment, log } from '../core';
 import { fetchPRDetails, fetchPRReviewComments } from './githubApi';
-import { log } from './utils';
 
 /**
  * Gets the timestamp of the last ADW commit on the given branch.

@@ -3,9 +3,8 @@
  */
 
 import * as path from 'path';
-import { GitHubIssue, PRDetails, PRReviewComment } from './dataTypes';
+import { GitHubIssue, PRDetails, PRReviewComment, log } from '../core';
 import { runClaudeAgent, AgentResult, ProgressCallback } from './claudeAgent';
-import { log } from './utils';
 
 /**
  * Builds the prompt for the Build Agent.
