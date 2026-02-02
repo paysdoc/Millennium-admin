@@ -31,7 +31,7 @@ export default function Home() {
 
       <div className="container">
         <main className="main-content">
-          <h1 className="page-title">Welcome to Millennium Admin</h1>
+          <h1 className="page-title">Millennium Admin</h1>
           <p>
             Here you can add, edit and delete millennium characters, update
             character images, select which area of an image to use, and create,
