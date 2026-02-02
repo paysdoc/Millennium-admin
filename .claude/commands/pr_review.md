@@ -1,6 +1,6 @@
 # PR-review Planning
 
-Create a new plan in specs/*.md to resolve the `PR-Review` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
+Create a new plan at `specs/issue-{issueNumber}-plan.md` (where `{issueNumber}` is the issue number) to resolve the `PR-Review` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
 
 ## Instructions
 
@@ -9,7 +9,7 @@ Create a new plan in specs/*.md to resolve the `PR-Review` using the exact speci
 - IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
 - You're writing a plan to resolve a PR review, it should be simple but we need to be thorough and precise so we don't miss anything or waste time with any second round of changes.
 - Analyze each review comment carefully and understand what changes are required to resolve the review.
-- Create a revision plan in the `specs/*.md` file that addresses ALL review comments in the `PR-Review`.
+- Create a revision plan at `specs/issue-{issueNumber}-plan.md` (where `{issueNumber}` is the issue number from the GitHub Issue) that addresses ALL review comments in the `PR-Review`.
 - Use the plan format below to create the plan.
 - Research the codebase and put together a plan to accomplish the review.
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to accomplish the review.

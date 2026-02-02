@@ -8,7 +8,7 @@ Create a new plan in specs/*.md to resolve the `Bug` using the exact specified m
 - IMPORTANT: The `Bug` describes the bug that will be resolved but remember we're not resolving the bug, we're creating the plan that will be used to resolve the bug based on the `Plan Format` below.
 - IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
 - You're writing a plan to resolve a bug, it should be thorough and precise so we fix the root cause and prevent regressions.
-- Create the plan in the `specs/*.md` file. Name it appropriately based on the `Bug`.
+- Create the plan file at `specs/issue-{issueNumber}-plan.md` where `{issueNumber}` is the issue number from the GitHub Issue (e.g., `specs/issue-36-plan.md` for issue #36).
 - Use the plan format below to create the plan.
 - Research the codebase to understand the bug, reproduce it, and put together a plan to fix it.
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to fix the bug.
