@@ -38,6 +38,7 @@ import {
   WorkflowContext,
   detectRecoveryState,
   STAGE_ORDER,
+  checkoutDefaultBranch,
 } from './github';
 import {
   runPlanAgent,
@@ -227,6 +228,10 @@ async function main(): Promise<void> {
   log('Fetching GitHub issue...', 'info');
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
+
+  // Step 1.5: Checkout default branch and pull latest changes
+  // This ensures feature branches are created from the latest code
+  const defaultBranch = checkoutDefaultBranch();
 
   // Detect recovery state from existing comments
   const recoveryState = detectRecoveryState(issue.comments);
