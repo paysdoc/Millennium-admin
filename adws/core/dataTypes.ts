@@ -196,7 +196,12 @@ export type WorkflowStage =
   | 'pr_creating'
   | 'pr_created'
   | 'completed'
-  | 'error';
+  | 'error'
+  // Test workflow stages
+  | 'test_running'
+  | 'test_failed'
+  | 'test_resolving'
+  | 'test_passed';
 
 /**
  * PR review comment from GitHub API.
@@ -301,7 +306,11 @@ export type AgentIdentifier =
   | 'plan-agent'
   | 'build-agent'
   | 'pr-review-plan-agent'
-  | 'pr-review-build-agent';
+  | 'pr-review-build-agent'
+  // Test workflow agents
+  | 'test-orchestrator'
+  | 'test-agent'
+  | 'test-resolver-agent';
 
 /**
  * Execution status for tracking agent progress.
