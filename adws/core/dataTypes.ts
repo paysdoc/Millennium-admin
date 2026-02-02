@@ -295,6 +295,8 @@ export interface PullRequestWebhookPayload {
  */
 export type AgentIdentifier =
   | 'orchestrator'
+  | 'plan-orchestrator'
+  | 'build-orchestrator'
   | 'classifier'
   | 'plan-agent'
   | 'build-agent'
