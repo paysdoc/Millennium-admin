@@ -7,7 +7,7 @@ Create a new plan in specs/*.md to implement the `Feature` using the exact speci
 - IMPORTANT: You're writing a plan to implement a net new feature based on the `Feature` that will add value to the application.
 - IMPORTANT: The `Feature` describes the feature that will be implemented but remember we're not implementing a new feature, we're creating the plan that will be used to implement the feature based on the `Plan Format` below.
 - IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
-- Create the plan in the `specs/*.md` file. Name it appropriately based on the `Feature`.
+- Create the plan file at `specs/issue-{issueNumber}-plan.md` where `{issueNumber}` is the issue number from the GitHub Issue (e.g., `specs/issue-36-plan.md` for issue #36).
 - Use the `Plan Format` below to create the plan.
 - Research the codebase to understand existing patterns, architecture, and conventions before planning the feature.
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to implement the feature successfully.
