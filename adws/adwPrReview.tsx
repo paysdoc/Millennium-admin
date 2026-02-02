@@ -207,7 +207,6 @@ async function main(): Promise<void> {
 
     const buildResult = await runPrReviewBuildAgent(
       prDetails,
-      unaddressedComments,
       planResult.output,
       logsDir,
       buildProgressCallback,

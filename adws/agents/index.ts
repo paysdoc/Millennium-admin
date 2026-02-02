@@ -1,10 +1,12 @@
 /**
  * Agents module - Claude Code agent runners.
+ * All agents use slash commands from .claude/commands/ for consistent prompt templates.
  */
 
-// Claude Agent (base runner)
+// Claude Agent (base runners)
 export {
   runClaudeAgent,
+  runClaudeAgentWithCommand,
   type AgentResult,
   type ProgressInfo,
   type ProgressCallback,
@@ -12,18 +14,14 @@ export {
 
 // Plan Agent
 export {
-  buildPlanPrompt,
   getPlanFilePath,
   planFileExists,
-  buildPrReviewPlanPrompt,
   runPrReviewPlanAgent,
   runPlanAgent,
 } from './planAgent';
 
 // Build Agent
 export {
-  buildImplementPrompt,
-  buildPrReviewImplementPrompt,
   runPrReviewBuildAgent,
   runBuildAgent,
 } from './buildAgent';

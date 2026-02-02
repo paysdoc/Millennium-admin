@@ -1,24 +1,25 @@
 /**
  * Plan Agent - Generates implementation plans from GitHub issues.
+ * Uses slash commands from .claude/commands/ for consistent prompt templates.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from '../core';
-import { runClaudeAgent, AgentResult } from './claudeAgent';
+import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 
 /**
- * Formats issue context for the plan prompt.
+ * Formats issue context as arguments for plan commands.
+ * This creates the full context that replaces $ARGUMENTS in the command templates.
  */
-function formatIssueContext(issue: GitHubIssue): string {
+function formatIssueContextAsArgs(issue: GitHubIssue): string {
   const commentsSection = issue.comments.length > 0
     ? issue.comments
         .map(c => `**${c.author.login}** (${c.createdAt}):\n${c.body}`)
         .join('\n\n---\n\n')
     : 'No comments.';
 
-  return `
-## GitHub Issue #${issue.number}
+  return `## GitHub Issue #${issue.number}
 **Title:** ${issue.title}
 **State:** ${issue.state}
 **Author:** ${issue.author.login}
@@ -29,40 +30,7 @@ function formatIssueContext(issue: GitHubIssue): string {
 ${issue.body || 'No description provided.'}
 
 ### Comments
-${commentsSection}
-`.trim();
-}
-
-/**
- * Builds the prompt for the Plan Agent.
- */
-export function buildPlanPrompt(issue: GitHubIssue, issueType: IssueClassSlashCommand = '/feature'): string {
-  const issueContext = formatIssueContext(issue);
-
-  return `You are a Plan Agent. Your job is to analyze the following GitHub issue and create a detailed implementation plan.
-
-${issueContext}
-
-## Instructions
-
-1. Analyze the issue requirements carefully
-2. Research the codebase to understand existing patterns and architecture
-3. Create a comprehensive implementation plan in specs/issue-${issue.number}-plan.md
-
-Use the ${issueType} command format to create the plan. The plan should include:
-- Feature description
-- User story
-- Problem and solution statements
-- Relevant files (existing and new)
-- Implementation phases
-- Step-by-step tasks
-- Testing strategy
-- Acceptance criteria
-- Validation commands
-
-After creating the plan, provide a brief summary of what the plan covers.
-
-IMPORTANT: Focus only on planning. Do not implement any code changes. Create the plan file and summarize it.`;
+${commentsSection}`;
 }
 
 /**
@@ -101,18 +69,16 @@ function formatPrReviewComments(comments: PRReviewComment[]): string {
 }
 
 /**
- * Builds the prompt for the Plan Agent to address PR review comments.
+ * Formats PR review context as arguments for the /pr_review command.
  */
-export function buildPrReviewPlanPrompt(
+function formatPrReviewContextAsArgs(
   prDetails: PRDetails,
   comments: PRReviewComment[],
   existingPlanContent: string
 ): string {
   const commentsSection = formatPrReviewComments(comments);
 
-  return `You are a Plan Agent. Your job is to create a revision plan to address PR review comments.
-
-## PR #${prDetails.number}: ${prDetails.title}
+  return `## PR #${prDetails.number}: ${prDetails.title}
 **URL:** ${prDetails.url}
 **Branch:** ${prDetails.headBranch}
 
@@ -120,23 +86,12 @@ export function buildPrReviewPlanPrompt(
 ${existingPlanContent}
 
 ## PR Review Comments to Address
-${commentsSection}
-
-## Instructions
-
-1. Analyze each review comment carefully
-2. Research the codebase to understand the context of each comment
-3. Create a revision plan that addresses ALL review comments
-4. The revision plan should be specific about what files to change and how
-5. Include validation commands to verify the changes
-
-Output the revision plan as markdown. Focus only on the changes needed to address the review comments — do not re-implement the entire feature.
-
-IMPORTANT: Focus only on planning. Do not implement any code changes.`;
+${commentsSection}`;
 }
 
 /**
  * Runs the Plan Agent to create a revision plan for PR review comments.
+ * Uses the /pr_review slash command from .claude/commands/pr_review.md
  */
 export async function runPrReviewPlanAgent(
   prDetails: PRDetails,
@@ -145,14 +100,15 @@ export async function runPrReviewPlanAgent(
   logsDir: string,
   statePath?: string
 ): Promise<AgentResult> {
-  const prompt = buildPrReviewPlanPrompt(prDetails, comments, existingPlanContent);
+  const args = formatPrReviewContextAsArgs(prDetails, comments, existingPlanContent);
   const outputFile = path.join(logsDir, 'pr-review-plan-agent.jsonl');
 
-  return runClaudeAgent(prompt, 'PR Review Plan', outputFile, 'opus', undefined, statePath);
+  return runClaudeAgentWithCommand('/pr_review', args, 'PR Review Plan', outputFile, 'opus', undefined, statePath);
 }
 
 /**
  * Runs the Plan Agent to generate an implementation plan.
+ * Uses the appropriate slash command (/feature, /bug, /chore, /pr_review) based on issue type.
  */
 export async function runPlanAgent(
   issue: GitHubIssue,
@@ -160,8 +116,9 @@ export async function runPlanAgent(
   issueType: IssueClassSlashCommand = '/feature',
   statePath?: string
 ): Promise<AgentResult> {
-  const prompt = buildPlanPrompt(issue, issueType);
+  const args = formatIssueContextAsArgs(issue);
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
-  return runClaudeAgent(prompt, 'Plan', outputFile, 'opus', undefined, statePath);
+  // Use the issueType directly as the command (e.g., '/feature', '/bug', '/chore', '/pr_review')
+  return runClaudeAgentWithCommand(issueType, args, 'Plan', outputFile, 'opus', undefined, statePath);
 }
