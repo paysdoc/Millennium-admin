@@ -48,13 +48,14 @@ import {
   getPlanFilePath,
   planFileExists,
   runBuildAgent,
-  runClaudeAgent,
+  runClaudeAgentWithCommand,
   ProgressCallback,
   ProgressInfo,
 } from './agents';
 
 /**
  * Classifies a GitHub issue as feature, bug, or chore using the haiku model.
+ * Uses the /classify_issue slash command from .claude/commands/classify_issue.md
  */
 async function classifyIssue(
   issue: GitHubIssue,
@@ -63,32 +64,23 @@ async function classifyIssue(
 ): Promise<IssueClassSlashCommand> {
   const labelsText = issue.labels.map(l => l.name).join(', ') || 'none';
 
-  const prompt = `Based on the Github Issue below, follow the Instructions to select the appropriate command to execute based on the Command Mapping.
-
-## Instructions
-
-- Based on the details in the Github Issue, select the appropriate command to execute.
-- Respond exclusively with '/' followed by the command to execute.
-- Use the command mapping to help you decide which command to respond with.
-- Think hard about the command to execute.
-
-## Command Mapping
-
-- Respond with /chore if the issue is a chore.
-- Respond with /bug if the issue is a bug.
-- Respond with /feature if the issue is a feature.
-- Respond with /pr_review if the issue is requesting a PR review, code review, or review-related changes.
-- Respond with 0 if the issue isn't any of the above.
-
-## Github Issue
-
-**Title:** ${issue.title}
+  // Format the issue context as arguments for the /classify_issue command
+  // This matches the $ARGUMENTS placeholder in classify_issue.md
+  const args = `**Title:** ${issue.title}
 **Labels:** ${labelsText}
 
 ${issue.body || 'No description provided.'}`;
 
   const outputFile = path.join(logsDir, 'classifier-agent.jsonl');
-  const result = await runClaudeAgent(prompt, 'Classifier', outputFile, 'haiku', undefined, statePath);
+  const result = await runClaudeAgentWithCommand(
+    '/classify_issue',
+    args,
+    'Classifier',
+    outputFile,
+    'haiku',
+    undefined,
+    statePath
+  );
 
   if (!result.success) {
     log('Classification failed, defaulting to /feature', 'info');

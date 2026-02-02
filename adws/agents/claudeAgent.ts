@@ -267,3 +267,146 @@ export async function runClaudeAgent(
     });
   });
 }
+
+/**
+ * Runs a Claude Code agent with a slash command.
+ * The command is passed as a CLI argument rather than via stdin.
+ *
+ * @param command - The slash command to invoke (e.g., '/implement', '/feature')
+ * @param args - Arguments to pass to the command (replaces $ARGUMENTS)
+ * @param agentName - Human-readable name for logging
+ * @param outputFile - Path to write JSONL output
+ * @param model - The model to use ('opus', 'sonnet', 'haiku')
+ * @param onProgress - Optional callback for progress updates
+ * @param statePath - Optional path to agent's state directory for state tracking
+ */
+export async function runClaudeAgentWithCommand(
+  command: string,
+  args: string,
+  agentName: string,
+  outputFile: string,
+  model: string = 'sonnet',
+  onProgress?: ProgressCallback,
+  statePath?: string
+): Promise<AgentResult> {
+  // Build the prompt as "command 'args'" for the CLI
+  // The args are single-quoted to preserve formatting
+  const prompt = `${command} '${args.replace(/'/g, "'\\''")}'`;
+
+  // Write initial state if state path provided
+  if (statePath) {
+    AgentStateManager.appendLog(statePath, `Starting ${agentName} agent with command: ${command}`, prompt);
+    AgentStateManager.appendLog(statePath, `Model: ${model}`);
+  }
+
+  return new Promise((resolve) => {
+    const cliArgs = [
+      '--print',
+      '--verbose',
+      '--dangerously-skip-permissions',
+      '--output-format', 'stream-json',
+      '--model', model,
+      prompt
+    ];
+
+    log(`Starting ${agentName} agent...`, 'info');
+    log(`  Command: ${CLAUDE_CODE_PATH} ${cliArgs.slice(0, -1).join(' ')} "<prompt>"`, 'info');
+    log(`  Slash command: ${command}`, 'info');
+    log(`  Model: ${model}`, 'info');
+    log(`  Output file: ${outputFile}`, 'info');
+    log(`  Args length: ${args.length} characters`, 'info');
+
+    const claude = spawn(CLAUDE_CODE_PATH, cliArgs, {
+      cwd: process.cwd(),
+      env: { ...process.env }
+    });
+
+    const state = {
+      lastResult: null as ClaudeCodeResultMessage | null,
+      fullOutput: '',
+      turnCount: 0,
+      toolCount: 0,
+    };
+
+    const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
+
+    claude.stdout.on('data', (data: Buffer) => {
+      const text = data.toString();
+      outputStream.write(text);
+      parseJsonlOutput(text, state, onProgress, statePath);
+    });
+
+    claude.stderr.on('data', (data: Buffer) => {
+      const text = data.toString();
+      outputStream.write(`[STDERR] ${text}`);
+      log(`${agentName} stderr: ${text}`, 'error');
+    });
+
+    claude.on('close', (code) => {
+      outputStream.end();
+
+      // Log final summary
+      log(`${agentName} agent finished:`, 'info');
+      log(`  Exit code: ${code}`, 'info');
+      log(`  Total turns: ${state.turnCount}`, 'info');
+      log(`  Total tool calls: ${state.toolCount}`, 'info');
+
+      if (onProgress) {
+        onProgress({
+          type: 'summary',
+          turnCount: state.turnCount,
+          toolCount: state.toolCount,
+        });
+      }
+
+      // Write final state summary if statePath provided
+      if (statePath) {
+        AgentStateManager.appendLog(
+          statePath,
+          `Completed: exit code ${code}, turns: ${state.turnCount}, tools: ${state.toolCount}`
+        );
+      }
+
+      if (code === 0 && state.lastResult) {
+        log(`${agentName} completed successfully`, 'success');
+        if (state.lastResult.totalCostUsd) {
+          log(`  Cost: $${state.lastResult.totalCostUsd.toFixed(4)}`, 'info');
+        }
+        resolve({
+          success: !state.lastResult.isError,
+          output: state.lastResult.result || state.fullOutput,
+          sessionId: state.lastResult.sessionId,
+          totalCostUsd: state.lastResult.totalCostUsd,
+          statePath
+        });
+      } else if (code === 0) {
+        resolve({
+          success: true,
+          output: state.fullOutput,
+          statePath
+        });
+      } else {
+        log(`${agentName} exited with code ${code}`, 'error');
+        resolve({
+          success: false,
+          output: state.fullOutput || 'Agent failed without output',
+          statePath
+        });
+      }
+    });
+
+    claude.on('error', (error) => {
+      outputStream.end();
+      log(`${agentName} error: ${error.message}`, 'error');
+      // Log error to state if statePath provided
+      if (statePath) {
+        AgentStateManager.appendLog(statePath, `Error: ${error.message}`);
+      }
+      resolve({
+        success: false,
+        output: error.message,
+        statePath
+      });
+    });
+  });
+}

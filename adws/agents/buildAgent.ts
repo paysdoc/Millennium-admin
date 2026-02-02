@@ -1,116 +1,64 @@
 /**
  * Build Agent - Implements solutions based on implementation plans.
+ * Uses the /implement slash command from .claude/commands/implement.md
  */
 
 import * as path from 'path';
-import { GitHubIssue, PRDetails, PRReviewComment, log } from '../core';
-import { runClaudeAgent, AgentResult, ProgressCallback } from './claudeAgent';
+import { GitHubIssue, PRDetails, log } from '../core';
+import { runClaudeAgentWithCommand, AgentResult, ProgressCallback } from './claudeAgent';
 
 /**
- * Builds the prompt for the Build Agent.
+ * Formats the plan content as arguments for the /implement command.
+ * Includes issue context to provide additional information to the agent.
  */
-export function buildImplementPrompt(issue: GitHubIssue, planContent: string): string {
-  return `You are a Build Agent. Your job is to implement the solution based on the implementation plan below.
-
-## GitHub Issue #${issue.number}
+function formatImplementArgs(issue: GitHubIssue, planContent: string): string {
+  return `## GitHub Issue #${issue.number}
 **Title:** ${issue.title}
 **URL:** ${issue.url}
 
 ## Implementation Plan
-${planContent}
-
-## Instructions
-
-1. Follow the implementation plan step-by-step
-2. Make all necessary code changes as specified in the plan
-3. Run the validation commands from the plan to verify correctness
-4. Ensure all tests pass and there are no regressions
-
-## After Implementation
-Provide a summary of:
-- What was implemented
-- Files changed/created
-- Validation results
-- Any issues encountered and how they were resolved
-
-IMPORTANT: Follow the plan exactly. Run validation commands to verify the implementation.`;
+${planContent}`;
 }
 
 /**
- * Formats PR review comments for inclusion in a build prompt.
+ * Formats the revision plan as arguments for the /implement command.
+ * Includes PR context to provide additional information to the agent.
  */
-function formatPrReviewComments(comments: PRReviewComment[]): string {
-  return comments
-    .map(c => {
-      const location = c.path
-        ? `**File:** \`${c.path}\`${c.line ? ` (line ${c.line})` : ''}`
-        : '**General comment**';
-      return `${location}\n**Author:** ${c.author.login}\n**Comment:** ${c.body}`;
-    })
-    .join('\n\n---\n\n');
-}
-
-/**
- * Builds the prompt for the Build Agent to address PR review comments.
- */
-export function buildPrReviewImplementPrompt(
-  prDetails: PRDetails,
-  comments: PRReviewComment[],
-  revisionPlan: string
-): string {
-  const commentsSection = formatPrReviewComments(comments);
-
-  return `You are a Build Agent. Your job is to implement changes to address PR review comments.
-
-## PR #${prDetails.number}: ${prDetails.title}
+function formatPrReviewImplementArgs(prDetails: PRDetails, revisionPlan: string): string {
+  return `## PR #${prDetails.number}: ${prDetails.title}
 **URL:** ${prDetails.url}
 **Branch:** ${prDetails.headBranch}
 
-## PR Review Comments to Address
-${commentsSection}
-
 ## Revision Plan
-${revisionPlan}
-
-## Instructions
-
-1. Follow the revision plan to address each review comment
-2. Make all necessary code changes
-3. Run validation commands to verify correctness
-4. Ensure no regressions are introduced
-
-## After Implementation
-Provide a summary of what was changed to address each review comment.
-
-IMPORTANT: Follow the revision plan exactly. Only make changes that address the review comments.`;
+${revisionPlan}`;
 }
 
 /**
  * Runs the Build Agent to implement PR review changes.
+ * Uses the /implement slash command with the revision plan as arguments.
  */
 export async function runPrReviewBuildAgent(
   prDetails: PRDetails,
-  comments: PRReviewComment[],
   revisionPlan: string,
   logsDir: string,
   onProgress?: ProgressCallback,
   statePath?: string
 ): Promise<AgentResult> {
-  const prompt = buildPrReviewImplementPrompt(prDetails, comments, revisionPlan);
+  const args = formatPrReviewImplementArgs(prDetails, revisionPlan);
   const outputFile = path.join(logsDir, 'pr-review-build-agent.jsonl');
 
   log('PR Review Build Agent starting with arguments:', 'info');
   log(`  PR: #${prDetails.number} - ${prDetails.title}`, 'info');
-  log(`  Review comments: ${comments.length}`, 'info');
   log(`  Output file: ${outputFile}`, 'info');
   log(`  Revision plan length: ${revisionPlan.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgent(prompt, 'PR Review Build', outputFile, 'opus', onProgress, statePath);
+  return runClaudeAgentWithCommand('/implement', args, 'PR Review Build', outputFile, 'opus', onProgress, statePath);
 }
 
 /**
  * Runs the Build Agent to implement the solution.
+ * Uses the /implement slash command with the plan content as arguments.
  */
 export async function runBuildAgent(
   issue: GitHubIssue,
@@ -119,7 +67,7 @@ export async function runBuildAgent(
   onProgress?: ProgressCallback,
   statePath?: string
 ): Promise<AgentResult> {
-  const prompt = buildImplementPrompt(issue, planContent);
+  const args = formatImplementArgs(issue, planContent);
   const outputFile = path.join(logsDir, 'build-agent.jsonl');
 
   // Log the arguments with which the agent is started
@@ -130,5 +78,5 @@ export async function runBuildAgent(
   log(`  Plan content length: ${planContent.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgent(prompt, 'Build', outputFile, 'opus', onProgress, statePath);
+  return runClaudeAgentWithCommand('/implement', args, 'Build', outputFile, 'opus', onProgress, statePath);
 }
