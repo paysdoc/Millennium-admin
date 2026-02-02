@@ -12,7 +12,8 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { log } from '../core';
+import { log, PullRequestWebhookPayload } from '../core';
+import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
 
 const port = parseInt(process.env.PORT || '8001', 10);
 
@@ -42,6 +43,64 @@ function spawnDetached(command: string, args: string[]): void {
     stdio: 'inherit',
   });
   child.unref();
+}
+
+/**
+ * Extracts issue number from PR body using the "Implements #N" pattern.
+ * Returns null if no issue link is found.
+ */
+function extractIssueNumberFromPRBody(body: string | null): number | null {
+  if (!body) {
+    return null;
+  }
+  const match = body.match(/Implements #(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * Handles pull_request webhook events.
+ * When a PR is closed (merged or not), closes the linked issue.
+ */
+async function handlePullRequestEvent(payload: PullRequestWebhookPayload): Promise<{ status: string; issue?: number }> {
+  const { action, pull_request, repository } = payload;
+
+  log(`Received pull_request event: action=${action}, PR=#${pull_request.number}, repo=${repository.full_name}`);
+
+  // Only handle closed PRs
+  if (action !== 'closed') {
+    log(`Ignored pull_request action: ${action}`);
+    return { status: 'ignored' };
+  }
+
+  const prNumber = pull_request.number;
+  const prUrl = pull_request.html_url;
+  const wasMerged = pull_request.merged;
+  const prBody = pull_request.body;
+
+  log(`PR #${prNumber} was ${wasMerged ? 'merged' : 'closed without merging'}`);
+
+  // Extract issue number from PR body
+  const issueNumber = extractIssueNumberFromPRBody(prBody);
+  if (issueNumber === null) {
+    log(`No issue link found in PR #${prNumber} body (no "Implements #N" pattern)`);
+    return { status: 'ignored' };
+  }
+
+  log(`Found linked issue #${issueNumber} in PR #${prNumber}`);
+
+  // Create closure comment
+  const comment = formatIssueClosureComment(prNumber, prUrl, wasMerged);
+
+  // Close the issue
+  const closed = await closeIssue(issueNumber, comment);
+
+  if (closed) {
+    log(`Successfully closed issue #${issueNumber} after PR #${prNumber} was ${wasMerged ? 'merged' : 'closed'}`);
+    return { status: 'closed', issue: issueNumber };
+  } else {
+    log(`Issue #${issueNumber} was already closed or could not be closed`);
+    return { status: 'already_closed', issue: issueNumber };
+  }
 }
 
 const server = http.createServer((req, res) => {
@@ -89,6 +148,26 @@ const server = http.createServer((req, res) => {
       log(`PR review comment on PR #${prNumber}, triggering ADW PR Review`);
       spawnDetached('npx', ['tsx', 'adws/adwPrReview.tsx', String(prNumber)]);
       jsonResponse(res, 200, { status: 'triggered', pr: prNumber });
+      return;
+    }
+
+    // Handle pull_request events (for closing linked issues when PR is closed/merged)
+    if (event === 'pull_request') {
+      const action = (body.action as string) || '';
+      if (action === 'closed') {
+        // Handle asynchronously but respond quickly to avoid GitHub timeout
+        handlePullRequestEvent(body as unknown as PullRequestWebhookPayload)
+          .then((result) => {
+            log(`PR close event handled: ${JSON.stringify(result)}`);
+          })
+          .catch((error) => {
+            log(`Error handling PR close event: ${error}`, 'error');
+          });
+        jsonResponse(res, 200, { status: 'processing' });
+        return;
+      }
+      log(`Ignored pull_request action: ${action}`);
+      jsonResponse(res, 200, { status: 'ignored' });
       return;
     }
 

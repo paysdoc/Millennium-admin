@@ -264,3 +264,25 @@ export interface RecoveryState {
   /** Whether recovery is possible */
   canResume: boolean;
 }
+
+/**
+ * GitHub webhook payload for pull_request events.
+ */
+export interface PullRequestWebhookPayload {
+  action: 'opened' | 'closed' | 'reopened' | 'synchronize' | 'edited';
+  pull_request: {
+    number: number;
+    state: string;
+    merged: boolean;
+    body: string | null;
+    html_url: string;
+    title: string;
+    base: { ref: string };
+    head: { ref: string };
+  };
+  repository: {
+    name: string;
+    owner: { login: string };
+    full_name: string;
+  };
+}
