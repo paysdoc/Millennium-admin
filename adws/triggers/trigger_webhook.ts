@@ -5,35 +5,54 @@
  *
  * Receives GitHub webhook events and spawns adwPlanBuild.tsx
  * for new issues and adwPrReview.tsx for PR review comments.
- * Start with: npx tsx adws/trigger_webhook.ts
+ * Start with: npx tsx adws/triggers/trigger_webhook.ts
  */
 
 import * as http from 'http';
+import * as fs from 'fs';
+import * as path from 'path';
 import { spawn } from 'child_process';
-import { log } from './utils';
+import { log } from '../core';
 
 const port = parseInt(process.env.PORT || '8001', 10);
+
+const HTTP_STATUS_DESCRIPTIONS: Record<number, string> = {
+  400: 'Bad Request',
+  404: 'Not Found',
+  405: 'Method Not Allowed',
+};
 
 function jsonResponse(
   res: http.ServerResponse,
   statusCode: number,
   body: Record<string, unknown>,
 ): void {
+  if (statusCode >= 400) {
+    const description = HTTP_STATUS_DESCRIPTIONS[statusCode] || 'Error';
+    log(`HTTP ${statusCode} ${description}: ${JSON.stringify(body)}`, 'error');
+  }
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
 function spawnDetached(command: string, args: string[]): void {
+  log(`Spawning: ${command} ${args.join(' ')}`);
   const child = spawn(command, args, {
     detached: true,
-    stdio: 'ignore',
+    stdio: 'inherit',
   });
   child.unref();
 }
 
 const server = http.createServer((req, res) => {
-  if (req.method !== 'POST' || req.url !== '/webhook') {
+  if (req.url !== '/webhook') {
     jsonResponse(res, 404, { error: 'not found' });
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    jsonResponse(res, 405, { error: 'method not allowed' });
     return;
   }
 

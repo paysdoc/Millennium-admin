@@ -2,13 +2,12 @@
  * CRON trigger for ADW (AI Developer Workflow).
  *
  * Polls GitHub every 20 seconds for qualifying issues and
- * spawns adwPlanBuild.tsx for each. Start with: npx tsx adws/trigger_cron.ts
+ * spawns adwPlanBuild.tsx for each. Start with: npx tsx adws/triggers/trigger_cron.ts
  */
 
 import { execSync, spawn } from 'child_process';
-import { getRepoInfo, fetchPRList } from './githubApi';
-import { hasUnaddressedComments } from './prCommentDetector';
-import { log } from './utils';
+import { log } from '../core';
+import { getRepoInfo, fetchPRList, hasUnaddressedComments } from '../github';
 
 const POLL_INTERVAL_MS = 20_000;
 const PR_POLL_INTERVAL_MS = 60_000;

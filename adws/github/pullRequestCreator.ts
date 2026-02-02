@@ -6,10 +6,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { GitHubIssue } from './dataTypes';
+import { GitHubIssue, log } from '../core';
 import { getRepoInfo } from './githubApi';
 import { getCurrentBranch, pushBranch } from './gitOperations';
-import { log } from './utils';
 
 /**
  * Generates the PR body with implementation details.

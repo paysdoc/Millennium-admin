@@ -5,9 +5,7 @@
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
-import { ClaudeCodeResultMessage } from './dataTypes';
-import { CLAUDE_CODE_PATH } from './config';
-import { log } from './utils';
+import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log } from '../core';
 
 export interface AgentResult {
   success: boolean;

@@ -9,8 +9,8 @@
     "lint": "next lint",
     "adw": "tsx",
     "adw:plan-build": "tsx adws/adwPlanBuild.tsx",
-    "adw:trigger-webhook": "tsx adws/trigger_webhook.ts",
-    "adw:trigger-cron": "tsx adws/trigger_cron.ts",
+    "adw:trigger-webhook": "tsx adws/triggers/trigger_webhook.ts",
+    "adw:trigger-cron": "tsx adws/triggers/trigger_cron.ts",
     "adw:pr-review": "tsx adws/adwPrReview.tsx",
     "test": "vitest run"
   },

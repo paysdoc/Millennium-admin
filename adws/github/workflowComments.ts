@@ -3,9 +3,8 @@
  * Centralizes all GitHub issue comment templates for ADW workflow stages.
  */
 
-import { WorkflowStage, IssueClassSlashCommand, RecoveryState, GitHubComment, PRReviewWorkflowStage } from './dataTypes';
+import { WorkflowStage, IssueClassSlashCommand, RecoveryState, GitHubComment, PRReviewWorkflowStage, log } from '../core';
 import { commentOnIssue, commentOnPR } from './githubApi';
-import { log } from './utils';
 
 /**
  * Stage order for determining recovery resume point.

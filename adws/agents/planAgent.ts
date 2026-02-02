@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from './dataTypes';
+import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from '../core';
 import { runClaudeAgent, AgentResult } from './claudeAgent';
 
 /**
