@@ -29,6 +29,8 @@ import {
   WorkflowStage,
   RecoveryState,
   commitPrefixMap,
+  AgentStateManager,
+  AgentState,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -54,7 +56,11 @@ import {
 /**
  * Classifies a GitHub issue as feature, bug, or chore using the haiku model.
  */
-async function classifyIssue(issue: GitHubIssue, logsDir: string): Promise<IssueClassSlashCommand> {
+async function classifyIssue(
+  issue: GitHubIssue,
+  logsDir: string,
+  statePath?: string
+): Promise<IssueClassSlashCommand> {
   const labelsText = issue.labels.map(l => l.name).join(', ') || 'none';
 
   const prompt = `Based on the Github Issue below, follow the Instructions to select the appropriate command to execute based on the Command Mapping.
@@ -81,7 +87,7 @@ async function classifyIssue(issue: GitHubIssue, logsDir: string): Promise<Issue
 ${issue.body || 'No description provided.'}`;
 
   const outputFile = path.join(logsDir, 'classifier-agent.jsonl');
-  const result = await runClaudeAgent(prompt, 'Classifier', outputFile, 'haiku');
+  const result = await runClaudeAgent(prompt, 'Classifier', outputFile, 'haiku', undefined, statePath);
 
   if (!result.success) {
     log('Classification failed, defaulting to /feature', 'info');
@@ -248,6 +254,20 @@ async function main(): Promise<void> {
   log(`ADW ID: ${adwId}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
 
+  // Initialize orchestrator state directory
+  const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'orchestrator');
+  log(`State: ${orchestratorStatePath}`, 'info');
+
+  // Write initial orchestrator state
+  const initialOrchestratorState: Partial<AgentState> = {
+    adwId,
+    issueNumber,
+    agentName: 'orchestrator',
+    execution: AgentStateManager.createExecutionState('running'),
+  };
+  AgentStateManager.writeState(orchestratorStatePath, initialOrchestratorState);
+  AgentStateManager.appendLog(orchestratorStatePath, `Starting ADW Plan & Build workflow for issue #${issueNumber}`);
+
   // Initialize workflow context
   const ctx: WorkflowContext = {
     issueNumber,
@@ -287,9 +307,34 @@ async function main(): Promise<void> {
     let issueType: IssueClassSlashCommand;
     if (shouldExecuteStage('classified', recoveryState)) {
       log('Classifying issue type...', 'info');
-      issueType = await classifyIssue(issue, logsDir);
+      // Initialize classifier agent state
+      const classifierStatePath = AgentStateManager.initializeState(adwId, 'classifier', orchestratorStatePath);
+      AgentStateManager.writeState(classifierStatePath, {
+        adwId,
+        issueNumber,
+        agentName: 'classifier',
+        parentAgent: 'orchestrator',
+        execution: AgentStateManager.createExecutionState('running'),
+      });
+
+      issueType = await classifyIssue(issue, logsDir, classifierStatePath);
       log(`Issue classified as: ${issueType}`, 'success');
       ctx.issueType = issueType;
+
+      // Update classifier state with result
+      AgentStateManager.writeState(classifierStatePath, {
+        issueClass: issueType,
+        output: issueType,
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          true
+        ),
+      });
+
+      // Update orchestrator state
+      AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
+      AgentStateManager.appendLog(orchestratorStatePath, `Issue classified as: ${issueType}`);
+
       postWorkflowComment(issueNumber, 'classified', ctx);
     } else {
       log('Skipping classification (already completed)', 'info');
@@ -304,6 +349,11 @@ async function main(): Promise<void> {
       branchName = createFeatureBranch(issueNumber, issue.title, issueType);
       log(`On branch: ${branchName}`, 'success');
       ctx.branchName = branchName;
+
+      // Update orchestrator state with branch name
+      AgentStateManager.writeState(orchestratorStatePath, { branchName });
+      AgentStateManager.appendLog(orchestratorStatePath, `Branch created: ${branchName}`);
+
       postWorkflowComment(issueNumber, 'branch_created', ctx);
     } else {
       log('Skipping branch creation (already completed)', 'info');
@@ -321,11 +371,45 @@ async function main(): Promise<void> {
     if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber)) {
       postWorkflowComment(issueNumber, 'plan_building', ctx);
       log('Running Plan Agent...', 'info');
-      const planResult = await runPlanAgent(issue, logsDir, issueType);
+
+      // Initialize plan agent state
+      const planAgentStatePath = AgentStateManager.initializeState(adwId, 'plan-agent', orchestratorStatePath);
+      AgentStateManager.writeState(planAgentStatePath, {
+        adwId,
+        issueNumber,
+        branchName,
+        issueClass: issueType,
+        agentName: 'plan-agent',
+        parentAgent: 'orchestrator',
+        execution: AgentStateManager.createExecutionState('running'),
+      });
+
+      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath);
 
       if (!planResult.success) {
+        AgentStateManager.writeState(planAgentStatePath, {
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            false,
+            planResult.output
+          ),
+        });
         throw new Error(`Plan Agent failed: ${planResult.output}`);
       }
+
+      // Update plan agent state with result
+      AgentStateManager.writeState(planAgentStatePath, {
+        planFile: planPath,
+        output: planResult.output.substring(0, 1000), // Truncate for state
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          true
+        ),
+      });
+
+      // Update orchestrator state
+      AgentStateManager.writeState(orchestratorStatePath, { planFile: planPath });
+      AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${planPath}`);
 
       ctx.planOutput = planResult.output;
       planCostUsd = planResult.totalCostUsd || 0;
@@ -355,6 +439,19 @@ async function main(): Promise<void> {
         throw new Error(`Cannot read plan file at ${planPath}: ${error}`);
       }
 
+      // Initialize build agent state
+      const buildAgentStatePath = AgentStateManager.initializeState(adwId, 'build-agent', orchestratorStatePath);
+      AgentStateManager.writeState(buildAgentStatePath, {
+        adwId,
+        issueNumber,
+        branchName,
+        planFile: planPath,
+        issueClass: issueType,
+        agentName: 'build-agent',
+        parentAgent: 'orchestrator',
+        execution: AgentStateManager.createExecutionState('running'),
+      });
+
       // Track progress and post periodic updates
       let lastProgressUpdate = Date.now();
       const PROGRESS_UPDATE_INTERVAL_MS = 60000; // Post progress every 60 seconds
@@ -381,11 +478,29 @@ async function main(): Promise<void> {
         }
       };
 
-      const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback);
+      const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback, buildAgentStatePath);
 
       if (!buildResult.success) {
+        AgentStateManager.writeState(buildAgentStatePath, {
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            false,
+            buildResult.output
+          ),
+        });
         throw new Error(`Build Agent failed: ${buildResult.output}`);
       }
+
+      // Update build agent state with result
+      AgentStateManager.writeState(buildAgentStatePath, {
+        output: buildResult.output.substring(0, 1000), // Truncate for state
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          true
+        ),
+      });
+
+      AgentStateManager.appendLog(orchestratorStatePath, 'Build completed');
 
       ctx.buildOutput = buildResult.output;
       buildCostUsd = buildResult.totalCostUsd || 0;
@@ -416,6 +531,19 @@ async function main(): Promise<void> {
     // Workflow completed
     postWorkflowComment(issueNumber, 'completed', ctx);
 
+    // Update final orchestrator state
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        true
+      ),
+      metadata: {
+        prUrl: ctx.prUrl,
+        totalCostUsd: planCostUsd + buildCostUsd,
+      },
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, 'Workflow completed successfully');
+
     // Final summary
     printWorkflowSummary(
       issueNumber,
@@ -430,6 +558,17 @@ async function main(): Promise<void> {
   } catch (error) {
     ctx.errorMessage = String(error);
     postWorkflowComment(issueNumber, 'error', ctx);
+
+    // Update orchestrator state with error
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        false,
+        String(error)
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, `Workflow failed: ${error}`);
+
     log(`Workflow failed: ${error}`, 'error');
     process.exit(1);
   }

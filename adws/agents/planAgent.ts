@@ -142,12 +142,13 @@ export async function runPrReviewPlanAgent(
   prDetails: PRDetails,
   comments: PRReviewComment[],
   existingPlanContent: string,
-  logsDir: string
+  logsDir: string,
+  statePath?: string
 ): Promise<AgentResult> {
   const prompt = buildPrReviewPlanPrompt(prDetails, comments, existingPlanContent);
   const outputFile = path.join(logsDir, 'pr-review-plan-agent.jsonl');
 
-  return runClaudeAgent(prompt, 'PR Review Plan', outputFile, 'opus');
+  return runClaudeAgent(prompt, 'PR Review Plan', outputFile, 'opus', undefined, statePath);
 }
 
 /**
@@ -156,10 +157,11 @@ export async function runPrReviewPlanAgent(
 export async function runPlanAgent(
   issue: GitHubIssue,
   logsDir: string,
-  issueType: IssueClassSlashCommand = '/feature'
+  issueType: IssueClassSlashCommand = '/feature',
+  statePath?: string
 ): Promise<AgentResult> {
   const prompt = buildPlanPrompt(issue, issueType);
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
-  return runClaudeAgent(prompt, 'Plan', outputFile, 'opus');
+  return runClaudeAgent(prompt, 'Plan', outputFile, 'opus', undefined, statePath);
 }

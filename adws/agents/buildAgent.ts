@@ -93,7 +93,8 @@ export async function runPrReviewBuildAgent(
   comments: PRReviewComment[],
   revisionPlan: string,
   logsDir: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  statePath?: string
 ): Promise<AgentResult> {
   const prompt = buildPrReviewImplementPrompt(prDetails, comments, revisionPlan);
   const outputFile = path.join(logsDir, 'pr-review-build-agent.jsonl');
@@ -105,7 +106,7 @@ export async function runPrReviewBuildAgent(
   log(`  Revision plan length: ${revisionPlan.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgent(prompt, 'PR Review Build', outputFile, 'opus', onProgress);
+  return runClaudeAgent(prompt, 'PR Review Build', outputFile, 'opus', onProgress, statePath);
 }
 
 /**
@@ -115,7 +116,8 @@ export async function runBuildAgent(
   issue: GitHubIssue,
   logsDir: string,
   planContent: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  statePath?: string
 ): Promise<AgentResult> {
   const prompt = buildImplementPrompt(issue, planContent);
   const outputFile = path.join(logsDir, 'build-agent.jsonl');
@@ -128,5 +130,5 @@ export async function runBuildAgent(
   log(`  Plan content length: ${planContent.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgent(prompt, 'Build', outputFile, 'opus', onProgress);
+  return runClaudeAgent(prompt, 'Build', outputFile, 'opus', onProgress, statePath);
 }

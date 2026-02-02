@@ -3,7 +3,7 @@
  */
 
 // Configuration
-export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR } from './config';
+export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR } from './config';
 
 // Data types
 export type {
@@ -26,6 +26,10 @@ export type {
   PRReviewWorkflowStage,
   RecoveryState,
   PullRequestWebhookPayload,
+  AgentIdentifier,
+  AgentExecutionStatus,
+  AgentExecutionState,
+  AgentState,
 } from './dataTypes';
 
 // Prefix maps for consistent branch naming and commit messages
@@ -37,5 +41,18 @@ export {
   slugify,
   log,
   ensureLogsDirectory,
+  ensureAgentStateDirectory,
+  getAgentStatePath,
   type LogLevel,
 } from './utils';
+
+// Agent State Management
+export {
+  AgentStateManager,
+  initializeAgentState,
+  writeAgentState,
+  readAgentState,
+  appendAgentLog,
+  writeAgentRawOutput,
+  readParentAgentState,
+} from './agentState';

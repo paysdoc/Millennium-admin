@@ -286,3 +286,64 @@ export interface PullRequestWebhookPayload {
     full_name: string;
   };
 }
+
+/**
+ * Agent identifier for consistent naming across the state system.
+ */
+export type AgentIdentifier =
+  | 'orchestrator'
+  | 'classifier'
+  | 'plan-agent'
+  | 'build-agent'
+  | 'pr-review-plan-agent'
+  | 'pr-review-build-agent';
+
+/**
+ * Execution status for tracking agent progress.
+ */
+export type AgentExecutionStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+/**
+ * Agent execution state for tracking progress.
+ */
+export interface AgentExecutionState {
+  /** Current execution status */
+  status: AgentExecutionStatus;
+  /** ISO 8601 timestamp when agent started */
+  startedAt: string;
+  /** ISO 8601 timestamp when agent completed (if applicable) */
+  completedAt?: string;
+  /** Error message if failed */
+  errorMessage?: string;
+}
+
+/**
+ * Core agent state stored in state.json.
+ * Contains all context needed for workflow execution and recovery.
+ */
+export interface AgentState {
+  /** Unique ADW session identifier */
+  adwId: string;
+  /** GitHub issue number being addressed */
+  issueNumber: number;
+  /** Git branch name for the feature/fix */
+  branchName?: string;
+  /** Path to the implementation plan file */
+  planFile?: string;
+  /** Issue classification (slash command) */
+  issueClass?: IssueClassSlashCommand;
+  /** Agent identifier */
+  agentName: AgentIdentifier;
+  /** Parent agent identifier (for nested agents) */
+  parentAgent?: AgentIdentifier;
+  /** Execution state */
+  execution: AgentExecutionState;
+  /** Agent-specific output or summary */
+  output?: string;
+  /** Additional metadata for agent-specific data */
+  metadata?: Record<string, unknown>;
+}

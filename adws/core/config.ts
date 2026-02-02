@@ -19,3 +19,6 @@ export const LOGS_DIR = path.join(process.cwd(), 'logs');
 
 /** Directory for storing implementation plans. */
 export const SPECS_DIR = path.join(process.cwd(), 'specs');
+
+/** Directory for storing agent state files. */
+export const AGENTS_STATE_DIR = path.join(process.cwd(), 'agents');
