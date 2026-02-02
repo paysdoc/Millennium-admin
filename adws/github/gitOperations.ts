@@ -89,3 +89,54 @@ export function pushBranch(branchName: string): void {
   execSync(`git push -u origin ${branchName}`, { stdio: 'pipe' });
   log(`Pushed branch to origin`, 'success');
 }
+
+/**
+ * Gets the default branch name of the repository using the GitHub CLI.
+ * @returns The name of the default branch (e.g., 'main', 'master', 'develop')
+ */
+export function getDefaultBranch(): string {
+  try {
+    const result = execSync(
+      "gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'",
+      { encoding: 'utf-8' }
+    );
+    const branchName = result.trim();
+
+    if (!branchName) {
+      throw new Error('GitHub CLI returned empty default branch name');
+    }
+
+    return branchName;
+  } catch (error) {
+    throw new Error(`Failed to get default branch: ${error}`);
+  }
+}
+
+/**
+ * Checks out the repository's default branch and pulls the latest changes.
+ * This ensures the working directory is on the latest version of the default branch
+ * before creating feature branches.
+ * @returns The name of the default branch that was checked out.
+ */
+export function checkoutDefaultBranch(): string {
+  log('Checking out default branch...', 'info');
+
+  const defaultBranch = getDefaultBranch();
+  log(`Default branch is: ${defaultBranch}`, 'info');
+
+  try {
+    execSync(`git checkout ${defaultBranch}`, { stdio: 'pipe' });
+    log(`Checked out branch: ${defaultBranch}`, 'success');
+  } catch (error) {
+    throw new Error(`Failed to checkout default branch '${defaultBranch}': ${error}`);
+  }
+
+  try {
+    execSync(`git pull origin ${defaultBranch}`, { stdio: 'pipe' });
+    log(`Pulled latest changes from origin/${defaultBranch}`, 'success');
+  } catch (error) {
+    throw new Error(`Failed to pull latest changes for '${defaultBranch}': ${error}`);
+  }
+
+  return defaultBranch;
+}

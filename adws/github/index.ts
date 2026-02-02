@@ -23,6 +23,8 @@ export {
   checkoutBranch,
   commitChanges,
   pushBranch,
+  getDefaultBranch,
+  checkoutDefaultBranch,
 } from './gitOperations';
 
 // Pull Request Creator
