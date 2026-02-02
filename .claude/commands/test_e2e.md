@@ -4,10 +4,8 @@ Execute end-to-end (E2E) tests using Playwright browser automation (MCP Server).
 
 ## Variables
 
-adw_id: $1 if provided, otherwise generate a random 8 character hex string
-agent_name: $2 if provided, otherwise use 'test_e2e'
-e2e_test_file: $3
-application_url: $4 if provided, otherwise use http://localhost:5173
+e2e_test_file: $1
+application_url: $2 if provided, otherwise use http://localhost:3000
 
 ## Instructions
 
@@ -24,23 +22,22 @@ application_url: $4 if provided, otherwise use http://localhost:5173
 - IMPORTANT: After taking each screenshot, save it to `Screenshot Directory` with descriptive names. Use absolute paths to move the files to the `Screenshot Directory` with the correct name.
 - Capture and report any errors encountered
 - Ultra think about the `Test Steps` and execute them in order
-- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "query-input" on page "http://localhost:5173"'
+- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "query-input" on page "http://localhost:3000"'
 - Use `pwd` or equivalent to get the absolute path to the codebase for writing and displaying the correct paths to the screenshots
 
 ## Setup
 
-- IMPORTANT: Reset the database by running `scripts/reset_db.sh`
-- IMPORTANT: Make sure the server and client are running on a background process before executing the test steps. Read `scripts/` and `README.md` for more information on how to start, stop and reset the server and client
-
+- Ensure the Next.js development server is running on port 3000 (`npm run dev`)
+- If the server is not running, start it in a background process before executing the test steps
+- Verify the application is accessible at `application_url` before proceeding with tests
 
 ## Screenshot Directory
 
-<absolute path to codebase>/agents/<adw_id>/<agent_name>/img/<directory name based on test file name>/*.png
+<absolute path to codebase>/e2e-screenshots/<test name>/
 
 Each screenshot should be saved with a descriptive name that reflects what is being captured. The directory structure ensures that:
-- Screenshots are organized by ADW ID (workflow run)
-- They are stored under the specified agent name (e.g., e2e_test_runner_0, e2e_test_resolver_iter1_0)
-- Each test has its own subdirectory based on the test file name (e.g., test_basic_query → basic_query/)
+- Screenshots are organized by test name
+- Each test has its own subdirectory based on the test file name (e.g., test_login → login/)
 
 ## Report
 
@@ -55,9 +52,9 @@ Each screenshot should be saved with a descriptive name that reflects what is be
   "test_name": "Test Name Here",
   "status": "passed|failed",
   "screenshots": [
-    "<absolute path to codebase>/agents/<adw_id>/<agent_name>/img/<test name>/01_<descriptive name>.png",
-    "<absolute path to codebase>/agents/<adw_id>/<agent_name>/img/<test name>/02_<descriptive name>.png",
-    "<absolute path to codebase>/agents/<adw_id>/<agent_name>/img/<test name>/03_<descriptive name>.png"
+    "<absolute path to codebase>/e2e-screenshots/<test name>/01_<descriptive name>.png",
+    "<absolute path to codebase>/e2e-screenshots/<test name>/02_<descriptive name>.png",
+    "<absolute path to codebase>/e2e-screenshots/<test name>/03_<descriptive name>.png"
   ],
   "error": null
 }
