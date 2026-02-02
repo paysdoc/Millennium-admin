@@ -25,6 +25,7 @@ export type {
   PRListItem,
   PRReviewWorkflowStage,
   RecoveryState,
+  PullRequestWebhookPayload,
 } from './dataTypes';
 
 // Prefix maps for consistent branch naming and commit messages
