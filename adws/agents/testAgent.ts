@@ -244,7 +244,7 @@ export async function runResolveE2ETestAgent(
  * @returns Array of absolute paths to E2E test files
  */
 export function discoverE2ETestFiles(): string[] {
-  const e2eTestsDir = path.join(process.cwd(), 'e2e-tests');
+  const e2eTestsDir = path.join(process.cwd(), '.claude/commands/e2e');
 
   // Return empty array if directory doesn't exist
   if (!fs.existsSync(e2eTestsDir)) {
