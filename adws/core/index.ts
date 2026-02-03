@@ -3,7 +3,7 @@
  */
 
 // Configuration
-export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS } from './config';
+export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS, VERCEL_CLI_PATH } from './config';
 
 // Data types
 export type {

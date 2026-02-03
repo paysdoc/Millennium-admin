@@ -11,6 +11,9 @@ dotenv.config();
 /** Path to the Claude CLI executable. */
 export const CLAUDE_CODE_PATH = process.env.CLAUDE_CODE_PATH || '/usr/local/bin/claude';
 
+/** Path to the Vercel CLI executable. */
+export const VERCEL_CLI_PATH = process.env.VERCEL_CLI_PATH || 'vercel';
+
 /** GitHub Personal Access Token (optional, gh CLI handles auth). */
 export const GITHUB_PAT = process.env.GITHUB_PAT || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
