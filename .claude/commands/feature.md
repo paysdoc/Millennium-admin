@@ -70,7 +70,11 @@ Use these files to implement the feature:
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-<list step by step tasks as h3 headers plus bullet points. use as many h3 headers as needed to implement the feature. Order matters, start with the foundational shared changes required then move on to the specific implementation. Include creating tests throughout the implementation process. Your last step should be running the `Validation Commands` to validate the feature works correctly with zero regressions.>
+<list step by step tasks as h3 headers plus bullet points. use as many h3 headers as needed to implement the feature. Order matters, start with the foundational shared changes required then move on to the specific implementation. Include creating tests throughout the implementation process.> 
+
+<If the feature affects UI, include a task to create a E2E test file (like `.claude/commands/e2e/example_test_sql_injection.md` and `.claude/commands/e2e/example_test_basic_query.md`) as one of your early tasks. That e2e test should validate the feature works as expected, be specific with the steps to demonstrate the new functionality. We want the minimal set of steps to validate the feature works as expected and screen shots to prove it if possible.>
+
+<Your last step should be running the `Validation Commands` to validate the feature works correctly with zero regressions.>
 
 ## Testing Strategy
 ### Unit Tests
@@ -102,4 +106,4 @@ $ARGUMENTS
 
 ## Report
 - Summarize the work you've just done in a concise bullet point list.
-- Include a path to the plan you created in the `specs/*.md` file.
+- Include the full path to the plan file you created (e.g., `specs/issue-456-adw-xyz789-sdlc_planner-add-auth-system.md`)

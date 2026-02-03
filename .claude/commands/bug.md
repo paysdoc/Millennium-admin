@@ -82,4 +82,4 @@ $ARGUMENTS
 
 ## Report
 - Summarize the work you've just done in a concise bullet point list.
-- Include a path to the plan you created in the `specs/*.md` file.
+- Include the full path to the plan file you created (e.g., `specs/issue-456-adw-xyz789-sdlc_planner-add-auth-system.md`)
