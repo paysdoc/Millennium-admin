@@ -3,10 +3,10 @@ import Footer from '@/components/Footer'
 import TableOfContents from '@/components/TableOfContents'
 import CategorySection from '@/components/CategorySection'
 import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
-import { CategoryKey } from '@/types/character'
+import { CharactersByCategory } from '@/types/character'
 
 export default async function Home() {
-  let groupedCharacters: Map<CategoryKey, { id: string; name: string; category: string }[]>
+  let groupedCharacters: CharactersByCategory
   let error: string | null = null
 
   try {

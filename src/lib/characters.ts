@@ -2,30 +2,39 @@ import { getSupabaseClient } from './supabase'
 import { isTableNotFoundError } from './schema'
 import {
   Character,
+  CharacterRow,
   CategoryKey,
   CharactersByCategory,
   CATEGORY_ORDER,
+  mapCharacterRowToCharacter,
 } from '@/types/character'
 
+/**
+ * Fetch all characters from the `character` table.
+ * Maps database rows to the application Character interface.
+ */
 export async function fetchAllCharacters(): Promise<Character[]> {
   const supabase = getSupabaseClient()
 
   try {
     const { data, error } = await supabase
-      .from('characters')
-      .select('id, name, category')
+      .from('character')
+      .select(
+        'id, name, first_names, birth_date, death_date, biography, type, link, image_link'
+      )
 
     if (error) {
       if (isTableNotFoundError(error)) {
         console.warn(
-          'Characters table does not exist in database. Returning empty list.'
+          'Character table does not exist in database. Returning empty list.'
         )
         return []
       }
       throw new Error(`Failed to fetch characters: ${error.message}`)
     }
 
-    return data || []
+    // Map database rows to application Character interface
+    return (data as CharacterRow[] || []).map(mapCharacterRowToCharacter)
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
