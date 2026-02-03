@@ -409,3 +409,159 @@ branch refs/heads/main
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51'));
   });
 });
+
+describe('Concurrent ADW Workflow Isolation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates isolated worktrees for multiple concurrent workflows', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(execSync)
+      .mockReturnValueOnce('') // branch exists check for issue-1
+      .mockReturnValueOnce('') // git worktree add for issue-1
+      .mockReturnValueOnce('') // branch exists check for issue-2
+      .mockReturnValueOnce(''); // git worktree add for issue-2
+
+    const worktree1 = createWorktree('feature/issue-1');
+    const worktree2 = createWorktree('feature/issue-2');
+
+    expect(worktree1).toBe(path.join('/mock/project/.worktrees', 'feature-issue-1'));
+    expect(worktree2).toBe(path.join('/mock/project/.worktrees', 'feature-issue-2'));
+    expect(worktree1).not.toBe(worktree2);
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const worktreeAddCalls = execCalls.filter((call) =>
+      String(call[0]).includes('git worktree add')
+    );
+    expect(worktreeAddCalls).toHaveLength(2);
+    expect(String(worktreeAddCalls[0][0])).toContain('feature-issue-1');
+    expect(String(worktreeAddCalls[1][0])).toContain('feature-issue-2');
+  });
+
+  it('generates unique paths for different branch names', () => {
+    const path1 = getWorktreePath('feature/issue-1');
+    const path2 = getWorktreePath('feature/issue-10');
+    const path3 = getWorktreePath('feature/issue-100');
+    const path4 = getWorktreePath('bugfix/issue-1');
+
+    expect(path1).toBe(path.join('/mock/project/.worktrees', 'feature-issue-1'));
+    expect(path2).toBe(path.join('/mock/project/.worktrees', 'feature-issue-10'));
+    expect(path3).toBe(path.join('/mock/project/.worktrees', 'feature-issue-100'));
+    expect(path4).toBe(path.join('/mock/project/.worktrees', 'bugfix-issue-1'));
+
+    const allPaths = [path1, path2, path3, path4];
+    const uniquePaths = new Set(allPaths);
+    expect(uniquePaths.size).toBe(allPaths.length);
+  });
+
+  it('correctly identifies each worktree independently when multiple exist', () => {
+    const multiWorktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-1
+HEAD def456
+branch refs/heads/feature/issue-1
+
+worktree /mock/project/.worktrees/feature-issue-2
+HEAD ghi789
+branch refs/heads/feature/issue-2
+
+worktree /mock/project/.worktrees/bugfix-issue-3
+HEAD jkl012
+branch refs/heads/bugfix/issue-3
+
+`;
+    vi.mocked(execSync).mockReturnValue(multiWorktreeListOutput);
+
+    expect(worktreeExists('feature/issue-1')).toBe(true);
+    expect(worktreeExists('feature/issue-2')).toBe(true);
+    expect(worktreeExists('bugfix/issue-3')).toBe(true);
+    expect(worktreeExists('feature/issue-10')).toBe(false);
+    expect(worktreeExists('nonexistent-branch')).toBe(false);
+  });
+
+  it('removes one worktree without affecting others', () => {
+    const initialWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-1
+HEAD def456
+branch refs/heads/feature/issue-1
+
+worktree /mock/project/.worktrees/feature-issue-2
+HEAD ghi789
+branch refs/heads/feature/issue-2
+
+`;
+    const afterRemovalWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-2
+HEAD ghi789
+branch refs/heads/feature/issue-2
+
+`;
+
+    vi.mocked(execSync)
+      .mockReturnValueOnce('') // git worktree remove for issue-1
+      .mockReturnValueOnce(afterRemovalWorktreeList); // list after removal
+
+    const removeResult = removeWorktree('feature/issue-1');
+    expect(removeResult).toBe(true);
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const removeCall = execCalls.find((call) =>
+      String(call[0]).includes('git worktree remove')
+    );
+    expect(removeCall).toBeDefined();
+    expect(String(removeCall![0])).toContain('feature-issue-1');
+    expect(String(removeCall![0])).not.toContain('feature-issue-2');
+
+    vi.mocked(execSync).mockReturnValue(afterRemovalWorktreeList);
+    expect(worktreeExists('feature/issue-1')).toBe(false);
+    expect(worktreeExists('feature/issue-2')).toBe(true);
+  });
+
+  it('main repository state is not affected by worktree operations', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-1
+HEAD def456
+branch refs/heads/feature/issue-1
+
+worktree /mock/project/.worktrees/feature-issue-2
+HEAD ghi789
+branch refs/heads/feature/issue-2
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const worktrees = listWorktrees();
+
+    expect(worktrees).not.toContain('/mock/project');
+    expect(worktrees).toContain('/mock/project/.worktrees/feature-issue-1');
+    expect(worktrees).toContain('/mock/project/.worktrees/feature-issue-2');
+
+    vi.clearAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(execSync)
+      .mockReturnValueOnce('') // branch exists
+      .mockReturnValueOnce(''); // worktree add
+
+    createWorktree('feature/issue-3');
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const worktreeAddCall = execCalls.find((call) =>
+      String(call[0]).includes('git worktree add')
+    );
+    expect(worktreeAddCall).toBeDefined();
+    expect(String(worktreeAddCall![0])).not.toContain('git checkout');
+    expect(String(worktreeAddCall![0])).not.toContain('git switch');
+  });
+});
