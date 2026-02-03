@@ -1,108 +1,80 @@
-# Bug: PR should not be created until all tests pass
+# PR-Review: Fix adwPlanBuild.tsx to create PRs after build phase
 
-## Bug Description
-The `adwPlanBuildTest` workflow creates a Pull Request during the Build phase (Step 7 in `adwBuild.tsx`) before the Test phase runs. This means that even if tests fail after exhausting all retry attempts (MAX_TEST_RETRY_ATTEMPTS), a PR has already been created and is visible on GitHub. This is problematic because PRs with failing tests should not be created in the first place.
+## PR-Review Description
+The PR review comment from paysdoc indicates that `adwPlanBuild.tsx` now no longer creates a PR. This is a side effect of the fix for issue #47, which moved PR creation from `adwBuild.tsx` to `adwPlanBuildTest.tsx`.
 
-**Expected behavior:** A PR should only be created after all tests (unit and E2E) pass successfully.
+The problem is that there are two orchestrator scripts:
+1. `adwPlanBuildTest.tsx` - Orchestrates Plan + Build + Test, now creates PR after tests pass ✓
+2. `adwPlanBuild.tsx` - Orchestrates Plan + Build only (no Test phase), but now has no PR creation logic ✗
 
-**Actual behavior:** A PR is created during the Build phase before tests are run. If tests fail after max retries, the PR already exists.
+Users who use the simpler `adwPlanBuild.tsx` workflow (without running tests) will no longer get a PR created. The PR creation logic needs to be added to `adwPlanBuild.tsx` so it creates a PR after the Build phase completes.
 
-## Problem Statement
-The PR creation step is located in `adwBuild.tsx` (Step 7, lines 329-338), which executes before `adwTest.tsx` runs. The orchestrator `adwPlanBuildTest.tsx` calls these phases sequentially, but PR creation happens too early in the workflow.
+## Summary of Original Implementation Plan
+The original plan for issue #47 was to fix the problem where PRs were created during the Build phase before tests run. The solution was to:
+1. Remove PR creation from `adwBuild.tsx` (Step 7)
+2. Move PR creation to `adwPlanBuildTest.tsx`, executing it only after the Test phase completes successfully
 
-## Solution Statement
-Move the PR creation logic from `adwBuild.tsx` to `adwPlanBuildTest.tsx`, executing it only after the Test phase completes successfully. If tests fail after maximum retry attempts, the workflow should exit without creating a PR.
-
-## Steps to Reproduce
-1. Run `npx tsx adws/adwPlanBuildTest.tsx <issue-number>` on an issue
-2. The Plan phase completes successfully
-3. The Build phase completes and creates a PR (Step 7)
-4. The Test phase runs, tests fail, resolution is attempted
-5. Tests still fail after MAX_TEST_RETRY_ATTEMPTS
-6. PR already exists on GitHub despite tests failing
-
-## Root Cause Analysis
-The workflow architecture has a sequencing flaw:
-
-1. `adwPlanBuildTest.tsx` orchestrates the workflow by calling three phases in order:
-   - Phase 1: `adwPlan.tsx` - Plans the implementation
-   - Phase 2: `adwBuild.tsx` - Implements AND creates PR (lines 329-338)
-   - Phase 3: `adwTest.tsx` - Runs tests with retry logic
-
-2. In `adwBuild.tsx` (lines 329-338), the PR is created at Step 7:
-   ```typescript
-   // Step 7: Create PR
-   if (shouldExecuteStage('pr_created', recoveryState) && !ctx.prUrl) {
-     postWorkflowComment(issueNumber, 'pr_creating', ctx);
-     log('Creating Pull Request...', 'info');
-     const prUrl = createPullRequest(issue, ctx.planOutput || '', ctx.buildOutput || '');
-     ctx.prUrl = prUrl;
-     postWorkflowComment(issueNumber, 'pr_created', ctx);
-   }
-   ```
-
-3. The Test phase is completely independent and has no way to prevent or undo PR creation.
-
-4. The fix requires separating the "implementation commit" step from the "PR creation" step, keeping the commit in Build and moving PR creation to after tests pass in the orchestrator.
+This was successfully implemented, but the change had a side effect on `adwPlanBuild.tsx` which was not addressed.
 
 ## Relevant Files
-Use these files to fix the bug:
+Use these files to resolve the review:
 
-- `adws/adwPlanBuildTest.tsx` - Main orchestrator that needs to handle PR creation after tests pass. This is where the PR creation logic should be moved to.
-- `adws/adwBuild.tsx` - Currently contains PR creation logic (Step 7, lines 329-338) that needs to be removed. The "completed" workflow comment posting should also be removed since the workflow isn't complete until tests pass and PR is created.
-- `adws/github/pullRequestCreator.ts` - Contains the `createPullRequest` function that will be called from the orchestrator instead. No changes needed to this file.
-- `adws/github/index.ts` - May need to export `createPullRequest` if not already exported for use by orchestrator.
-- `adws/github/workflowComments.ts` - Contains workflow comment functions and stage definitions. May need reference for understanding stage progression.
-- `adws/core/dataTypes.ts` - Contains type definitions including `WorkflowStage`. May need to add new stages for test workflow integration.
+- `adws/adwPlanBuild.tsx` - Main file that needs PR creation logic added after the Build phase. Currently only calls adwPlan.tsx and adwBuild.tsx but doesn't create a PR.
+- `adws/adwPlanBuildTest.tsx` - Reference implementation showing how PR creation should be done after phases complete. This file already imports and uses `createPullRequest`, `fetchGitHubIssue`, `postWorkflowComment`, `WorkflowContext`, and `getCurrentBranch`.
+- `adws/github/index.ts` - Exports the functions needed for PR creation (`createPullRequest`, `fetchGitHubIssue`, `postWorkflowComment`, `WorkflowContext`, `getCurrentBranch`).
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Verify current exports in github/index.ts
-- Read `adws/github/index.ts` to confirm what is currently exported
-- Ensure `createPullRequest` is exported from the github module (it should be re-exported from `pullRequestCreator.ts`)
+### Step 1: Add imports to adwPlanBuild.tsx
+- Import the necessary functions from `./github`:
+  - `createPullRequest` - To create the pull request
+  - `fetchGitHubIssue` - To get issue details for PR creation
+  - `postWorkflowComment` - To post workflow status comments
+  - `WorkflowContext` - Type for workflow context
+  - `getCurrentBranch` - To get the current branch name
 
-### Step 2: Remove PR creation from adwBuild.tsx
-- Remove Step 7 (PR creation) from `adwBuild.tsx` (lines 329-338)
-- Remove the "completed" workflow comment posting (line 341) since the workflow isn't complete until tests pass and PR is created
-- Update the `printBuildSummary` function call to not expect a PR URL (pass empty string)
-- Remove the `prUrl` from the final orchestrator state metadata
-- Adjust the workflow comments: do NOT post `pr_creating`, `pr_created`, or `completed` stages
-- Keep the implementation commit step (Step 6) intact
+### Step 2: Update the main function signature
+- Change `main()` from synchronous `function main(): void` to async `async function main(): Promise<void>`
+- This is required because `fetchGitHubIssue` is an async function
 
-### Step 3: Update adwPlanBuildTest.tsx to create PR after tests pass
-- Import `createPullRequest` from `./github`
-- Import `fetchGitHubIssue` from `./github` to get issue details for PR creation
-- After Test Phase succeeds (line 109), add PR creation logic:
-  - Fetch the GitHub issue details
-  - Call `createPullRequest` with issue, plan summary (empty), and build summary (empty)
-  - Log the PR URL on success
-- If Test Phase fails, log that no PR was created due to test failures and exit with code 1
+### Step 3: Add PR creation logic after Build phase succeeds
+- After the Build phase completes successfully (line ~98), add PR creation logic:
+  - Get the current branch name using `getCurrentBranch()`
+  - Create a `WorkflowContext` object with `issueNumber`, `adwId`, and `branchName`
+  - Fetch the GitHub issue details using `await fetchGitHubIssue(issueNumber)`
+  - Post a `pr_creating` workflow comment
+  - Call `createPullRequest(issue, '', '')` to create the PR
+  - Update `ctx.prUrl` with the returned PR URL
+  - Post a `pr_created` workflow comment
+  - Post a `completed` workflow comment
+  - Log the PR URL
+- Wrap the PR creation in a try/catch block and handle errors by posting an `error` workflow comment
 
-### Step 4: Update workflow comments for the new flow
-- In `adwPlanBuildTest.tsx`, post appropriate workflow comments:
-  - Post `pr_creating` comment before creating PR
-  - Post `pr_created` comment after PR is created
-  - Post `completed` comment after PR is created
-  - Post `error` comment if tests fail after max retries (no PR created)
-- Import `postWorkflowComment` and `WorkflowContext` from `./github`
+### Step 4: Update documentation comment
+- Update the file header comment (lines 1-15) to reflect that this script now also handles PR creation after build
+- Change "2. adwBuild.tsx - Build phase (implementation, commit, PR creation)" to "2. adwBuild.tsx - Build phase (implementation, commit)"
+- Add "3. Create PR after build completes"
 
-### Step 5: Run validation commands
+### Step 5: Update the usage help text
+- Update `printUsageAndExit()` function (lines 23-35) to reflect the new workflow
+- Change the step description from "2. adwBuild.tsx - Implementation and PR creation" to "2. adwBuild.tsx - Implementation and commit"
+- Add "3. Create Pull Request"
+
+### Step 6: Run validation commands
 - Run `npm run lint` to check for linting errors
 - Run `npm run build` to verify TypeScript compilation
 - Run `npm test` to run unit tests and verify no regressions
 
 ## Validation Commands
-Execute every command to validate the bug is fixed with zero regressions.
+Execute every command to validate the review is complete with zero regressions.
 
 - `npm run lint` - Run linter to check for code quality issues
 - `npm run build` - Build the application to verify no build errors
-- `npm test` - Run tests to validate the bug is fixed with zero regressions
+- `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `createPullRequest` function is already self-contained in `pullRequestCreator.ts` and handles pushing the branch before creating the PR.
-- The `adwTest.tsx` already returns appropriate exit codes: `process.exit(1)` if tests fail, `process.exit(0)` (implicit) if tests pass.
-- The orchestrator `adwPlanBuildTest.tsx` already checks the exit status of each subprocess via `runSubprocess` and handles failures appropriately.
-- Consider adding a workflow comment when tests fail indicating no PR was created. This provides visibility to users monitoring the issue.
-- The `WorkflowContext` interface already has `prUrl` as an optional field, so it can be omitted when posting comments before PR creation.
-- No new libraries are needed for this fix.
+- The implementation should closely mirror how `adwPlanBuildTest.tsx` handles PR creation (lines 130-168) but without the test phase logic.
+- The `adwPlanBuild.tsx` workflow is used for simpler use cases where tests are not needed or are run separately.
+- Error handling should match the pattern used in `adwPlanBuildTest.tsx` for consistency.
+- No new libraries or dependencies are needed - all required functions are already exported from the `./github` module.
