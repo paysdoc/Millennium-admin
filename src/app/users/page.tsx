@@ -1,33 +1,11 @@
 import Link from 'next/link'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
 
 export default function Users() {
   return (
     <div>
-      <header className="header">
-        <div className="container">
-          <div className="header-content">
-            <Link href="/" className="logo">
-              Millennium Characters
-            </Link>
-            <nav>
-              <ul className="nav-links">
-                <li>
-                  <Link href="/">Home</Link>
-                </li>
-                <li>
-                  <Link href="/pages">Pages</Link>
-                </li>
-                <li>
-                  <Link href="/users">Users</Link>
-                </li>
-                <li>
-                  <Link href="/settings">Settings</Link>
-                </li>
-              </ul>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <div className="container">
         <main className="main-content">
@@ -64,14 +42,8 @@ export default function Users() {
           </table>
         </main>
 
-        <footer className="footer">
-          <div className="container">
-            <p>Millennium Admin &copy; {new Date().getFullYear()}</p>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
   )
 }
-
-

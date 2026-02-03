@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -28,6 +28,10 @@ import {
 describe('testAgent', () => {
   const testLogsDir = '/tmp/test-logs';
   const e2eTestsDir = path.join(process.cwd(), 'e2e-tests');
+  const mockE2eTestsDir = '/tmp/mock-e2e-tests';
+
+  // Store original e2e-tests content to restore after tests
+  let originalE2eTestsContent: Map<string, Buffer> | null = null;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,6 +40,20 @@ describe('testAgent', () => {
       fs.rmSync(testLogsDir, { recursive: true, force: true });
     }
     fs.mkdirSync(testLogsDir, { recursive: true });
+
+    // Save original e2e-tests content if it exists
+    if (fs.existsSync(e2eTestsDir) && originalE2eTestsContent === null) {
+      originalE2eTestsContent = new Map();
+      const files = fs.readdirSync(e2eTestsDir);
+      for (const file of files) {
+        const filePath = path.join(e2eTestsDir, file);
+        if (fs.statSync(filePath).isFile()) {
+          originalE2eTestsContent.set(file, fs.readFileSync(filePath));
+        }
+      }
+      // Remove the directory for testing
+      fs.rmSync(e2eTestsDir, { recursive: true, force: true });
+    }
   });
 
   afterEach(() => {
@@ -43,9 +61,22 @@ describe('testAgent', () => {
     if (fs.existsSync(testLogsDir)) {
       fs.rmSync(testLogsDir, { recursive: true, force: true });
     }
-    // Clean up mock e2e-tests directory if created
+    // Clean up mock e2e-tests directory if created by tests
     if (fs.existsSync(e2eTestsDir)) {
       fs.rmSync(e2eTestsDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(mockE2eTestsDir)) {
+      fs.rmSync(mockE2eTestsDir, { recursive: true, force: true });
+    }
+  });
+
+  afterAll(() => {
+    // Restore original e2e-tests content
+    if (originalE2eTestsContent && originalE2eTestsContent.size > 0) {
+      fs.mkdirSync(e2eTestsDir, { recursive: true });
+      for (const [file, content] of originalE2eTestsContent) {
+        fs.writeFileSync(path.join(e2eTestsDir, file), content);
+      }
     }
   });
 

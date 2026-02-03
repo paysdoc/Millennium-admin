@@ -1,65 +1,59 @@
-import Link from 'next/link'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import TableOfContents from '@/components/TableOfContents'
+import CategorySection from '@/components/CategorySection'
+import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
+import { CategoryKey } from '@/types/character'
 
-export default function Home() {
+export default async function Home() {
+  let groupedCharacters: Map<CategoryKey, { id: string; name: string; category: string }[]>
+  let error: string | null = null
+
+  try {
+    const characters = await fetchAllCharacters()
+    groupedCharacters = groupCharactersByCategory(characters)
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Failed to load characters'
+    groupedCharacters = new Map()
+  }
+
+  const categories = Array.from(groupedCharacters.keys())
+
   return (
-    <div>
-      <header className="header">
-        <div className="container">
-          <div className="header-content">
-            <Link href="/" className="logo">
-              Millennium Characters
-            </Link>
-            <nav>
-              <ul className="nav-links">
-                <li>
-                  <Link href="/">Home</Link>
-                </li>
-                <li>
-                  <Link href="/pages">Pages</Link>
-                </li>
-                <li>
-                  <Link href="/users">Users</Link>
-                </li>
-                <li>
-                  <Link href="/settings">Settings</Link>
-                </li>
-              </ul>
-            </nav>
-          </div>
-        </div>
-      </header>
+    <div id="top">
+      <Header />
 
       <div className="container">
         <main className="main-content">
-          <h1 className="page-title">Millennium Admin</h1>
-          <p>
-            Here you can add, edit and delete millennium characters, update
-            character images, select which area of an image to use, and create,
-            edit and delete connections between characters.
-          </p>
+          <h1 className="page-title">Millennium Characters Overview</h1>
 
-          <h2>Quick Links</h2>
-          <ul>
-            <li>
-              <Link href="/pages">Manage Pages</Link>
-            </li>
-            <li>
-              <Link href="/users">Manage Users</Link>
-            </li>
-            <li>
-              <Link href="/settings">Settings</Link>
-            </li>
-          </ul>
+          {error ? (
+            <div className="empty-state">
+              <p>Error loading characters: {error}</p>
+            </div>
+          ) : categories.length === 0 ? (
+            <div className="empty-state">
+              <p>No characters found.</p>
+            </div>
+          ) : (
+            <>
+              <TableOfContents categories={categories} />
+
+              <div className="overview-content">
+                {categories.map((category) => (
+                  <CategorySection
+                    key={category}
+                    category={category}
+                    characters={groupedCharacters.get(category) || []}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </main>
 
-        <footer className="footer">
-          <div className="container">
-            <p>Millennium Admin &copy; {new Date().getFullYear()}</p>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
   )
 }
-
-
