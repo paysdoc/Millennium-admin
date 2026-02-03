@@ -27,7 +27,7 @@ import {
 
 describe('testAgent', () => {
   const testLogsDir = '/tmp/test-logs';
-  const e2eTestsDir = path.join(process.cwd(), 'e2e-tests');
+  const e2eTestsDir = path.join(process.cwd(), '.claude/commands/e2e');
   const mockE2eTestsDir = '/tmp/mock-e2e-tests';
 
   // Store original e2e-tests content to restore after tests
