@@ -38,3 +38,12 @@ export {
   type TestAgentResult,
   type E2ETestAgentResult,
 } from './testAgent';
+
+// Test Retry (shared test retry logic)
+export {
+  runUnitTestsWithRetry,
+  runE2ETestsWithRetry,
+  type TestRetryResult,
+  type TestRetryOptions,
+} from './testRetry';
+
