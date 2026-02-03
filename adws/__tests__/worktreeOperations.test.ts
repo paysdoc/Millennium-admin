@@ -19,6 +19,10 @@ vi.mock('../core/config', () => ({
   WORKTREES_DIR: '/mock/project/.worktrees',
 }));
 
+vi.mock('../github/gitOperations', () => ({
+  getDefaultBranch: vi.fn(() => 'main'),
+}));
+
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import {
@@ -30,6 +34,9 @@ import {
   removeWorktree,
   getWorktreeForBranch,
   ensureWorktree,
+  getMainRepoPath,
+  isBranchCheckedOutElsewhere,
+  freeBranchFromMainRepo,
 } from '../github/worktreeOperations';
 
 describe('getWorktreePath', () => {
@@ -148,9 +155,15 @@ describe('createWorktree', () => {
   });
 
   it('creates worktree for existing branch', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists check
+      .mockReturnValueOnce('') // branch exists check (rev-parse)
+      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
       .mockReturnValueOnce(''); // git worktree add
 
     const result = createWorktree('feature/issue-51');
@@ -196,12 +209,18 @@ describe('createWorktree', () => {
   });
 
   it('throws error when git worktree add fails', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists
+      .mockReturnValueOnce('') // branch exists (rev-parse)
+      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
       .mockImplementationOnce(() => {
         throw new Error('worktree already exists');
-      });
+      }); // git worktree add fails
 
     expect(() => createWorktree('feature/issue-51')).toThrow(
       "Failed to create worktree for branch 'feature/issue-51'"
@@ -416,11 +435,18 @@ describe('Concurrent ADW Workflow Isolation', () => {
   });
 
   it('creates isolated worktrees for multiple concurrent workflows', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(execSync)
       .mockReturnValueOnce('') // branch exists check for issue-1
+      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere for issue-1
       .mockReturnValueOnce('') // git worktree add for issue-1
       .mockReturnValueOnce('') // branch exists check for issue-2
+      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere for issue-2
       .mockReturnValueOnce(''); // git worktree add for issue-2
 
     const worktree1 = createWorktree('feature/issue-1');
@@ -549,9 +575,15 @@ branch refs/heads/feature/issue-2
     expect(worktrees).toContain('/mock/project/.worktrees/feature-issue-2');
 
     vi.clearAllMocks();
+    const worktreeListOutput2 = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists
+      .mockReturnValueOnce('') // branch exists (rev-parse)
+      .mockReturnValueOnce(worktreeListOutput2) // isBranchCheckedOutElsewhere
       .mockReturnValueOnce(''); // worktree add
 
     createWorktree('feature/issue-3');
@@ -563,5 +595,303 @@ branch refs/heads/feature/issue-2
     expect(worktreeAddCall).toBeDefined();
     expect(String(worktreeAddCall![0])).not.toContain('git checkout');
     expect(String(worktreeAddCall![0])).not.toContain('git switch');
+  });
+});
+
+describe('getMainRepoPath', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the main repository path', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-51
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = getMainRepoPath();
+    expect(result).toBe('/mock/project');
+  });
+
+  it('throws error when git command fails', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('git error');
+    });
+
+    expect(() => getMainRepoPath()).toThrow('Failed to get main repository path');
+  });
+
+  it('throws error when no main repo found', () => {
+    const worktreeListOutput = `worktree /mock/project/.worktrees/feature-issue-51
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    expect(() => getMainRepoPath()).toThrow('Failed to get main repository path');
+  });
+});
+
+describe('isBranchCheckedOutElsewhere', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns false when branch is not checked out anywhere', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-51
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = isBranchCheckedOutElsewhere('feature/issue-99');
+    expect(result).toEqual({ checkedOut: false, path: null, isMainRepo: false });
+  });
+
+  it('returns true with isMainRepo when branch is checked out in main repo', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+worktree /mock/project/.worktrees/other-branch
+HEAD def456
+branch refs/heads/other-branch
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = isBranchCheckedOutElsewhere('feature/issue-51');
+    expect(result).toEqual({
+      checkedOut: true,
+      path: '/mock/project',
+      isMainRepo: true,
+    });
+  });
+
+  it('returns true without isMainRepo when branch is checked out in another worktree', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-51
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = isBranchCheckedOutElsewhere('feature/issue-51');
+    expect(result).toEqual({
+      checkedOut: true,
+      path: '/mock/project/.worktrees/feature-issue-51',
+      isMainRepo: false,
+    });
+  });
+
+  it('returns false when git command fails', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('git error');
+    });
+
+    const result = isBranchCheckedOutElsewhere('feature/issue-51');
+    expect(result).toEqual({ checkedOut: false, path: null, isMainRepo: false });
+  });
+});
+
+describe('freeBranchFromMainRepo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('commits and pushes changes when there are uncommitted changes', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync)
+      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath
+      .mockReturnValueOnce('M file.txt\n') // git status --porcelain
+      .mockReturnValueOnce('') // git add -A
+      .mockReturnValueOnce('') // git commit
+      .mockReturnValueOnce('') // git push
+      .mockReturnValueOnce(''); // git checkout main
+
+    freeBranchFromMainRepo('feature/issue-51');
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    expect(execCalls).toHaveLength(6);
+    expect(String(execCalls[2][0])).toBe('git add -A');
+    expect(String(execCalls[3][0])).toContain('git commit');
+    expect(String(execCalls[3][0])).toContain('WIP: auto-commit');
+    expect(String(execCalls[4][0])).toContain('git push');
+    expect(String(execCalls[5][0])).toBe('git checkout main');
+  });
+
+  it('skips commit when there are no uncommitted changes', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync)
+      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath
+      .mockReturnValueOnce('') // git status --porcelain (no changes)
+      .mockReturnValueOnce(''); // git checkout main
+
+    freeBranchFromMainRepo('feature/issue-51');
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    expect(execCalls).toHaveLength(3);
+    expect(String(execCalls[2][0])).toBe('git checkout main');
+  });
+
+  it('continues even when push fails', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync)
+      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath
+      .mockReturnValueOnce('M file.txt\n') // git status --porcelain
+      .mockReturnValueOnce('') // git add -A
+      .mockReturnValueOnce('') // git commit
+      .mockImplementationOnce(() => {
+        throw new Error('push failed');
+      }) // git push fails
+      .mockReturnValueOnce(''); // git checkout main
+
+    // Should not throw
+    freeBranchFromMainRepo('feature/issue-51');
+
+    const execCalls = vi.mocked(execSync).mock.calls;
+    expect(execCalls).toHaveLength(6);
+    expect(String(execCalls[5][0])).toBe('git checkout main');
+  });
+
+  it('throws error when checkout fails', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync)
+      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath
+      .mockReturnValueOnce('') // git status --porcelain
+      .mockImplementationOnce(() => {
+        throw new Error('checkout failed');
+      }); // git checkout fails
+
+    expect(() => freeBranchFromMainRepo('feature/issue-51')).toThrow(
+      "Failed to free branch 'feature/issue-51' from main repository"
+    );
+  });
+});
+
+describe('createWorktree edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('handles branch already checked out in main repository', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(execSync)
+      .mockReturnValueOnce('') // rev-parse branch exists
+      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
+      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath in freeBranchFromMainRepo
+      .mockReturnValueOnce('') // git status --porcelain
+      .mockReturnValueOnce('') // git checkout main
+      .mockReturnValueOnce(''); // git worktree add
+
+    const result = createWorktree('feature/issue-51');
+
+    expect(result).toBe('/mock/project/.worktrees/feature-issue-51');
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const checkoutCall = execCalls.find((call) =>
+      String(call[0]).includes('git checkout main')
+    );
+    expect(checkoutCall).toBeDefined();
+  });
+
+  it('reuses worktree when branch is checked out in different worktree path', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/different-path
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(execSync)
+      .mockReturnValueOnce('') // rev-parse branch exists
+      .mockReturnValueOnce(worktreeListOutput); // isBranchCheckedOutElsewhere
+
+    const result = createWorktree('feature/issue-51');
+
+    expect(result).toBe('/mock/project/.worktrees/different-path');
+    // Should not call git worktree add since we're reusing
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const worktreeAddCall = execCalls.find((call) =>
+      String(call[0]).includes('git worktree add')
+    );
+    expect(worktreeAddCall).toBeUndefined();
+  });
+});
+
+describe('getWorktreeForBranch edge cases', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('finds worktree by branch name even at unexpected path', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/unexpected-path
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = getWorktreeForBranch('feature/issue-51');
+    expect(result).toBe('/mock/project/.worktrees/unexpected-path');
+  });
+
+  it('returns expected path when worktree exists at expected location', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-51
+HEAD def456
+branch refs/heads/feature/issue-51
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = getWorktreeForBranch('feature/issue-51');
+    expect(result).toBe('/mock/project/.worktrees/feature-issue-51');
   });
 });

@@ -9,6 +9,16 @@ import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { log, WORKTREES_DIR } from '../core';
+import { getDefaultBranch } from './gitOperations';
+
+/**
+ * Result of checking if a branch is checked out elsewhere.
+ */
+export interface BranchCheckoutStatus {
+  checkedOut: boolean;
+  path: string | null;
+  isMainRepo: boolean;
+}
 
 /**
  * Sanitizes a branch name for use as a directory name.
@@ -19,6 +29,123 @@ import { log, WORKTREES_DIR } from '../core';
  */
 function sanitizeBranchName(branchName: string): string {
   return branchName.replace(/[/\\:*?"<>|]/g, '-');
+}
+
+/**
+ * Gets the path of the main repository (not a worktree).
+ * The main repository is the first worktree listed that doesn't contain '.worktrees'.
+ *
+ * @returns The absolute path to the main repository
+ * @throws Error if unable to determine the main repository path
+ */
+export function getMainRepoPath(): string {
+  try {
+    const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
+    const lines = output.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('worktree ')) {
+        const wtPath = line.substring('worktree '.length);
+        if (!wtPath.includes('.worktrees')) {
+          return wtPath;
+        }
+      }
+    }
+
+    throw new Error('Could not find main repository in worktree list');
+  } catch (error) {
+    throw new Error(`Failed to get main repository path: ${error}`);
+  }
+}
+
+/**
+ * Checks if a branch is currently checked out in the main repository or another worktree.
+ *
+ * @param branchName - The branch name to check
+ * @returns Status object with checkedOut flag, path where it's checked out, and isMainRepo flag
+ */
+export function isBranchCheckedOutElsewhere(branchName: string): BranchCheckoutStatus {
+  try {
+    const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
+    const lines = output.split('\n');
+
+    let currentWorktreePath: string | null = null;
+    let mainRepoPath: string | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('worktree ')) {
+        currentWorktreePath = line.substring('worktree '.length);
+        if (!currentWorktreePath.includes('.worktrees') && !mainRepoPath) {
+          mainRepoPath = currentWorktreePath;
+        }
+      }
+
+      if (line.startsWith('branch ') && currentWorktreePath) {
+        const branchRef = line.substring('branch '.length);
+        const checkedOutBranch = branchRef.replace('refs/heads/', '');
+
+        if (checkedOutBranch === branchName) {
+          const isMainRepo = currentWorktreePath === mainRepoPath;
+          return {
+            checkedOut: true,
+            path: currentWorktreePath,
+            isMainRepo,
+          };
+        }
+      }
+    }
+
+    return { checkedOut: false, path: null, isMainRepo: false };
+  } catch {
+    return { checkedOut: false, path: null, isMainRepo: false };
+  }
+}
+
+/**
+ * Frees a branch from the main repository by committing/pushing changes
+ * and switching to the default branch.
+ *
+ * @param branchName - The branch name to free from the main repository
+ * @throws Error if unable to free the branch
+ */
+export function freeBranchFromMainRepo(branchName: string): void {
+  const mainRepoPath = getMainRepoPath();
+  log(`Freeing branch '${branchName}' from main repository at ${mainRepoPath}`, 'info');
+
+  try {
+    // Check for uncommitted changes
+    const status = execSync('git status --porcelain', {
+      encoding: 'utf-8',
+      cwd: mainRepoPath,
+    });
+
+    if (status.trim()) {
+      log(`Found uncommitted changes in main repository, auto-committing...`, 'info');
+      execSync('git add -A', { stdio: 'pipe', cwd: mainRepoPath });
+      execSync('git commit -m "WIP: auto-commit before switching to worktree"', {
+        stdio: 'pipe',
+        cwd: mainRepoPath,
+      });
+      log(`Auto-committed changes`, 'success');
+
+      // Push the branch
+      try {
+        execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd: mainRepoPath });
+        log(`Pushed branch '${branchName}' to origin`, 'success');
+      } catch (pushError) {
+        log(`Warning: Could not push branch to origin: ${pushError}`, 'info');
+      }
+    }
+
+    // Switch to default branch
+    const defaultBranch = getDefaultBranch();
+    execSync(`git checkout ${defaultBranch}`, { stdio: 'pipe', cwd: mainRepoPath });
+    log(`Switched main repository to '${defaultBranch}'`, 'success');
+  } catch (error) {
+    throw new Error(`Failed to free branch '${branchName}' from main repository: ${error}`);
+  }
 }
 
 /**
@@ -122,6 +249,24 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
     }
 
     if (branchExists) {
+      // Check if branch is checked out elsewhere before attempting worktree add
+      const checkoutStatus = isBranchCheckedOutElsewhere(branchName);
+
+      if (checkoutStatus.checkedOut) {
+        if (checkoutStatus.isMainRepo) {
+          // Branch is checked out in main repo, free it first
+          log(`Branch '${branchName}' is checked out in main repository, freeing it...`, 'info');
+          freeBranchFromMainRepo(branchName);
+        } else if (checkoutStatus.path) {
+          // Branch is checked out in another worktree, reuse that worktree
+          log(
+            `Branch '${branchName}' is already checked out at ${checkoutStatus.path}, reusing existing worktree`,
+            'info'
+          );
+          return checkoutStatus.path;
+        }
+      }
+
       // Branch exists, create worktree for existing branch
       execSync(`git worktree add "${worktreePath}" ${branchName}`, { stdio: 'pipe' });
       log(`Created worktree for existing branch '${branchName}' at ${worktreePath}`, 'success');
@@ -212,23 +357,42 @@ export function removeWorktree(branchName: string): boolean {
 export function getWorktreeForBranch(branchName: string): string | null {
   try {
     const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
-    const worktreePath = getWorktreePath(branchName);
+    const expectedWorktreePath = getWorktreePath(branchName);
 
     // Parse worktree list output to find matching worktree
     const lines = output.split('\n');
-    for (const line of lines) {
+    let currentWorktreePath: string | null = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
       if (line.startsWith('worktree ')) {
-        const wtPath = line.substring('worktree '.length);
-        if (wtPath === worktreePath) {
-          return worktreePath;
+        currentWorktreePath = line.substring('worktree '.length);
+        // Check if this is the expected path
+        if (currentWorktreePath === expectedWorktreePath) {
+          return expectedWorktreePath;
+        }
+      }
+
+      // Also check by branch name to find worktrees at unexpected paths
+      if (line.startsWith('branch ') && currentWorktreePath) {
+        const branchRef = line.substring('branch '.length);
+        const checkedOutBranch = branchRef.replace('refs/heads/', '');
+
+        if (checkedOutBranch === branchName && currentWorktreePath.includes('.worktrees')) {
+          log(
+            `Found worktree for branch '${branchName}' at unexpected path ${currentWorktreePath}`,
+            'info'
+          );
+          return currentWorktreePath;
         }
       }
     }
 
     // Also check if the directory exists even if git doesn't track it
-    if (fs.existsSync(worktreePath)) {
-      log(`Found orphaned worktree directory at ${worktreePath}, will attempt to reuse`, 'info');
-      return worktreePath;
+    if (fs.existsSync(expectedWorktreePath)) {
+      log(`Found orphaned worktree directory at ${expectedWorktreePath}, will attempt to reuse`, 'info');
+      return expectedWorktreePath;
     }
 
     return null;

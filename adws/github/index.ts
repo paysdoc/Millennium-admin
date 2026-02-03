@@ -42,6 +42,10 @@ export {
   removeWorktree,
   getWorktreeForBranch,
   ensureWorktree,
+  getMainRepoPath,
+  isBranchCheckedOutElsewhere,
+  freeBranchFromMainRepo,
+  type BranchCheckoutStatus,
 } from './worktreeOperations';
 
 // PR Comment Detector
