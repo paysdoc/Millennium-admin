@@ -28,16 +28,31 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ## Project Structure
 
-- `src/app/` - Next.js App Router directory
-  - `layout.tsx` - Root layout component
-  - `page.tsx` - Home page
-  - `globals.css` - Global styles
-  - `pages/` - Pages management
-  - `users/` - Users management
-  - `settings/` - Settings page
+- `src/` - Application source code
+  - `app/` - Next.js App Router directory
+    - `layout.tsx` - Root layout component
+    - `page.tsx` - Home page (character overview)
+    - `globals.css` - Global styles
+    - `pages/` - Pages management
+    - `users/` - Users management
+    - `settings/` - Settings page
+  - `components/` - Reusable React components
+    - `CategorySection.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
+  - `lib/` - Utility libraries
+    - `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
+  - `types/` - TypeScript type definitions
+    - `character.ts`, `connection.ts`, `database.ts`
+  - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
-  - Agent orchestration, git operations, GitHub API, PR creation
+  - `agents/` - Agent implementations (build, plan, test, claude)
+  - `core/` - Core utilities (state, config, data types)
+  - `github/` - Git/GitHub operations (git, worktree, PR, comments)
+  - `triggers/` - Workflow triggers (webhook, cron, issue classifier)
+  - `__tests__/` - ADWS unit tests
+- `e2e-tests/` - End-to-end test specifications
+- `e2e-screenshots/` - E2E test screenshots
 - `guidelines/` - Coding guidelines
+- `specs/` - Issue implementation plans
 - `.claude/` - Claude Code configuration (commands, hooks, settings)
 - `.github/workflows/` - CI/CD pipeline
 
