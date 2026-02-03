@@ -530,6 +530,12 @@ export interface PRReviewWorkflowContext extends WorkflowContext {
   reviewComments: number;
   revisionPlanOutput?: string;
   revisionBuildOutput?: string;
+  /** Current test attempt number */
+  testAttempt?: number;
+  /** Maximum test attempts allowed */
+  maxTestAttempts?: number;
+  /** List of failed test names */
+  failedTests?: string[];
 }
 
 /**
@@ -597,6 +603,49 @@ Changes have been implemented to address the review comments.
 ${truncatedBuild}
 
 </details>`;
+    }
+
+    case 'pr_review_testing':
+      return `## :test_tube: Running Validation Tests
+
+Running validation tests before pushing changes...
+
+**ADW ID:** \`${ctx.adwId}\``;
+
+    case 'pr_review_test_failed': {
+      const attemptInfo = ctx.testAttempt && ctx.maxTestAttempts
+        ? `\n**Attempt:** ${ctx.testAttempt}/${ctx.maxTestAttempts}`
+        : '';
+      return `## :warning: Tests Failed
+
+Tests failed, attempting automatic resolution...
+${attemptInfo}
+
+**ADW ID:** \`${ctx.adwId}\``;
+    }
+
+    case 'pr_review_test_passed':
+      return `## :white_check_mark: All Tests Passed
+
+All validation tests passed!
+
+**ADW ID:** \`${ctx.adwId}\``;
+
+    case 'pr_review_test_max_attempts': {
+      const failedTestsList = ctx.failedTests && ctx.failedTests.length > 0
+        ? `\n\n**Failed tests:**\n${ctx.failedTests.map(t => `- ${t}`).join('\n')}`
+        : '';
+      const attemptsInfo = ctx.maxTestAttempts
+        ? `\n**Retry attempts:** ${ctx.maxTestAttempts}`
+        : '';
+      return `## :x: Tests Exceeded Maximum Retry Attempts
+
+Tests could not be resolved after maximum retry attempts. Changes have **not** been pushed.
+${attemptsInfo}${failedTestsList}
+
+**ADW ID:** \`${ctx.adwId}\`
+
+Please review the failing tests manually and address the issues.`;
     }
 
     case 'pr_review_committing':
