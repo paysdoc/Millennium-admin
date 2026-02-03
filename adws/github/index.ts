@@ -32,6 +32,18 @@ export {
 // Pull Request Creator
 export { createPullRequest } from './pullRequestCreator';
 
+// Worktree Operations
+export {
+  getWorktreePath,
+  worktreeExists,
+  listWorktrees,
+  createWorktree,
+  createWorktreeForNewBranch,
+  removeWorktree,
+  getWorktreeForBranch,
+  ensureWorktree,
+} from './worktreeOperations';
+
 // PR Comment Detector
 export {
   getLastAdwCommitTimestamp,

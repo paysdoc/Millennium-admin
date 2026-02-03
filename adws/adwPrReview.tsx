@@ -21,13 +21,13 @@ import * as fs from 'fs';
 import { log, generateAdwId, ensureLogsDirectory, commitPrefixMap, AgentStateManager, AgentState, MAX_TEST_RETRY_ATTEMPTS } from './core';
 import {
   fetchPRDetails,
-  checkoutBranch,
   commitChanges,
   pushBranch,
   postPRWorkflowComment,
   PRReviewWorkflowContext,
   getUnaddressedComments,
   inferIssueTypeFromBranch,
+  ensureWorktree,
 } from './github';
 import {
   runPrReviewPlanAgent,
@@ -102,7 +102,9 @@ async function main(): Promise<void> {
   postPRWorkflowComment(prNumber, 'pr_review_starting', ctx);
 
   try {
-    checkoutBranch(prDetails.headBranch);
+    // Create worktree for the PR branch instead of checking out
+    const worktreePath = ensureWorktree(prDetails.headBranch);
+    log(`Worktree path: ${worktreePath}`, 'info');
 
     let existingPlanContent = '';
     if (issueNumber) {
@@ -261,9 +263,9 @@ async function main(): Promise<void> {
     const commitMsg = issueNumber
       ? `${commitPrefix} address PR review comments for #${issueNumber}`
       : `${commitPrefix} address PR review comments`;
-    commitChanges(commitMsg);
+    commitChanges(commitMsg, worktreePath);
 
-    pushBranch(prDetails.headBranch);
+    pushBranch(prDetails.headBranch, worktreePath);
     postPRWorkflowComment(prNumber, 'pr_review_pushed', ctx);
     postPRWorkflowComment(prNumber, 'pr_review_completed', ctx);
 

@@ -31,9 +31,12 @@ import { runUnitTestsWithRetry, runE2ETestsWithRetry } from './agents';
 
 /** Prints usage information and exits. */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwTest.tsx [adw-id]');
+  console.error('Usage: npx tsx adws/adwTest.tsx [adw-id] [--cwd <path>]');
   console.error('');
   console.error('Runs comprehensive validation tests with automatic failure resolution.');
+  console.error('');
+  console.error('Options:');
+  console.error('  --cwd <path>             Working directory for test execution (worktree path)');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY        - Anthropic API key');
@@ -43,12 +46,21 @@ function printUsageAndExit(): never {
 }
 
 /** Parses and validates command line arguments. */
-function parseArguments(args: string[]): { adwId: string } {
+function parseArguments(args: string[]): { adwId: string; cwd: string | null } {
   if (args.includes('--help') || args.includes('-h')) {
     printUsageAndExit();
   }
+
+  // Parse --cwd option
+  let cwd: string | null = null;
+  const cwdIndex = args.indexOf('--cwd');
+  if (cwdIndex !== -1 && args[cwdIndex + 1]) {
+    cwd = args[cwdIndex + 1];
+    args.splice(cwdIndex, 2);
+  }
+
   const adwId = args[0] || generateAdwId();
-  return { adwId };
+  return { adwId, cwd };
 }
 
 /** Prints the test phase summary. */
@@ -80,7 +92,7 @@ function printTestSummary(
 /** Main test workflow. */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { adwId } = parseArguments(args);
+  const { adwId, cwd } = parseArguments(args);
 
   const logsDir = ensureLogsDirectory(adwId);
 
@@ -89,6 +101,9 @@ async function main(): Promise<void> {
   log(`ADW ID: ${adwId}`, 'info');
   log(`Max retry attempts: ${MAX_TEST_RETRY_ATTEMPTS}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
+  if (cwd) {
+    log(`Working directory: ${cwd}`, 'info');
+  }
   log('===================================', 'info');
 
   const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'test-orchestrator');

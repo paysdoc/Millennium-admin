@@ -14,6 +14,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
+import { removeWorktree } from '../github/worktreeOperations';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const port = parseInt(process.env.PORT || '8001', 10);
@@ -77,8 +78,23 @@ async function handlePullRequestEvent(payload: PullRequestWebhookPayload): Promi
   const prUrl = pull_request.html_url;
   const wasMerged = pull_request.merged;
   const prBody = pull_request.body;
+  const headBranch = pull_request.head?.ref;
 
   log(`PR #${prNumber} was ${wasMerged ? 'merged' : 'closed without merging'}`);
+
+  // Clean up worktree for the PR branch
+  if (headBranch) {
+    try {
+      const removed = removeWorktree(headBranch);
+      if (removed) {
+        log(`Cleaned up worktree for branch: ${headBranch}`, 'success');
+      } else {
+        log(`No worktree found for branch: ${headBranch}`, 'info');
+      }
+    } catch (error) {
+      log(`Failed to clean up worktree for branch ${headBranch}: ${error}`, 'error');
+    }
+  }
 
   // Extract issue number from PR body
   const issueNumber = extractIssueNumberFromPRBody(prBody);

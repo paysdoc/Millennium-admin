@@ -24,6 +24,9 @@ import {
   postWorkflowComment,
   WorkflowContext,
   getCurrentBranch,
+  getDefaultBranch,
+  generateBranchName,
+  ensureWorktree,
 } from './github';
 
 /**
@@ -66,12 +69,15 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string } 
 
 /**
  * Executes a subprocess and returns success status.
+ * @param command - The command to execute
+ * @param description - Description for logging
+ * @param cwd - Optional working directory for the subprocess
  */
-function runSubprocess(command: string, description: string): boolean {
+function runSubprocess(command: string, description: string, cwd?: string): boolean {
   log(`Starting: ${description}`, 'info');
 
   try {
-    execSync(command, { stdio: 'inherit' });
+    execSync(command, { stdio: 'inherit', cwd });
     log(`Completed: ${description}`, 'success');
     return true;
   } catch (error) {
@@ -94,32 +100,48 @@ async function main(): Promise<void> {
   log(`ADW ID: ${adwId}`, 'info');
   log('===================================', 'info');
 
-  // Phase 1: Run Plan
-  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId}`;
-  if (!runSubprocess(planCommand, 'Plan Phase')) {
+  // Fetch issue details first to generate branch name
+  const issue = await fetchGitHubIssue(issueNumber);
+  log(`Fetched issue: ${issue.title}`, 'success');
+
+  // Get default branch and create worktree
+  const defaultBranch = getDefaultBranch();
+  log(`Default branch: ${defaultBranch}`, 'info');
+
+  // Generate branch name (will be created by adwPlan in the worktree)
+  const branchName = generateBranchName(issueNumber, issue.title);
+  log(`Target branch: ${branchName}`, 'info');
+
+  // Create or get worktree for this branch
+  const worktreePath = ensureWorktree(branchName, defaultBranch);
+  log(`Worktree path: ${worktreePath}`, 'info');
+
+  // Phase 1: Run Plan (in worktree)
+  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}"`;
+  if (!runSubprocess(planCommand, 'Plan Phase', worktreePath)) {
     log('Plan phase failed. Aborting workflow.', 'error');
     process.exit(1);
   }
 
-  // Phase 2: Run Build
-  const buildCommand = `npx tsx adws/adwBuild.tsx ${issueNumber} ${adwId}`;
-  if (!runSubprocess(buildCommand, 'Build Phase')) {
+  // Phase 2: Run Build (in worktree)
+  const buildCommand = `npx tsx adws/adwBuild.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}"`;
+  if (!runSubprocess(buildCommand, 'Build Phase', worktreePath)) {
     log('Build phase failed. Aborting workflow.', 'error');
     process.exit(1);
   }
 
-  // Phase 3: Run Test
-  const testCommand = `npx tsx adws/adwTest.tsx ${adwId}`;
-  if (!runSubprocess(testCommand, 'Test Phase')) {
+  // Phase 3: Run Test (in worktree)
+  const testCommand = `npx tsx adws/adwTest.tsx ${adwId} --cwd "${worktreePath}"`;
+  if (!runSubprocess(testCommand, 'Test Phase', worktreePath)) {
     log('Test phase failed after maximum retry attempts.', 'error');
     log('No PR was created due to test failures.', 'error');
 
     // Post error comment to indicate no PR was created
-    const branchName = getCurrentBranch();
+    const currentBranch = getCurrentBranch(worktreePath);
     const ctx: WorkflowContext = {
       issueNumber,
       adwId,
-      branchName,
+      branchName: currentBranch,
       errorMessage: 'Tests failed after maximum retry attempts. No PR was created.',
     };
     postWorkflowComment(issueNumber, 'error', ctx);
@@ -130,16 +152,16 @@ async function main(): Promise<void> {
   // Phase 4: Create PR (only after all tests pass)
   log('All tests passed! Creating Pull Request...', 'info');
 
-  const branchName = getCurrentBranch();
+  // Get current branch from worktree
+  const currentBranch = getCurrentBranch(worktreePath);
   const ctx: WorkflowContext = {
     issueNumber,
     adwId,
-    branchName,
+    branchName: currentBranch,
   };
 
   try {
-    // Fetch issue details for PR creation
-    const issue = await fetchGitHubIssue(issueNumber);
+    // Issue already fetched above
 
     // Post workflow comment indicating PR creation is starting
     postWorkflowComment(issueNumber, 'pr_creating', ctx);
