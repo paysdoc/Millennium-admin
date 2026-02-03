@@ -38,7 +38,6 @@ import {
 import {
   fetchGitHubIssue,
   commitChanges,
-  createPullRequest,
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
@@ -326,19 +325,8 @@ async function main(): Promise<void> {
       log('Skipping implementation commit (already completed)', 'info');
     }
 
-    // Step 7: Create PR
-    if (shouldExecuteStage('pr_created', recoveryState) && !ctx.prUrl) {
-      postWorkflowComment(issueNumber, 'pr_creating', ctx);
-      log('Creating Pull Request...', 'info');
-      const prUrl = createPullRequest(issue, ctx.planOutput || '', ctx.buildOutput || '');
-      ctx.prUrl = prUrl;
-      postWorkflowComment(issueNumber, 'pr_created', ctx);
-    } else {
-      log('Skipping PR creation (already created)', 'info');
-    }
-
-    // Workflow completed
-    postWorkflowComment(issueNumber, 'completed', ctx);
+    // Note: PR creation and workflow completion are handled by adwPlanBuildTest.tsx
+    // after tests pass successfully
 
     // Update final orchestrator state
     AgentStateManager.writeState(orchestratorStatePath, {
@@ -347,19 +335,18 @@ async function main(): Promise<void> {
         true
       ),
       metadata: {
-        prUrl: ctx.prUrl,
         totalCostUsd: buildCostUsd,
       },
     });
-    AgentStateManager.appendLog(orchestratorStatePath, 'Build workflow completed successfully');
+    AgentStateManager.appendLog(orchestratorStatePath, 'Build phase completed successfully');
 
-    // Print summary
+    // Print summary (no PR URL - PR is created by orchestrator after tests pass)
     printBuildSummary(
       issueNumber,
       issue.title,
       branchName,
       logsDir,
-      ctx.prUrl || '',
+      '',
       buildCostUsd
     );
 

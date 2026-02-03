@@ -18,6 +18,13 @@
 
 import { execSync, SpawnSyncReturns } from 'child_process';
 import { log, generateAdwId } from './core';
+import {
+  createPullRequest,
+  fetchGitHubIssue,
+  postWorkflowComment,
+  WorkflowContext,
+  getCurrentBranch,
+} from './github';
 
 /**
  * Prints usage information and exits.
@@ -77,7 +84,7 @@ function runSubprocess(command: string, description: string): boolean {
 /**
  * Main orchestrator workflow.
  */
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
@@ -104,13 +111,61 @@ function main(): void {
   // Phase 3: Run Test
   const testCommand = `npx tsx adws/adwTest.tsx ${adwId}`;
   if (!runSubprocess(testCommand, 'Test Phase')) {
-    log('Test phase failed.', 'error');
+    log('Test phase failed after maximum retry attempts.', 'error');
+    log('No PR was created due to test failures.', 'error');
+
+    // Post error comment to indicate no PR was created
+    const branchName = getCurrentBranch();
+    const ctx: WorkflowContext = {
+      issueNumber,
+      adwId,
+      branchName,
+      errorMessage: 'Tests failed after maximum retry attempts. No PR was created.',
+    };
+    postWorkflowComment(issueNumber, 'error', ctx);
+
     process.exit(1);
   }
 
-  log('===================================', 'info');
-  log('ADW Plan, Build & Test workflow completed!', 'success');
-  log('===================================', 'info');
+  // Phase 4: Create PR (only after all tests pass)
+  log('All tests passed! Creating Pull Request...', 'info');
+
+  const branchName = getCurrentBranch();
+  const ctx: WorkflowContext = {
+    issueNumber,
+    adwId,
+    branchName,
+  };
+
+  try {
+    // Fetch issue details for PR creation
+    const issue = await fetchGitHubIssue(issueNumber);
+
+    // Post workflow comment indicating PR creation is starting
+    postWorkflowComment(issueNumber, 'pr_creating', ctx);
+
+    // Create the PR
+    const prUrl = createPullRequest(issue, '', '');
+    ctx.prUrl = prUrl;
+
+    // Post workflow comment indicating PR was created
+    postWorkflowComment(issueNumber, 'pr_created', ctx);
+
+    log(`Pull Request created: ${prUrl}`, 'success');
+
+    // Post workflow completed comment
+    postWorkflowComment(issueNumber, 'completed', ctx);
+
+    log('===================================', 'info');
+    log('ADW Plan, Build & Test workflow completed!', 'success');
+    log(`PR: ${prUrl}`, 'info');
+    log('===================================', 'info');
+  } catch (error) {
+    ctx.errorMessage = `Failed to create PR: ${error}`;
+    postWorkflowComment(issueNumber, 'error', ctx);
+    log(`Failed to create PR: ${error}`, 'error');
+    process.exit(1);
+  }
 }
 
 main();
