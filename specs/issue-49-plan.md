@@ -1,194 +1,132 @@
-# Feature: adwPrReview should run tests before pushing
+# PR-Review: Coding Guidelines Compliance for Issue #49
 
-## Feature Description
-The `adwPrReview` orchestrator should run the validation test suite (via `adwTest` flow) before pushing changes to the origin branch. This ensures that changes made in response to PR review comments don't introduce regressions or break existing functionality. If tests fail after the maximum number of retry attempts, an error comment should be posted to the PR explaining why the issue cannot be resolved.
+## PR-Review Description
+The PR review comment states that "Coding guidelines as stipulated in `/guidelines` have not been adhered to". After analyzing the implementation against the coding guidelines in `guidelines/coding_guidelines.md`, the following violations were identified:
 
-## User Story
-As a developer using the ADW PR review workflow
-I want tests to run automatically before my changes are pushed
-So that I can be confident that PR review changes don't introduce regressions
+1. **File Size Violations (>150 lines guideline)**:
+   - `adwPrReview.tsx` = 598 lines (exceeds 150 line limit by 448 lines)
+   - `adwTest.tsx` = 412 lines (exceeds 150 line limit by 262 lines)
+   - `workflowComments.ts` = 703 lines (exceeds 150 line limit by 553 lines)
 
-## Problem Statement
-Currently, `adwPrReview.tsx` implements changes from PR review comments and pushes them directly to the branch without running any validation tests. This can lead to:
-- Regressions being introduced by review changes
-- Build failures being pushed to the branch
-- Type errors or linting issues going undetected
-- Code quality degradation over time
+2. **Code Duplication Violations (Modular Design guideline)**:
+   - `runUnitTestsWithRetry` function in `adwPrReview.tsx` (lines 61-145) is nearly identical to the same function in `adwTest.tsx` (lines 103-174)
+   - `runE2ETestsWithRetry` function in `adwPrReview.tsx` (lines 151-269) is nearly identical to the same function in `adwTest.tsx` (lines 180-291)
+   - This violates "Structure the code in a modular way to promote reusability and separation of concerns"
 
-## Solution Statement
-Integrate the existing test workflow (`adwTest.tsx` logic) into `adwPrReview.tsx` between the implementation phase and the push phase. The solution will:
-1. Run unit tests and E2E tests after the build agent completes
-2. Attempt to resolve test failures automatically (up to `MAX_TEST_RETRY_ATTEMPTS`)
-3. Only push changes if all tests pass
-4. Post an error comment to the PR if tests exceed maximum retry attempts, explaining the failure
+3. **Function Reusability (Higher-Order Functions guideline)**:
+   - The test retry logic should be extracted to a shared module for reuse
+   - The duplicated functions could be replaced with a single shared implementation
+
+## Summary of Original Implementation Plan
+The original plan at `specs/issue-49-plan.md` implemented the feature to add test running before pushing in the PR review workflow. The implementation:
+- Added new `PRReviewWorkflowStage` types for test stages
+- Added comment formatters for test stages in `workflowComments.ts`
+- Added `runUnitTestsWithRetry` and `runE2ETestsWithRetry` functions in `adwPrReview.tsx`
+- Integrated test phase between build completion and commit/push
+- Created unit tests in `adws/__tests__/adwPrReview.test.ts`
+
+However, the implementation copied test retry functions from `adwTest.tsx` rather than extracting shared logic, leading to code duplication and file size violations.
 
 ## Relevant Files
-Use these files to implement the feature:
+Use these files to resolve the review:
 
-- `adws/adwPrReview.tsx` - Main orchestrator that needs to be modified to include test running. Currently handles Plan → Build → Commit → Push workflow. Needs test phase inserted between Build and Push.
-- `adws/adwTest.tsx` - Reference implementation for the test workflow with retry logic. Contains `runUnitTestsWithRetry` and `runE2ETestsWithRetry` patterns.
-- `adws/agents/testAgent.ts` - Contains test agent functions: `runTestAgent`, `runE2ETestAgent`, `runResolveTestAgent`, `runResolveE2ETestAgent`, `discoverE2ETestFiles`. These should be imported and used in adwPrReview.
-- `adws/core/dataTypes.ts` - Contains `PRReviewWorkflowStage` type that needs new stages for test running.
-- `adws/github/workflowComments.ts` - Contains `formatPRReviewWorkflowComment` function that needs to handle new test-related stages.
-- `adws/core/config.ts` - Contains `MAX_TEST_RETRY_ATTEMPTS` constant for retry limit.
-- `adws/__tests__/testAgent.test.ts` - Existing tests for test agent functionality to reference.
+- `adws/adwPrReview.tsx` - Main PR review orchestrator (598 lines). Needs to import shared test utilities instead of defining them locally.
+- `adws/adwTest.tsx` - Test workflow orchestrator (412 lines). Needs to use shared test utilities instead of local definitions.
+- `adws/github/workflowComments.ts` - Workflow comment formatting (703 lines). Needs to be split into smaller focused modules.
+- `guidelines/coding_guidelines.md` - Reference for coding standards that must be followed.
 
 ### New Files
-- `adws/__tests__/adwPrReview.test.ts` - Unit tests for the new test integration in PR review workflow.
-
-## Implementation Plan
-### Phase 1: Foundation
-1. Add new PR review workflow stages for test running to `PRReviewWorkflowStage` type
-2. Add corresponding comment formatters for the new stages in `workflowComments.ts`
-3. Export `MAX_TEST_RETRY_ATTEMPTS` from `core/index.ts` if not already exported
-
-### Phase 2: Core Implementation
-1. Import test agent functions into `adwPrReview.tsx`
-2. Create helper functions for running tests with retry logic (similar to `adwTest.tsx`)
-3. Insert test phase between build completion and commit/push
-4. Handle test failures by posting error comment and exiting
-
-### Phase 3: Integration
-1. Update workflow comments to reflect test progress
-2. Add state tracking for test phase in agent state
-3. Ensure proper error handling propagates test failures to PR comments
-4. Test the complete flow end-to-end
+- `adws/agents/testRetry.ts` - New shared module for test retry logic. Will contain `runUnitTestsWithRetry` and `runE2ETestsWithRetry` functions.
+- `adws/github/workflowCommentsBase.ts` - Base workflow comment utilities (truncate, stage parsing).
+- `adws/github/workflowCommentsIssue.ts` - Issue workflow comment formatters.
+- `adws/github/workflowCommentsPR.ts` - PR review workflow comment formatters.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Add new PR review workflow stages to dataTypes.ts
-- Add the following stages to `PRReviewWorkflowStage` type in `adws/core/dataTypes.ts`:
-  - `'pr_review_testing'` - Tests are running
-  - `'pr_review_test_failed'` - Tests failed and being resolved
-  - `'pr_review_test_passed'` - All tests passed
-  - `'pr_review_test_max_attempts'` - Tests exceeded max retry attempts
+### Step 1: Create shared test retry module
+- Create `adws/agents/testRetry.ts` with the shared test retry logic
+- Move `runUnitTestsWithRetry` function from `adwTest.tsx` to the new module
+- Move `runE2ETestsWithRetry` function from `adwTest.tsx` to the new module
+- Add type definitions for `TestRetryResult` and `TestRetryOptions`
+- Make functions accept optional callback for posting workflow comments (for PR review use case)
+- Export all functions and types from the new module
+- Ensure file stays under 150 lines
 
-### Step 2: Add comment formatters for new test stages
-- Update `formatPRReviewWorkflowComment` function in `adws/github/workflowComments.ts` to handle the new stages:
-  - `pr_review_testing`: "Running validation tests before pushing changes..."
-  - `pr_review_test_failed`: "Tests failed, attempting automatic resolution..."
-  - `pr_review_test_passed`: "All tests passed!"
-  - `pr_review_test_max_attempts`: "Tests exceeded maximum retry attempts. Changes not pushed." with detailed error info
+### Step 2: Update agents index to export test retry utilities
+- Update `adws/agents/index.ts` to export the new test retry functions and types from `testRetry.ts`
 
-### Step 3: Update PRReviewWorkflowContext interface
-- Add optional fields to `PRReviewWorkflowContext` in `adws/github/workflowComments.ts`:
-  - `testAttempt?: number` - Current test attempt number
-  - `maxTestAttempts?: number` - Maximum attempts allowed
-  - `failedTests?: string[]` - List of failed test names
+### Step 3: Refactor adwTest.tsx to use shared module
+- Remove local `runUnitTestsWithRetry` function definition
+- Remove local `runE2ETestsWithRetry` function definition
+- Import `runUnitTestsWithRetry` and `runE2ETestsWithRetry` from `./agents`
+- Verify file size is now under 150 lines (should reduce from 412 to ~240 lines)
 
-### Step 4: Import test agent functions in adwPrReview.tsx
-- Add imports from `'./agents'`:
-  - `runTestAgent`
-  - `runE2ETestAgent`
-  - `runResolveTestAgent`
-  - `runResolveE2ETestAgent`
-  - `discoverE2ETestFiles`
-  - `TestResult`
-  - `E2ETestResult`
-- Add import from `'./core'`:
-  - `MAX_TEST_RETRY_ATTEMPTS`
+### Step 4: Refactor adwPrReview.tsx to use shared module
+- Remove local `TestRetryResult` interface definition
+- Remove local `runUnitTestsWithRetry` function definition
+- Remove local `runE2ETestsWithRetry` function definition
+- Import shared functions from `./agents`
+- Create wrapper functions that add PR comment posting callbacks
+- Verify file size is reduced significantly (should reduce from 598 to ~390 lines)
 
-### Step 5: Create test helper functions in adwPrReview.tsx
-- Create `runUnitTestsWithRetry` function (adapted from adwTest.tsx):
-  - Takes `logsDir`, `orchestratorStatePath`, `maxRetries` as parameters
-  - Returns `{ passed: boolean; costUsd: number; totalRetries: number; failedTests: TestResult[] }`
-  - Runs unit tests and attempts resolution on failures
-  - Posts `pr_review_test_failed` comments during resolution attempts
+### Step 5: Split workflowComments.ts into smaller modules
+- Create `adws/github/workflowCommentsBase.ts` with:
+  - `truncateText` utility function
+  - `STAGE_ORDER` constant
+  - `STAGE_HEADER_MAP` constant
+  - Stage parsing functions (`parseWorkflowStageFromComment`, `extractAdwIdFromComment`, etc.)
+  - `detectRecoveryState` function
+  - Target: ~100 lines
 
-- Create `runE2ETestsWithRetry` function (adapted from adwTest.tsx):
-  - Takes `logsDir`, `orchestratorStatePath`, `maxRetries` as parameters
-  - Returns `{ passed: boolean; costUsd: number; totalRetries: number; failedTests: E2ETestResult[] }`
-  - Runs E2E tests and attempts resolution on failures
+- Create `adws/github/workflowCommentsIssue.ts` with:
+  - `WorkflowContext` interface
+  - All issue workflow comment formatters (formatStartingComment, formatClassifiedComment, etc.)
+  - `formatWorkflowComment` function
+  - `postWorkflowComment` function
+  - Target: ~150 lines
 
-### Step 6: Insert test phase in main workflow
-- After `pr_review_implemented` stage and before `pr_review_committing`:
-  - Post `pr_review_testing` workflow comment
-  - Run unit tests with retry logic
-  - If unit tests pass, run E2E tests with retry logic
-  - If all tests pass:
-    - Post `pr_review_test_passed` workflow comment
-    - Continue to commit and push phases
-  - If tests fail after max attempts:
-    - Post `pr_review_test_max_attempts` workflow comment with failure details
-    - Update orchestrator state with failure
-    - Exit with error code (do not push changes)
+- Create `adws/github/workflowCommentsPR.ts` with:
+  - `PRReviewWorkflowContext` interface
+  - All PR review workflow comment formatters
+  - `formatPRReviewWorkflowComment` function
+  - `postPRWorkflowComment` function
+  - Target: ~150 lines
 
-### Step 7: Update error handling
-- Ensure `pr_review_test_max_attempts` error comment includes:
-  - The number of retry attempts made
-  - List of failing tests
-  - Suggestion for manual intervention
-- Update the `PRReviewWorkflowContext` error message to include test failure context
+- Update `adws/github/workflowComments.ts` to:
+  - Re-export all types and functions from the split modules
+  - Keep as barrel file for backwards compatibility
+  - Target: ~30 lines
 
-### Step 8: Update file header documentation
-- Update the header comment in `adwPrReview.tsx` to reflect the new workflow:
-  ```
-  * Workflow:
-  * 1. Fetch PR details and review comments
-  * 2. Detect unaddressed review comments
-  * 3. Run Plan Agent to create revision plan
-  * 4. Run Build Agent to implement changes
-  * 5. Run validation tests with automatic failure resolution
-  * 6. Commit and push to the PR branch (only if tests pass)
-  ```
+### Step 6: Update github index exports
+- Ensure `adws/github/index.ts` continues to export all necessary types and functions
+- No changes should be needed if workflowComments.ts re-exports correctly
 
-### Step 9: Create unit tests for the new functionality
-- Create `adws/__tests__/adwPrReview.test.ts` with tests:
-  - Test that test phase is invoked after build phase
-  - Test that push is skipped when tests fail
-  - Test that error comment is posted on max retry attempts
-  - Test that workflow completes when tests pass
+### Step 7: Update imports in test files
+- Update `adws/__tests__/adwPrReview.test.ts` if any imports changed
+- Verify all imports resolve correctly
 
-### Step 10: Run validation commands
-- Run all validation commands to verify no regressions
-
-## Testing Strategy
-### Unit Tests
-- Test `runUnitTestsWithRetry` helper function with mocked test agent
-- Test `runE2ETestsWithRetry` helper function with mocked test agent
-- Test error comment formatting for test failures
-- Test workflow state transitions during test phase
-
-### Integration Tests
-- Verify test phase is correctly positioned in workflow
-- Verify push is blocked when tests fail
-- Verify error comment contains meaningful failure information
-- Verify successful test run allows push to proceed
-
-### Edge Cases
-- All tests pass on first attempt
-- Tests fail then pass after resolution
-- Tests fail after max retry attempts
-- No E2E tests configured (should still pass)
-- Test agent execution error (not test failure)
-- Network errors during test execution
-
-## Acceptance Criteria
-- [ ] Tests run automatically after build phase in PR review workflow
-- [ ] Changes are only pushed if all tests pass
-- [ ] Test failures are automatically resolved (up to MAX_TEST_RETRY_ATTEMPTS)
-- [ ] Clear error comment is posted to PR when tests exceed max attempts
-- [ ] Error comment includes: attempt count, failing tests, suggestion for resolution
-- [ ] Workflow status comments reflect test progress
-- [ ] No regressions in existing PR review functionality
-- [ ] Unit tests cover the new test integration logic
-- [ ] All validation commands pass
+### Step 8: Run validation commands
+- Run all validation commands to verify no regressions and all guidelines are now followed
 
 ## Validation Commands
-Execute every command to validate the feature works correctly with zero regressions.
+Execute every command to validate the review is complete with zero regressions.
 
 - `npm run lint` - Run linter to check for code quality issues
 - `npm run build` - Build the application to verify no build errors
 - `npx tsc --noEmit -p adws/tsconfig.json` - Validate ADW TypeScript types
 - `npm test -- --run adws/__tests__` - Run ADW tests to validate no regressions
-- `npm test` - Run all tests to validate feature works with zero regressions
+- `npm test` - Run all tests to validate the review is complete with zero regressions
 
 ## Notes
-- The test integration should reuse patterns from `adwTest.tsx` for consistency
-- The `MAX_TEST_RETRY_ATTEMPTS` constant from config should be used (default: 5)
-- Test failures should not leave the branch in an inconsistent state - changes are only pushed after tests pass
-- The error comment should provide actionable information for manual resolution
-- Consider that running tests adds latency to the PR review workflow, but ensures code quality
-- The existing `testAgent.ts` functions handle all the low-level test execution - this feature only needs to orchestrate them
-- State tracking through `AgentStateManager` should include test phase metadata for debugging
+- The key insight is that the test retry logic was duplicated rather than shared. By extracting it to `adws/agents/testRetry.ts`, both `adwTest.tsx` and `adwPrReview.tsx` can use the same implementation.
+- The `workflowComments.ts` file grew to 703 lines because it handles both issue workflow comments and PR review workflow comments. Splitting it into focused modules improves maintainability.
+- The shared test retry functions should accept optional callbacks for posting status updates, allowing `adwPrReview.tsx` to post PR comments during test execution without duplicating the retry logic.
+- After this refactoring:
+  - `testRetry.ts` should be ~120 lines (shared test retry logic)
+  - `adwTest.tsx` should be ~120 lines (orchestrator only)
+  - `adwPrReview.tsx` should be ~140 lines (orchestrator only)
+  - `workflowCommentsBase.ts` should be ~100 lines
+  - `workflowCommentsIssue.ts` should be ~150 lines
+  - `workflowCommentsPR.ts` should be ~150 lines
+  - All files will comply with the 150 line guideline
