@@ -307,4 +307,140 @@ a:visited {
   }
 }
 
+/* Character Detail Page */
+.character-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
 
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.section-heading {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 22px;
+  font-weight: normal;
+  border-bottom: 1px solid #a7d7f9;
+  padding-bottom: 5px;
+  margin-bottom: 15px;
+}
+
+.back-to-overview {
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+/* Wikipedia-style Infobox */
+.infobox {
+  float: right;
+  clear: right;
+  width: 300px;
+  margin: 0 0 15px 20px;
+  padding: 0;
+  background-color: #f8f9fa;
+  border: 1px solid #a7d7f9;
+  font-size: 14px;
+}
+
+.infobox-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px 10px;
+  background-color: #eaecf0;
+  margin: 0;
+  border-bottom: 1px solid #a7d7f9;
+}
+
+.infobox-image {
+  text-align: center;
+  padding: 10px;
+  border-bottom: 1px solid #a7d7f9;
+}
+
+.character-image {
+  max-width: 100%;
+  height: auto;
+}
+
+.infobox-content {
+  padding: 0;
+}
+
+.infobox-row {
+  display: flex;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.infobox-row:last-child {
+  border-bottom: none;
+}
+
+.infobox-label {
+  font-weight: bold;
+  width: 100px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  background-color: #eaecf0;
+  border-right: 1px solid #a7d7f9;
+}
+
+.infobox-value {
+  flex: 1;
+  padding: 6px 10px;
+  word-break: break-word;
+}
+
+.infobox-row-full {
+  flex-direction: column;
+}
+
+.infobox-row-full .infobox-label {
+  width: 100%;
+  border-right: none;
+  border-bottom: 1px solid #a7d7f9;
+}
+
+.infobox-biography {
+  white-space: pre-wrap;
+}
+
+/* Connection Status Indicators */
+.status-active {
+  color: #00a000;
+  font-weight: bold;
+}
+
+.status-inactive {
+  color: #a00000;
+}
+
+.unknown-character {
+  color: #54595d;
+  font-style: italic;
+}
+
+/* Character links in list */
+.character-link {
+  color: #0645ad;
+  text-decoration: none;
+}
+
+.character-link:hover {
+  text-decoration: underline;
+}
+
+.character-link:visited {
+  color: #0b0080;
+}
+
+/* Responsive adjustments for detail page */
+@media (max-width: 768px) {
+  .infobox {
+    float: none;
+    width: 100%;
+    margin: 0 0 20px 0;
+  }
+}
