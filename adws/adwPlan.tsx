@@ -141,7 +141,10 @@ function getNextStage(lastCompletedStage: WorkflowStage): WorkflowStage {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id]');
+  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>]');
+  console.error('');
+  console.error('Options:');
+  console.error('  --cwd <path>       Working directory for git operations (worktree path)');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -153,9 +156,17 @@ function printUsageAndExit(): never {
 /**
  * Parses and validates command line arguments.
  */
-function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null } {
+function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null; cwd: string | null } {
   if (args.length < 1) {
     printUsageAndExit();
+  }
+
+  // Parse --cwd option
+  let cwd: string | null = null;
+  const cwdIndex = args.indexOf('--cwd');
+  if (cwdIndex !== -1 && args[cwdIndex + 1]) {
+    cwd = args[cwdIndex + 1];
+    args.splice(cwdIndex, 2);
   }
 
   const issueNumber = parseInt(args[0], 10);
@@ -166,7 +177,7 @@ function parseArguments(args: string[]): { issueNumber: number; providedAdwId: s
 
   const providedAdwId = args[1] || null;
 
-  return { issueNumber, providedAdwId };
+  return { issueNumber, providedAdwId, cwd };
 }
 
 /**
@@ -201,10 +212,13 @@ function printPlanSummary(
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { issueNumber, providedAdwId } = parseArguments(args);
+  const { issueNumber, providedAdwId, cwd } = parseArguments(args);
 
   log(`Starting ADW Plan workflow`, 'info');
   log(`Issue: #${issueNumber}`, 'info');
+  if (cwd) {
+    log(`Working directory: ${cwd}`, 'info');
+  }
 
   // Step 1: Fetch GitHub issue
   log('Fetching GitHub issue...', 'info');
@@ -212,7 +226,12 @@ async function main(): Promise<void> {
   log(`Fetched issue: ${issue.title}`, 'success');
 
   // Step 2: Checkout default branch and pull latest changes
-  checkoutDefaultBranch();
+  // Skip if cwd is provided (worktree already has the correct starting point)
+  if (!cwd) {
+    checkoutDefaultBranch();
+  } else {
+    log('Skipping checkout (using worktree)', 'info');
+  }
 
   // Step 3: Detect recovery state from existing comments
   const recoveryState = detectRecoveryState(issue.comments);
@@ -312,7 +331,7 @@ async function main(): Promise<void> {
     // Step 6: Create branch
     if (shouldExecuteStage('branch_created', recoveryState)) {
       log('Creating branch...', 'info');
-      branchName = createFeatureBranch(issueNumber, issue.title, issueType);
+      branchName = createFeatureBranch(issueNumber, issue.title, issueType, cwd || undefined);
       log(`On branch: ${branchName}`, 'success');
       ctx.branchName = branchName;
 
@@ -323,7 +342,7 @@ async function main(): Promise<void> {
     } else {
       log('Skipping branch creation (already completed)', 'info');
       if (recoveryState.branchName) {
-        branchName = createFeatureBranch(issueNumber, issue.title, issueType);
+        branchName = createFeatureBranch(issueNumber, issue.title, issueType, cwd || undefined);
         ctx.branchName = branchName;
       }
     }
@@ -382,7 +401,7 @@ async function main(): Promise<void> {
     // Step 8: Commit plan
     if (shouldExecuteStage('plan_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'plan_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`);
+      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, cwd || undefined);
     } else {
       log('Skipping plan commit (already completed)', 'info');
     }

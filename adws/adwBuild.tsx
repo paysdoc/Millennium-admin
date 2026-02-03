@@ -94,7 +94,10 @@ function getNextStage(lastCompletedStage: WorkflowStage): WorkflowStage {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwBuild.tsx <github-issue-number> [adw-id]');
+  console.error('Usage: npx tsx adws/adwBuild.tsx <github-issue-number> [adw-id] [--cwd <path>]');
+  console.error('');
+  console.error('Options:');
+  console.error('  --cwd <path>       Working directory for git operations (worktree path)');
   console.error('');
   console.error('Prerequisites:');
   console.error('  - Must be on a feature/bugfix/chore branch');
@@ -110,9 +113,17 @@ function printUsageAndExit(): never {
 /**
  * Parses and validates command line arguments.
  */
-function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null } {
+function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null; cwd: string | null } {
   if (args.length < 1) {
     printUsageAndExit();
+  }
+
+  // Parse --cwd option
+  let cwd: string | null = null;
+  const cwdIndex = args.indexOf('--cwd');
+  if (cwdIndex !== -1 && args[cwdIndex + 1]) {
+    cwd = args[cwdIndex + 1];
+    args.splice(cwdIndex, 2);
   }
 
   const issueNumber = parseInt(args[0], 10);
@@ -123,7 +134,7 @@ function parseArguments(args: string[]): { issueNumber: number; providedAdwId: s
 
   const providedAdwId = args[1] || null;
 
-  return { issueNumber, providedAdwId };
+  return { issueNumber, providedAdwId, cwd };
 }
 
 /**
@@ -160,10 +171,13 @@ function printBuildSummary(
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { issueNumber, providedAdwId } = parseArguments(args);
+  const { issueNumber, providedAdwId, cwd } = parseArguments(args);
 
   log(`Starting ADW Build workflow`, 'info');
   log(`Issue: #${issueNumber}`, 'info');
+  if (cwd) {
+    log(`Working directory: ${cwd}`, 'info');
+  }
 
   // Step 1: Fetch GitHub issue
   log('Fetching GitHub issue...', 'info');
@@ -177,7 +191,7 @@ async function main(): Promise<void> {
   log(`Logs: ${logsDir}`, 'info');
 
   // Step 3: Verify current branch and plan file
-  const branchName = getCurrentBranch();
+  const branchName = getCurrentBranch(cwd || undefined);
   log(`Current branch: ${branchName}`, 'info');
 
   const planPath = getPlanFilePath(issueNumber);
@@ -320,7 +334,7 @@ async function main(): Promise<void> {
     // Step 6: Commit implementation
     if (shouldExecuteStage('implementation_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'implementation_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`);
+      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`, cwd || undefined);
     } else {
       log('Skipping implementation commit (already completed)', 'info');
     }

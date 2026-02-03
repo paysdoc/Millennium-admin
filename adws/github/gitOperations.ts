@@ -7,9 +7,10 @@ import { log, slugify, IssueClassSlashCommand, branchPrefixMap } from '../core';
 
 /**
  * Gets the current git branch name.
+ * @param cwd - Optional working directory to run the command in
  */
-export function getCurrentBranch(): string {
-  return execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+export function getCurrentBranch(cwd?: string): string {
+  return execSync('git branch --show-current', { encoding: 'utf-8', cwd }).trim();
 }
 
 /**
@@ -48,23 +49,25 @@ export function generateFeatureBranchName(issueNumber: number, title: string): s
  * @param issueNumber - The GitHub issue number
  * @param title - The issue title (will be slugified for branch name)
  * @param issueType - The issue classification (defaults to '/feature')
+ * @param cwd - Optional working directory to run the command in
  * @returns The branch name.
  */
 export function createFeatureBranch(
   issueNumber: number,
   title: string,
-  issueType: IssueClassSlashCommand = '/feature'
+  issueType: IssueClassSlashCommand = '/feature',
+  cwd?: string
 ): string {
   const branchName = generateBranchName(issueNumber, title, issueType);
 
   try {
-    const existingBranches = execSync('git branch -a', { encoding: 'utf-8' });
+    const existingBranches = execSync('git branch -a', { encoding: 'utf-8', cwd });
 
     if (existingBranches.includes(branchName)) {
       log(`Branch ${branchName} already exists, checking out...`, 'info');
-      execSync(`git checkout ${branchName}`, { stdio: 'pipe' });
+      execSync(`git checkout ${branchName}`, { stdio: 'pipe', cwd });
     } else {
-      execSync(`git checkout -b ${branchName}`, { stdio: 'pipe' });
+      execSync(`git checkout -b ${branchName}`, { stdio: 'pipe', cwd });
       log(`Created branch: ${branchName}`, 'success');
     }
 
@@ -89,19 +92,21 @@ export function checkoutBranch(branchName: string): void {
 
 /**
  * Stages all changes and commits with the given message.
+ * @param message - The commit message
+ * @param cwd - Optional working directory to run the command in
  * @returns True if changes were committed, false if no changes to commit.
  */
-export function commitChanges(message: string): boolean {
+export function commitChanges(message: string, cwd?: string): boolean {
   try {
-    const status = execSync('git status --porcelain', { encoding: 'utf-8' });
+    const status = execSync('git status --porcelain', { encoding: 'utf-8', cwd });
 
     if (!status.trim()) {
       log('No changes to commit', 'info');
       return false;
     }
 
-    execSync('git add -A', { stdio: 'pipe' });
-    execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { stdio: 'pipe' });
+    execSync('git add -A', { stdio: 'pipe', cwd });
+    execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { stdio: 'pipe', cwd });
     log(`Committed: ${message}`, 'success');
     return true;
   } catch (error) {
@@ -112,9 +117,11 @@ export function commitChanges(message: string): boolean {
 
 /**
  * Pushes the current branch to origin with upstream tracking.
+ * @param branchName - The branch name to push
+ * @param cwd - Optional working directory to run the command in
  */
-export function pushBranch(branchName: string): void {
-  execSync(`git push -u origin ${branchName}`, { stdio: 'pipe' });
+export function pushBranch(branchName: string, cwd?: string): void {
+  execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd });
   log(`Pushed branch to origin`, 'success');
 }
 
