@@ -4,7 +4,8 @@
  *
  * This script orchestrates the complete ADW workflow by calling:
  * 1. adwPlan.tsx - Planning phase (classification, branch creation, plan generation)
- * 2. adwBuild.tsx - Build phase (implementation, commit, PR creation)
+ * 2. adwBuild.tsx - Build phase (implementation, commit)
+ * 3. Create PR after build completes
  *
  * Usage: npx tsx adws/adwPlanBuild.tsx <github-issue-number> [adw-id]
  *
@@ -16,6 +17,13 @@
 
 import { execSync, SpawnSyncReturns } from 'child_process';
 import { log, generateAdwId } from './core';
+import {
+  createPullRequest,
+  fetchGitHubIssue,
+  postWorkflowComment,
+  WorkflowContext,
+  getCurrentBranch,
+} from './github';
 
 /**
  * Prints usage information and exits.
@@ -25,7 +33,8 @@ function printUsageAndExit(): never {
   console.error('');
   console.error('This orchestrator runs the complete ADW workflow:');
   console.error('  1. adwPlan.tsx  - Plan generation');
-  console.error('  2. adwBuild.tsx - Implementation and PR creation');
+  console.error('  2. adwBuild.tsx - Implementation and commit');
+  console.error('  3. Create Pull Request');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -73,7 +82,7 @@ function runSubprocess(command: string, description: string): boolean {
 /**
  * Main orchestrator workflow.
  */
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
@@ -93,13 +102,49 @@ function main(): void {
   // Phase 2: Run Build
   const buildCommand = `npx tsx adws/adwBuild.tsx ${issueNumber} ${adwId}`;
   if (!runSubprocess(buildCommand, 'Build Phase')) {
-    log('Build phase failed.', 'error');
+    log('Build phase failed. Aborting workflow.', 'error');
     process.exit(1);
   }
 
-  log('===================================', 'info');
-  log('ADW Plan & Build workflow completed!', 'success');
-  log('===================================', 'info');
+  // Phase 3: Create PR (after build completes)
+  log('Build completed! Creating Pull Request...', 'info');
+
+  const branchName = getCurrentBranch();
+  const ctx: WorkflowContext = {
+    issueNumber,
+    adwId,
+    branchName,
+  };
+
+  try {
+    // Fetch issue details for PR creation
+    const issue = await fetchGitHubIssue(issueNumber);
+
+    // Post workflow comment indicating PR creation is starting
+    postWorkflowComment(issueNumber, 'pr_creating', ctx);
+
+    // Create the PR
+    const prUrl = createPullRequest(issue, '', '');
+    ctx.prUrl = prUrl;
+
+    // Post workflow comment indicating PR was created
+    postWorkflowComment(issueNumber, 'pr_created', ctx);
+
+    log(`Pull Request created: ${prUrl}`, 'success');
+
+    // Post workflow completed comment
+    postWorkflowComment(issueNumber, 'completed', ctx);
+
+    log('===================================', 'info');
+    log('ADW Plan & Build workflow completed!', 'success');
+    log(`PR: ${prUrl}`, 'info');
+    log('===================================', 'info');
+  } catch (error) {
+    ctx.errorMessage = `Failed to create PR: ${error}`;
+    postWorkflowComment(issueNumber, 'error', ctx);
+    log(`Failed to create PR: ${error}`, 'error');
+    process.exit(1);
+  }
 }
 
 main();
