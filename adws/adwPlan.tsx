@@ -148,10 +148,12 @@ function getNextStage(lastCompletedStage: WorkflowStage): WorkflowStage {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>]');
+  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>] [--issue-type <type>]');
   console.error('');
   console.error('Options:');
-  console.error('  --cwd <path>       Working directory for git operations (worktree path)');
+  console.error('  --cwd <path>         Working directory for git operations (worktree path)');
+  console.error('  --issue-type <type>  Pre-classified issue type (skips classification step)');
+  console.error('                       Valid values: /feature, /bug, /chore, /pr_review');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -163,7 +165,12 @@ function printUsageAndExit(): never {
 /**
  * Parses and validates command line arguments.
  */
-function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null; cwd: string | null } {
+function parseArguments(args: string[]): {
+  issueNumber: number;
+  providedAdwId: string | null;
+  cwd: string | null;
+  providedIssueType: IssueClassSlashCommand | null;
+} {
   if (args.length < 1) {
     printUsageAndExit();
   }
@@ -176,6 +183,21 @@ function parseArguments(args: string[]): { issueNumber: number; providedAdwId: s
     args.splice(cwdIndex, 2);
   }
 
+  // Parse --issue-type option
+  let providedIssueType: IssueClassSlashCommand | null = null;
+  const issueTypeIndex = args.indexOf('--issue-type');
+  if (issueTypeIndex !== -1 && args[issueTypeIndex + 1]) {
+    const typeValue = args[issueTypeIndex + 1];
+    const validTypes: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore', '/pr_review'];
+    if (validTypes.includes(typeValue as IssueClassSlashCommand)) {
+      providedIssueType = typeValue as IssueClassSlashCommand;
+    } else {
+      console.error(`Invalid issue type: ${typeValue}. Valid values: ${validTypes.join(', ')}`);
+      process.exit(1);
+    }
+    args.splice(issueTypeIndex, 2);
+  }
+
   const issueNumber = parseInt(args[0], 10);
   if (isNaN(issueNumber)) {
     console.error(`Invalid issue number: ${args[0]}`);
@@ -184,7 +206,7 @@ function parseArguments(args: string[]): { issueNumber: number; providedAdwId: s
 
   const providedAdwId = args[1] || null;
 
-  return { issueNumber, providedAdwId, cwd };
+  return { issueNumber, providedAdwId, cwd, providedIssueType };
 }
 
 /**
@@ -219,12 +241,15 @@ function printPlanSummary(
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { issueNumber, providedAdwId, cwd } = parseArguments(args);
+  const { issueNumber, providedAdwId, cwd, providedIssueType } = parseArguments(args);
 
   log(`Starting ADW Plan workflow`, 'info');
   log(`Issue: #${issueNumber}`, 'info');
   if (cwd) {
     log(`Working directory: ${cwd}`, 'info');
+  }
+  if (providedIssueType) {
+    log(`Pre-classified issue type: ${providedIssueType}`, 'info');
   }
 
   // Step 1: Fetch GitHub issue
@@ -301,7 +326,17 @@ async function main(): Promise<void> {
 
     // Step 5: Classify issue type
     let issueType: IssueClassSlashCommand;
-    if (shouldExecuteStage('classified', recoveryState)) {
+    if (providedIssueType) {
+      // Issue type was provided via CLI (from orchestrator), skip classification
+      log(`Using pre-classified issue type: ${providedIssueType}`, 'info');
+      issueType = providedIssueType;
+      ctx.issueType = issueType;
+
+      AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
+      AgentStateManager.appendLog(orchestratorStatePath, `Using pre-classified issue type: ${issueType}`);
+
+      postWorkflowComment(issueNumber, 'classified', ctx);
+    } else if (shouldExecuteStage('classified', recoveryState)) {
       log('Classifying issue type...', 'info');
       const classifierStatePath = AgentStateManager.initializeState(adwId, 'classifier', orchestratorStatePath);
       AgentStateManager.writeState(classifierStatePath, {

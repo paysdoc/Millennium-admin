@@ -17,7 +17,7 @@
  */
 
 import { execSync, SpawnSyncReturns } from 'child_process';
-import { log, generateAdwId } from './core';
+import { log, generateAdwId, IssueClassSlashCommand } from './core';
 import {
   createPullRequest,
   fetchGitHubIssue,
@@ -28,6 +28,7 @@ import {
   generateBranchName,
   ensureWorktree,
 } from './github';
+import { classifyGitHubIssue } from './triggers/issueClassifier';
 
 /**
  * Prints usage information and exits.
@@ -104,12 +105,17 @@ async function main(): Promise<void> {
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
 
+  // Classify the issue to determine the correct branch prefix
+  const classificationResult = await classifyGitHubIssue(issue);
+  const issueType: IssueClassSlashCommand = classificationResult.issueType;
+  log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
+
   // Get default branch and create worktree
   const defaultBranch = getDefaultBranch();
   log(`Default branch: ${defaultBranch}`, 'info');
 
-  // Generate branch name (will be created by adwPlan in the worktree)
-  const branchName = generateBranchName(issueNumber, issue.title);
+  // Generate branch name with the correct prefix based on issue type
+  const branchName = generateBranchName(issueNumber, issue.title, issueType);
   log(`Target branch: ${branchName}`, 'info');
 
   // Create or get worktree for this branch
@@ -117,7 +123,8 @@ async function main(): Promise<void> {
   log(`Worktree path: ${worktreePath}`, 'info');
 
   // Phase 1: Run Plan (in worktree)
-  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}"`;
+  // Pass the issue type to skip redundant classification in adwPlan
+  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}" --issue-type "${issueType}"`;
   if (!runSubprocess(planCommand, 'Plan Phase', worktreePath)) {
     log('Plan phase failed. Aborting workflow.', 'error');
     process.exit(1);
