@@ -6,6 +6,7 @@ import CharacterImage from '@/components/CharacterImage'
 import ConnectionsTable from '@/components/ConnectionsTable'
 import { fetchCharacterById, fetchAllCharacters } from '@/lib/characters'
 import { fetchConnectionsByCharacter } from '@/lib/connections'
+import { getSupabaseStorageUrl } from '@/lib/supabase'
 
 interface CharacterPageProps {
   params: Promise<{ id: string }>
@@ -60,7 +61,7 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
                 </div>
                 <div className="character-info-right">
                   <CharacterImage
-                    imageUrl={character.image_link}
+                    imageUrl={getSupabaseStorageUrl(character.image_link)}
                     characterName={character.name}
                   />
                 </div>

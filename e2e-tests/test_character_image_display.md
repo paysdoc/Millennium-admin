@@ -28,6 +28,8 @@ So that I can visually identify characters while reading their details
    - The image is rendered in the right column
    - The image width does not exceed 450px
    - The infobox and image align at the top
+   - The image `src` attribute contains the Supabase storage URL pattern (`/storage/v1/object/public/`)
+   - The image loads successfully without 404 errors (check network requests or image naturalWidth > 0)
 
 10. Take a screenshot of the full page layout
 
@@ -44,5 +46,7 @@ So that I can visually identify characters while reading their details
 - Image and infobox align at the top of the section
 - Image does not exceed 450px maximum width
 - Image maintains aspect ratio
+- Image loads successfully without 404 errors
+- Image src contains the correct Supabase storage URL
 - Layout handles characters without images gracefully
 - 5 screenshots are taken
