@@ -22,6 +22,7 @@ So that I can understand a character's full profile and relationships at a glanc
 9. **Verify** the character details section is displayed:
    - Character name heading
    - Infobox with character fields (first names, dates, biography, category, link)
+   - If character has an image, it is displayed in the right column (separate from infobox)
 
 10. Take a screenshot of the character details section
 11. **Verify** the connections section is displayed:

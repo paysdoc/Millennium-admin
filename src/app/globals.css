@@ -436,11 +436,55 @@ a:visited {
   color: #0b0080;
 }
 
+/* Character Info Section - Two Column Layout */
+.character-info-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.character-info-left {
+  flex: 2;
+  min-width: 0;
+}
+
+.character-info-right {
+  flex: 1;
+  min-width: 0;
+}
+
+.character-info-section .infobox {
+  float: none;
+  width: 100%;
+  margin: 0;
+}
+
+.character-image-container {
+  display: flex;
+  justify-content: center;
+}
+
+.character-detail-image {
+  max-width: 450px;
+  width: 100%;
+  height: auto;
+}
+
 /* Responsive adjustments for detail page */
 @media (max-width: 768px) {
   .infobox {
     float: none;
     width: 100%;
     margin: 0 0 20px 0;
+  }
+
+  .character-info-section {
+    flex-direction: column;
+  }
+
+  .character-info-left,
+  .character-info-right {
+    flex: none;
+    width: 100%;
   }
 }

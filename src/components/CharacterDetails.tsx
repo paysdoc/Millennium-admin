@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import { Character } from '@/types/character'
 
 interface CharacterDetailsProps {
@@ -9,20 +8,6 @@ export default function CharacterDetails({ character }: CharacterDetailsProps) {
   return (
     <div className="infobox">
       <h2 className="infobox-title">{character.name}</h2>
-
-      {character.image_link && (
-        <div className="infobox-image">
-          <Image
-            src={character.image_link}
-            alt={character.name}
-            className="character-image"
-            width={280}
-            height={280}
-            style={{ objectFit: 'contain' }}
-            unoptimized
-          />
-        </div>
-      )}
 
       <div className="infobox-content">
         {character.first_names && (
