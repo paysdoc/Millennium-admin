@@ -44,6 +44,7 @@ export default function ConnectionsTable({
     <table className="table">
       <thead>
         <tr>
+          <th>Category</th>
           <th>Name</th>
           <th>Value</th>
           <th>Description</th>
@@ -60,6 +61,7 @@ export default function ConnectionsTable({
           )
           return (
             <tr key={connection.id}>
+              <td>{connectedCharacter?.category ?? '-'}</td>
               <td>
                 {connectedCharacter ? (
                   <Link href={`/characters/${connectedCharacter.id}`}>
