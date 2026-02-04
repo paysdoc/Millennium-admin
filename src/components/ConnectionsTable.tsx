@@ -16,11 +16,15 @@ function getConnectedCharacter(
   characterId: string,
   allCharacters: Character[]
 ): Character | undefined {
-  const otherId =
-    connection.char1_id === characterId
-      ? connection.char2_id
-      : connection.char1_id
-  return allCharacters.find((c) => c.id === otherId)
+  // Convert to strings to handle type mismatches (URL params vs database values)
+  const charIdStr = String(characterId)
+  const char1Str = String(connection.char1_id)
+  const char2Str = String(connection.char2_id)
+
+  // Determine the other character's ID (not the current character)
+  const otherId = char1Str === charIdStr ? connection.char2_id : connection.char1_id
+
+  return allCharacters.find((c) => String(c.id) === String(otherId))
 }
 
 export default function ConnectionsTable({
