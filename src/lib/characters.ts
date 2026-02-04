@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabase'
+import { getSupabaseClient, getSupabaseServiceClient } from './supabase'
 import { isTableNotFoundError } from './schema'
 import {
   Character,
@@ -99,7 +99,7 @@ export async function updateCharacter(
   id: string,
   data: Partial<Omit<Character, 'id'>>
 ): Promise<Character> {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseServiceClient()
 
   // Map application fields to database fields
   const updateData: Partial<CharacterRow> = {}
