@@ -4,27 +4,35 @@ import * as path from 'path';
 import { AgentStateManager } from '../core/agentState';
 import { AgentState } from '../core/dataTypes';
 
+// Generate a unique test directory to avoid conflicts when running in parallel across worktrees
+// Use __dirname hash to ensure each worktree/location gets a unique directory
+const uniqueTestDir = `/tmp/test-agents-${Buffer.from(__dirname).toString('base64').replace(/[/+=]/g, '').slice(0, 16)}`;
+
 // Mock the config module to use a temp directory
-vi.mock('../core/config', () => ({
-  AGENTS_STATE_DIR: '/tmp/test-agents',
-}));
+vi.mock('../core/config', async () => {
+  // Re-compute the unique path inside the mock to ensure consistency
+  const dirHash = Buffer.from(__dirname).toString('base64').replace(/[/+=]/g, '').slice(0, 16);
+  return {
+    AGENTS_STATE_DIR: `/tmp/test-agents-${dirHash}`,
+  };
+});
 
 describe('AgentStateManager', () => {
   const testAdwId = 'adw-test-12345-abc';
-  const testStatePath = '/tmp/test-agents/adw-test-12345-abc/orchestrator';
+  const testStatePath = `${uniqueTestDir}/adw-test-12345-abc/orchestrator`;
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Clean up test directory before each test
-    if (fs.existsSync('/tmp/test-agents')) {
-      fs.rmSync('/tmp/test-agents', { recursive: true, force: true });
+    if (fs.existsSync(uniqueTestDir)) {
+      fs.rmSync(uniqueTestDir, { recursive: true, force: true });
     }
   });
 
   afterEach(() => {
     // Clean up test directory after each test
-    if (fs.existsSync('/tmp/test-agents')) {
-      fs.rmSync('/tmp/test-agents', { recursive: true, force: true });
+    if (fs.existsSync(uniqueTestDir)) {
+      fs.rmSync(uniqueTestDir, { recursive: true, force: true });
     }
   });
 
@@ -32,7 +40,7 @@ describe('AgentStateManager', () => {
     it('creates correct directory structure for top-level agent', () => {
       const statePath = AgentStateManager.initializeState(testAdwId, 'orchestrator');
 
-      expect(statePath).toBe('/tmp/test-agents/adw-test-12345-abc/orchestrator');
+      expect(statePath).toBe(`${uniqueTestDir}/adw-test-12345-abc/orchestrator`);
       expect(fs.existsSync(statePath)).toBe(true);
     });
 
@@ -42,7 +50,7 @@ describe('AgentStateManager', () => {
       // Then create child under parent
       const childPath = AgentStateManager.initializeState(testAdwId, 'classifier', parentPath);
 
-      expect(childPath).toBe('/tmp/test-agents/adw-test-12345-abc/orchestrator/classifier');
+      expect(childPath).toBe(`${uniqueTestDir}/adw-test-12345-abc/orchestrator/classifier`);
       expect(fs.existsSync(childPath)).toBe(true);
     });
 
@@ -58,7 +66,7 @@ describe('AgentStateManager', () => {
       const parentPath = AgentStateManager.initializeState(testAdwId, 'orchestrator');
       const childPath = AgentStateManager.initializeState(testAdwId, 'plan-agent', parentPath);
 
-      expect(childPath).toBe('/tmp/test-agents/adw-test-12345-abc/orchestrator/plan-agent');
+      expect(childPath).toBe(`${uniqueTestDir}/adw-test-12345-abc/orchestrator/plan-agent`);
       expect(fs.existsSync(childPath)).toBe(true);
     });
   });
@@ -275,7 +283,7 @@ describe('AgentStateManager', () => {
     });
 
     it('returns null when at agents root directory', () => {
-      const parentState = AgentStateManager.readParentState('/tmp/test-agents');
+      const parentState = AgentStateManager.readParentState(uniqueTestDir);
 
       expect(parentState).toBeNull();
     });
@@ -335,14 +343,14 @@ describe('AgentStateManager', () => {
     it('returns correct path for top-level agent', () => {
       const statePath = AgentStateManager.getStatePath(testAdwId, 'orchestrator');
 
-      expect(statePath).toBe('/tmp/test-agents/adw-test-12345-abc/orchestrator');
+      expect(statePath).toBe(`${uniqueTestDir}/adw-test-12345-abc/orchestrator`);
     });
 
     it('returns correct path for nested agent', () => {
-      const parentPath = '/tmp/test-agents/adw-test-12345-abc/orchestrator';
+      const parentPath = `${uniqueTestDir}/adw-test-12345-abc/orchestrator`;
       const statePath = AgentStateManager.getStatePath(testAdwId, 'classifier', parentPath);
 
-      expect(statePath).toBe('/tmp/test-agents/adw-test-12345-abc/orchestrator/classifier');
+      expect(statePath).toBe(`${uniqueTestDir}/adw-test-12345-abc/orchestrator/classifier`);
     });
   });
 

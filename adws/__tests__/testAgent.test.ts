@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -21,74 +21,45 @@ import {
   runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
+  isValidE2ETestResult,
   TestResult,
   E2ETestResult,
 } from '../agents/testAgent';
 
-describe('testAgent', () => {
-  const testLogsDir = '/tmp/test-logs';
-  const e2eTestsDir = path.join(process.cwd(), '.claude/commands/e2e');
-  const mockE2eTestsDir = '/tmp/mock-e2e-tests';
+// Generate a unique test directory to avoid conflicts when running in parallel across worktrees
+const uniqueTestDir = `/tmp/test-e2e-${Buffer.from(__dirname).toString('base64').replace(/[/+=]/g, '').slice(0, 16)}`;
 
-  // Store original e2e-tests content to restore after tests
-  let originalE2eTestsContent: Map<string, Buffer> | null = null;
+describe('testAgent', () => {
+  const testLogsDir = `${uniqueTestDir}/test-logs`;
+  // Use a unique temp directory for e2e tests instead of the real .claude/commands/e2e
+  const testBaseDir = `${uniqueTestDir}/mock-project`;
+  const e2eTestsDir = path.join(testBaseDir, '.claude/commands/e2e');
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Clean up test directories
-    if (fs.existsSync(testLogsDir)) {
-      fs.rmSync(testLogsDir, { recursive: true, force: true });
+    // Clean up test directories before each test
+    if (fs.existsSync(uniqueTestDir)) {
+      fs.rmSync(uniqueTestDir, { recursive: true, force: true });
     }
     fs.mkdirSync(testLogsDir, { recursive: true });
-
-    // Save original e2e-tests content if it exists
-    if (fs.existsSync(e2eTestsDir) && originalE2eTestsContent === null) {
-      originalE2eTestsContent = new Map();
-      const files = fs.readdirSync(e2eTestsDir);
-      for (const file of files) {
-        const filePath = path.join(e2eTestsDir, file);
-        if (fs.statSync(filePath).isFile()) {
-          originalE2eTestsContent.set(file, fs.readFileSync(filePath));
-        }
-      }
-      // Remove the directory for testing
-      fs.rmSync(e2eTestsDir, { recursive: true, force: true });
-    }
   });
 
   afterEach(() => {
-    // Clean up test directories
-    if (fs.existsSync(testLogsDir)) {
-      fs.rmSync(testLogsDir, { recursive: true, force: true });
-    }
-    // Clean up mock e2e-tests directory if created by tests
-    if (fs.existsSync(e2eTestsDir)) {
-      fs.rmSync(e2eTestsDir, { recursive: true, force: true });
-    }
-    if (fs.existsSync(mockE2eTestsDir)) {
-      fs.rmSync(mockE2eTestsDir, { recursive: true, force: true });
-    }
-  });
-
-  afterAll(() => {
-    // Restore original e2e-tests content
-    if (originalE2eTestsContent && originalE2eTestsContent.size > 0) {
-      fs.mkdirSync(e2eTestsDir, { recursive: true });
-      for (const [file, content] of originalE2eTestsContent) {
-        fs.writeFileSync(path.join(e2eTestsDir, file), content);
-      }
+    // Clean up test directories after each test
+    if (fs.existsSync(uniqueTestDir)) {
+      fs.rmSync(uniqueTestDir, { recursive: true, force: true });
     }
   });
 
   describe('discoverE2ETestFiles', () => {
     it('returns empty array when e2e-tests directory does not exist', () => {
-      const result = discoverE2ETestFiles();
+      const result = discoverE2ETestFiles(testBaseDir);
       expect(result).toEqual([]);
     });
 
     it('returns empty array when e2e-tests directory is empty', () => {
       fs.mkdirSync(e2eTestsDir, { recursive: true });
-      const result = discoverE2ETestFiles();
+      const result = discoverE2ETestFiles(testBaseDir);
       expect(result).toEqual([]);
     });
 
@@ -98,7 +69,7 @@ describe('testAgent', () => {
       fs.writeFileSync(path.join(e2eTestsDir, 'test_signup.md'), '# Signup Test');
       fs.writeFileSync(path.join(e2eTestsDir, 'README.txt'), 'Not a test file');
 
-      const result = discoverE2ETestFiles();
+      const result = discoverE2ETestFiles(testBaseDir);
 
       expect(result).toHaveLength(2);
       expect(result).toContain(path.join(e2eTestsDir, 'test_login.md'));
@@ -111,7 +82,7 @@ describe('testAgent', () => {
       fs.writeFileSync(path.join(e2eTestsDir, 'a_test.md'), '# A Test');
       fs.writeFileSync(path.join(e2eTestsDir, 'm_test.md'), '# M Test');
 
-      const result = discoverE2ETestFiles();
+      const result = discoverE2ETestFiles(testBaseDir);
 
       expect(result[0]).toContain('a_test.md');
       expect(result[1]).toContain('m_test.md');
@@ -312,6 +283,112 @@ describe('testAgent', () => {
       const prompt = args[args.length - 1];
       expect(prompt).toContain('/resolve_failed_e2e_test');
       expect(prompt).toContain('Login Test');
+    });
+
+    it('handles undefined test_name without throwing', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      // Create a test result with undefined test_name (simulating API error parsing)
+      const failedE2ETest = {
+        test_name: undefined,
+        status: 'failed',
+        screenshots: [],
+        error: 'API returned error instead of JSON',
+        test_path: '/path/to/test_login.md',
+      } as unknown as E2ETestResult;
+
+      // Should not throw TypeError
+      const result = await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
+
+      expect(result).toBeDefined();
+      expect(result.success).toBe(true);
+    });
+
+    it('uses fallback filename when test_name is undefined', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      const failedE2ETest = {
+        test_name: undefined,
+        status: 'failed',
+        screenshots: [],
+        error: 'API returned error',
+      } as unknown as E2ETestResult;
+
+      await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
+
+      // Verify spawn was called (meaning no crash occurred)
+      expect(spawn).toHaveBeenCalled();
+    });
+
+    it('still passes original undefined test_name in JSON payload', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      const failedE2ETest = {
+        test_name: undefined,
+        status: 'failed',
+        screenshots: [],
+        error: 'API returned error',
+      } as unknown as E2ETestResult;
+
+      await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
+
+      // Verify the command was called and the JSON payload preserves undefined
+      const calls = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1];
+      const args = lastCall[1] as string[];
+      const prompt = args[args.length - 1];
+      expect(prompt).toContain('/resolve_failed_e2e_test');
+      // The undefined should be serialized in JSON (undefined becomes omitted or null)
+      expect(prompt).toContain('API returned error');
+    });
+  });
+
+  describe('isValidE2ETestResult', () => {
+    it('returns true for valid E2ETestResult with test_name', () => {
+      const result: E2ETestResult = {
+        test_name: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
+      };
+      expect(isValidE2ETestResult(result)).toBe(true);
+    });
+
+    it('returns false for null result', () => {
+      expect(isValidE2ETestResult(null)).toBe(false);
+    });
+
+    it('returns false when test_name is undefined', () => {
+      const result = {
+        test_name: undefined,
+        status: 'failed',
+        screenshots: [],
+        error: 'Some error',
+      } as unknown as E2ETestResult;
+      expect(isValidE2ETestResult(result)).toBe(false);
+    });
+
+    it('returns false when test_name is empty string', () => {
+      const result: E2ETestResult = {
+        test_name: '',
+        status: 'failed',
+        screenshots: [],
+        error: 'Some error',
+      };
+      expect(isValidE2ETestResult(result)).toBe(false);
+    });
+
+    it('returns false when test_name is not a string', () => {
+      const result = {
+        test_name: 123,
+        status: 'failed',
+        screenshots: [],
+        error: 'Some error',
+      } as unknown as E2ETestResult;
+      expect(isValidE2ETestResult(result)).toBe(false);
     });
   });
 });

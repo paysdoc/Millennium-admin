@@ -4,6 +4,8 @@ import path from 'path'
 export default defineConfig({
   test: {
     globals: true,
+    // Exclude worktrees from test discovery to avoid running duplicate tests
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**'],
   },
   resolve: {
     alias: {

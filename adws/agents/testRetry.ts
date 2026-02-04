@@ -10,6 +10,7 @@ import {
   runResolveTestAgent,
   runResolveE2ETestAgent,
   discoverE2ETestFiles,
+  isValidE2ETestResult,
   TestResult,
   E2ETestResult,
 } from './testAgent';
@@ -127,8 +128,16 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
         continue;
       }
 
-      log(`Resolving E2E test: ${result.test_name} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
-      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.test_name}`);
+      // Skip resolution if the result is missing a valid test_name
+      if (!isValidE2ETestResult(result)) {
+        log(`Skipping E2E test resolution: missing or invalid test_name`, 'error');
+        AgentStateManager.appendLog(statePath, `Skipping E2E test resolution: missing or invalid test_name`);
+        failedE2ETests.set(testFile, { result, retryCount: retryCount + 1 });
+        continue;
+      }
+
+      log(`Resolving E2E test: ${result.test_name ?? 'unknown'} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
+      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.test_name ?? 'unknown'}`);
 
       const resolveResult = await runResolveE2ETestAgent(result, logsDir, initState(statePath, 'test-resolver-agent'));
       costUsd += resolveResult.totalCostUsd || 0;

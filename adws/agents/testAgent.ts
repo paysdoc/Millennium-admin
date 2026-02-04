@@ -77,6 +77,14 @@ function parseTestResults(output: string): TestResult[] {
 }
 
 /**
+ * Validates that an E2ETestResult has a valid test_name property.
+ * Returns false if test_name is undefined, null, or not a string.
+ */
+export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { test_name: string } {
+  return result !== null && typeof result.test_name === 'string' && result.test_name.length > 0;
+}
+
+/**
  * Parses E2E test result from agent output.
  * Handles cases where the output contains additional text around the JSON.
  */
@@ -220,16 +228,23 @@ export async function runResolveE2ETestAgent(
   logsDir: string,
   statePath?: string
 ): Promise<AgentResult> {
-  const testName = failedE2ETest.test_name.replace(/\s+/g, '-').toLowerCase();
+  // Handle undefined or invalid test_name gracefully
+  const rawTestName = failedE2ETest.test_name;
+  const testName = typeof rawTestName === 'string' && rawTestName.length > 0
+    ? rawTestName.replace(/\s+/g, '-').toLowerCase()
+    : 'unknown-test';
   const outputFile = path.join(logsDir, `resolve-e2e-${testName}.jsonl`);
 
   // Format the failed E2E test as JSON for the resolver
   const failureJson = JSON.stringify(failedE2ETest, null, 2);
 
+  // Use fallback display name if test_name is undefined
+  const displayName = rawTestName ?? 'unknown';
+
   return runClaudeAgentWithCommand(
     '/resolve_failed_e2e_test',
     failureJson,
-    `Resolve E2E: ${failedE2ETest.test_name}`,
+    `Resolve E2E: ${displayName}`,
     outputFile,
     'opus',
     undefined,
@@ -241,10 +256,11 @@ export async function runResolveE2ETestAgent(
  * Discovers E2E test files in the e2e-tests directory.
  * Returns an array of paths to markdown test files.
  *
+ * @param baseDir - Optional base directory (defaults to process.cwd())
  * @returns Array of absolute paths to E2E test files
  */
-export function discoverE2ETestFiles(): string[] {
-  const e2eTestsDir = path.join(process.cwd(), '.claude/commands/e2e');
+export function discoverE2ETestFiles(baseDir?: string): string[] {
+  const e2eTestsDir = path.join(baseDir ?? process.cwd(), '.claude/commands/e2e');
 
   // Return empty array if directory doesn't exist
   if (!fs.existsSync(e2eTestsDir)) {
