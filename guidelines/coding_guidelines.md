@@ -43,6 +43,7 @@
 - **Currying**: Use currying to transform functions that take multiple arguments into a series of functions that each take a single argument. This can improve code readability and allow for partial application of functions.
 - **Avoid Deep Nesting**: Avoid deep nesting of functions or data structures. This can make code harder to read and maintain. Instead, consider breaking down complex logic into smaller, more manageable functions.
 - **Use Functional Patterns**: Make use of common functional programming patterns like map, filter, reduce, and flatMap. These patterns can help you write more concise and expressive code when working with collections or data transformations.
+- **Avoid While and For Loops**: Prefer using functional constructs like map, filter, and reduce over traditional loops. This promotes a more declarative style of programming and reduces the likelihood of side effects.
 - **Avoid Side Effects in Map/Reduce**: When using map or reduce functions, ensure that the callback functions do not have side effects. They should only transform data and return new values without modifying external state.
 
 ### Hygene Practices
