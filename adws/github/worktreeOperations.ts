@@ -8,7 +8,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { log, WORKTREES_DIR } from '../core';
+import { log } from '../core';
 import { getDefaultBranch } from './gitOperations';
 
 /**
@@ -29,6 +29,18 @@ export interface BranchCheckoutStatus {
  */
 function sanitizeBranchName(branchName: string): string {
   return branchName.replace(/[/\\:*?"<>|]/g, '-');
+}
+
+/**
+ * Gets the worktrees directory path based on the main repository path.
+ * This ensures worktree paths are always relative to the actual git repository,
+ * not process.cwd() which may differ when running from different contexts.
+ *
+ * @returns The absolute path to the worktrees directory
+ */
+export function getWorktreesDir(): string {
+  const mainRepoPath = getMainRepoPath();
+  return path.join(mainRepoPath, '.worktrees');
 }
 
 /**
@@ -55,6 +67,29 @@ export function getMainRepoPath(): string {
     throw new Error('Could not find main repository in worktree list');
   } catch (error) {
     throw new Error(`Failed to get main repository path: ${error}`);
+  }
+}
+
+/**
+ * Copies the .env file from the main repository to the worktree.
+ * This is necessary because .env is in .gitignore and won't be included in worktrees.
+ *
+ * @param worktreePath - The absolute path to the worktree
+ */
+export function copyEnvToWorktree(worktreePath: string): void {
+  try {
+    const mainRepoPath = getMainRepoPath();
+    const sourceEnvPath = path.join(mainRepoPath, '.env');
+    const destEnvPath = path.join(worktreePath, '.env');
+
+    if (fs.existsSync(sourceEnvPath)) {
+      fs.copyFileSync(sourceEnvPath, destEnvPath);
+      log(`Copied .env file to worktree at ${worktreePath}`, 'info');
+    } else {
+      log(`No .env file found in main repository at ${mainRepoPath}, skipping copy`, 'info');
+    }
+  } catch (error) {
+    log(`Warning: Failed to copy .env to worktree: ${error}`, 'info');
   }
 }
 
@@ -156,7 +191,7 @@ export function freeBranchFromMainRepo(branchName: string): void {
  */
 export function getWorktreePath(branchName: string): string {
   const sanitizedName = sanitizeBranchName(branchName);
-  return path.join(WORKTREES_DIR, sanitizedName);
+  return path.join(getWorktreesDir(), sanitizedName);
 }
 
 /**
@@ -226,10 +261,11 @@ export function listWorktrees(): string[] {
  */
 export function createWorktree(branchName: string, baseBranch?: string): string {
   const worktreePath = getWorktreePath(branchName);
+  const worktreesDir = getWorktreesDir();
 
   // Ensure worktrees directory exists
-  if (!fs.existsSync(WORKTREES_DIR)) {
-    fs.mkdirSync(WORKTREES_DIR, { recursive: true });
+  if (!fs.existsSync(worktreesDir)) {
+    fs.mkdirSync(worktreesDir, { recursive: true });
   }
 
   try {
@@ -296,10 +332,11 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
  */
 export function createWorktreeForNewBranch(branchName: string, baseBranch?: string): string {
   const worktreePath = getWorktreePath(branchName);
+  const worktreesDir = getWorktreesDir();
 
   // Ensure worktrees directory exists
-  if (!fs.existsSync(WORKTREES_DIR)) {
-    fs.mkdirSync(WORKTREES_DIR, { recursive: true });
+  if (!fs.existsSync(worktreesDir)) {
+    fs.mkdirSync(worktreesDir, { recursive: true });
   }
 
   try {
@@ -414,8 +451,11 @@ export function ensureWorktree(branchName: string, baseBranch?: string): string 
 
   if (existingPath) {
     log(`Worktree for branch '${branchName}' already exists at ${existingPath}, reusing`, 'info');
+    copyEnvToWorktree(existingPath);
     return existingPath;
   }
 
-  return createWorktree(branchName, baseBranch);
+  const worktreePath = createWorktree(branchName, baseBranch);
+  copyEnvToWorktree(worktreePath);
+  return worktreePath;
 }

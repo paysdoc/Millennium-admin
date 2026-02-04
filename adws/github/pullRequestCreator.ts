@@ -46,15 +46,21 @@ function generatePrTitle(issue: GitHubIssue): string {
 
 /**
  * Creates a pull request for the current branch.
+ * @param issue - The GitHub issue to create a PR for.
+ * @param planSummary - Summary of the implementation plan.
+ * @param buildSummary - Summary of the build changes.
+ * @param baseBranch - The base branch for the PR (default: 'develop').
+ * @param cwd - Optional working directory for git operations (e.g., worktree path).
  * @returns The PR URL if successful, empty string otherwise.
  */
 export function createPullRequest(
   issue: GitHubIssue,
   planSummary: string,
   buildSummary: string,
-  baseBranch: string = 'develop'
+  baseBranch: string = 'develop',
+  cwd?: string
 ): string {
-  const branchName = getCurrentBranch();
+  const branchName = getCurrentBranch(cwd);
   const prBody = generatePrBody(issue, planSummary, buildSummary);
   const prTitle = generatePrTitle(issue);
 
@@ -64,11 +70,11 @@ export function createPullRequest(
   try {
     fs.writeFileSync(tempFilePath, prBody, 'utf-8');
 
-    pushBranch(branchName);
+    pushBranch(branchName, cwd);
 
     const prUrl = execSync(
       `gh pr create --title "${prTitle.replace(/"/g, '\\"')}" --body-file "${tempFilePath}" --base ${baseBranch}`,
-      { encoding: 'utf-8', shell: '/bin/bash' }
+      { encoding: 'utf-8', shell: '/bin/bash', cwd }
     ).trim();
 
     log(`Created PR: ${prUrl}`, 'success');

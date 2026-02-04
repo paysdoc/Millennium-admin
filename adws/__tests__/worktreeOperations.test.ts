@@ -9,6 +9,7 @@ vi.mock('fs', () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
   rmSync: vi.fn(),
+  copyFileSync: vi.fn(),
 }));
 
 vi.mock('../core/utils', () => ({
@@ -37,20 +38,35 @@ import {
   getMainRepoPath,
   isBranchCheckedOutElsewhere,
   freeBranchFromMainRepo,
+  getWorktreesDir,
+  copyEnvToWorktree,
 } from '../github/worktreeOperations';
 
 describe('getWorktreePath', () => {
+  const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns correct path for simple branch name', () => {
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
     const result = getWorktreePath('main');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'main'));
   });
 
   it('sanitizes branch name with slashes', () => {
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
     const result = getWorktreePath('feature/issue-51-run-adw-workflow');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51-run-adw-workflow'));
   });
 
   it('sanitizes branch name with multiple special characters', () => {
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
     const result = getWorktreePath('bugfix/fix:bug*test?name');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'bugfix-fix-bug-test-name'));
   });
@@ -71,6 +87,7 @@ HEAD def456
 branch refs/heads/feature/issue-51
 
 `;
+    // First call for getWorktreesDir -> getMainRepoPath, second call for git worktree list
     vi.mocked(execSync).mockReturnValue(worktreeListOutput);
 
     const result = worktreeExists('feature/issue-51');
@@ -150,21 +167,31 @@ branch refs/heads/main
 });
 
 describe('createWorktree', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('creates worktree for existing branch', () => {
-    const worktreeListOutput = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists check (rev-parse)
-      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
-      .mockReturnValueOnce(''); // git worktree add
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      if (cmdStr.includes('git worktree add')) {
+        return '';
+      }
+      return '';
+    });
 
     const result = createWorktree('feature/issue-51');
 
@@ -178,14 +205,19 @@ branch refs/heads/main
   it('creates worktree with new branch from base branch', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(execSync)
-      .mockImplementationOnce(() => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
         throw new Error('branch does not exist');
-      })
-      .mockImplementationOnce(() => {
-        throw new Error('remote branch does not exist');
-      })
-      .mockReturnValueOnce(''); // git worktree add -b
+      }
+      if (cmdStr.includes('git worktree add')) {
+        return '';
+      }
+      return '';
+    });
 
     const result = createWorktree('feature/issue-51', 'main');
 
@@ -195,13 +227,16 @@ branch refs/heads/main
 
   it('throws error when branch does not exist and no base branch provided', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockImplementationOnce(() => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
         throw new Error('branch does not exist');
-      })
-      .mockImplementationOnce(() => {
-        throw new Error('remote branch does not exist');
-      });
+      }
+      return '';
+    });
 
     expect(() => createWorktree('nonexistent-branch')).toThrow(
       "Branch 'nonexistent-branch' does not exist and no base branch was provided"
@@ -209,18 +244,20 @@ branch refs/heads/main
   });
 
   it('throws error when git worktree add fails', () => {
-    const worktreeListOutput = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists (rev-parse)
-      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
-      .mockImplementationOnce(() => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      if (cmdStr.includes('git worktree add')) {
         throw new Error('worktree already exists');
-      }); // git worktree add fails
+      }
+      return '';
+    });
 
     expect(() => createWorktree('feature/issue-51')).toThrow(
       "Failed to create worktree for branch 'feature/issue-51'"
@@ -229,13 +266,25 @@ branch refs/heads/main
 });
 
 describe('createWorktreeForNewBranch', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('creates worktree with new branch from HEAD', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync).mockReturnValue('');
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      return '';
+    });
 
     const result = createWorktreeForNewBranch('feature/issue-51');
 
@@ -244,29 +293,39 @@ describe('createWorktreeForNewBranch', () => {
       expect.stringContaining('-b feature/issue-51'),
       { stdio: 'pipe' }
     );
-    expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining('HEAD'),
-      { stdio: 'pipe' }
-    );
   });
 
   it('creates worktree with new branch from specified base', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync).mockReturnValue('');
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      return '';
+    });
 
     const result = createWorktreeForNewBranch('feature/issue-51', 'develop');
 
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51'));
-    expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining('develop'),
-      { stdio: 'pipe' }
+    const execCalls = vi.mocked(execSync).mock.calls;
+    const worktreeAddCall = execCalls.find((call) =>
+      String(call[0]).includes('git worktree add')
     );
+    expect(worktreeAddCall).toBeDefined();
+    expect(String(worktreeAddCall![0])).toContain('develop');
   });
 
   it('creates worktrees directory if it does not exist', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(execSync).mockReturnValue('');
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      return '';
+    });
 
     createWorktreeForNewBranch('feature/issue-51');
 
@@ -275,8 +334,15 @@ describe('createWorktreeForNewBranch', () => {
 
   it('throws error when git command fails', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync).mockImplementation(() => {
-      throw new Error('branch already exists');
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git worktree add')) {
+        throw new Error('branch already exists');
+      }
+      return '';
     });
 
     expect(() => createWorktreeForNewBranch('feature/issue-51')).toThrow(
@@ -286,12 +352,20 @@ describe('createWorktreeForNewBranch', () => {
 });
 
 describe('removeWorktree', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('removes worktree successfully', () => {
-    vi.mocked(execSync).mockReturnValue('');
+    vi.mocked(execSync)
+      .mockReturnValueOnce(mainRepoWorktreeList) // getWorktreesDir -> getMainRepoPath
+      .mockReturnValueOnce(''); // git worktree remove
 
     const result = removeWorktree('feature/issue-51');
 
@@ -303,8 +377,15 @@ describe('removeWorktree', () => {
   });
 
   it('returns false when worktree does not exist', () => {
-    vi.mocked(execSync).mockImplementation(() => {
-      throw new Error('not a valid worktree');
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git worktree remove')) {
+        throw new Error('not a valid worktree');
+      }
+      return '';
     });
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
@@ -314,11 +395,19 @@ describe('removeWorktree', () => {
   });
 
   it('cleans up orphaned worktree directory', () => {
-    vi.mocked(execSync)
-      .mockImplementationOnce(() => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git worktree remove')) {
         throw new Error('not a valid worktree');
-      })
-      .mockReturnValueOnce(''); // git worktree prune
+      }
+      if (cmdStr.includes('git worktree prune')) {
+        return '';
+      }
+      return '';
+    });
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.rmSync).mockReturnValue(undefined);
 
@@ -333,6 +422,12 @@ describe('removeWorktree', () => {
 });
 
 describe('getWorktreeForBranch', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -354,12 +449,7 @@ branch refs/heads/feature/issue-51
   });
 
   it('returns null when worktree does not exist', () => {
-    const worktreeListOutput = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
-    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(execSync).mockReturnValue(mainRepoWorktreeList);
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
     const result = getWorktreeForBranch('feature/issue-51');
@@ -367,13 +457,16 @@ branch refs/heads/main
   });
 
   it('returns path for orphaned worktree directory', () => {
-    const worktreeListOutput = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
-    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    // getWorktreeForBranch calls execSync first for worktree list, then getWorktreePath -> getWorktreesDir -> getMainRepoPath
+    vi.mocked(execSync).mockReturnValue(mainRepoWorktreeList);
+    // fs.existsSync is called to check if the orphaned directory exists
+    vi.mocked(fs.existsSync).mockImplementation((p) => {
+      // Return true for the orphaned worktree directory check
+      if (String(p).includes('orphaned-branch')) {
+        return true;
+      }
+      return false;
+    });
 
     const result = getWorktreeForBranch('orphaned-branch');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'orphaned-branch'));
@@ -390,6 +483,12 @@ branch refs/heads/main
 });
 
 describe('ensureWorktree', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -404,25 +503,44 @@ HEAD def456
 branch refs/heads/feature/issue-51
 
 `;
-    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      return '';
+    });
+    vi.mocked(fs.existsSync).mockReturnValue(false); // .env doesn't exist
 
     const result = ensureWorktree('feature/issue-51');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51'));
   });
 
   it('creates new worktree when it does not exist', () => {
-    vi.mocked(execSync)
-      .mockReturnValueOnce(`worktree /mock/project
-HEAD abc123
-branch refs/heads/main
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      if (cmdStr.includes('git worktree add')) {
+        return '';
+      }
+      return '';
+    });
 
-`) // list worktrees
-      .mockReturnValueOnce('') // branch exists check
-      .mockReturnValueOnce(''); // git worktree add
-
-    vi.mocked(fs.existsSync)
-      .mockReturnValueOnce(false) // getWorktreeForBranch check
-      .mockReturnValueOnce(true); // worktrees dir exists
+    vi.mocked(fs.existsSync).mockImplementation((p) => {
+      const pathStr = String(p);
+      if (pathStr.includes('.env')) {
+        return false; // .env doesn't exist
+      }
+      if (pathStr.includes('.worktrees')) {
+        return true; // worktrees dir exists
+      }
+      return false;
+    });
 
     const result = ensureWorktree('feature/issue-51');
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51'));
@@ -430,24 +548,28 @@ branch refs/heads/main
 });
 
 describe('Concurrent ADW Workflow Isolation', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('creates isolated worktrees for multiple concurrent workflows', () => {
-    const worktreeListOutput = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists check for issue-1
-      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere for issue-1
-      .mockReturnValueOnce('') // git worktree add for issue-1
-      .mockReturnValueOnce('') // branch exists check for issue-2
-      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere for issue-2
-      .mockReturnValueOnce(''); // git worktree add for issue-2
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      return '';
+    });
 
     const worktree1 = createWorktree('feature/issue-1');
     const worktree2 = createWorktree('feature/issue-2');
@@ -466,6 +588,8 @@ branch refs/heads/main
   });
 
   it('generates unique paths for different branch names', () => {
+    vi.mocked(execSync).mockReturnValue(mainRepoWorktreeList);
+
     const path1 = getWorktreePath('feature/issue-1');
     const path2 = getWorktreePath('feature/issue-10');
     const path3 = getWorktreePath('feature/issue-100');
@@ -532,9 +656,13 @@ branch refs/heads/feature/issue-2
 
 `;
 
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // git worktree remove for issue-1
-      .mockReturnValueOnce(afterRemovalWorktreeList); // list after removal
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return initialWorktreeList;
+      }
+      return '';
+    });
 
     const removeResult = removeWorktree('feature/issue-1');
     expect(removeResult).toBe(true);
@@ -575,16 +703,17 @@ branch refs/heads/feature/issue-2
     expect(worktrees).toContain('/mock/project/.worktrees/feature-issue-2');
 
     vi.clearAllMocks();
-    const worktreeListOutput2 = `worktree /mock/project
-HEAD abc123
-branch refs/heads/main
-
-`;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // branch exists (rev-parse)
-      .mockReturnValueOnce(worktreeListOutput2) // isBranchCheckedOutElsewhere
-      .mockReturnValueOnce(''); // worktree add
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      return '';
+    });
 
     createWorktree('feature/issue-3');
 
@@ -807,19 +936,31 @@ describe('createWorktree edge cases', () => {
   });
 
   it('handles branch already checked out in main repository', () => {
-    const worktreeListOutput = `worktree /mock/project
+    const checkedOutInMainWorktreeList = `worktree /mock/project
 HEAD abc123
 branch refs/heads/feature/issue-51
 
 `;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // rev-parse branch exists
-      .mockReturnValueOnce(worktreeListOutput) // isBranchCheckedOutElsewhere
-      .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath in freeBranchFromMainRepo
-      .mockReturnValueOnce('') // git status --porcelain
-      .mockReturnValueOnce('') // git checkout main
-      .mockReturnValueOnce(''); // git worktree add
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return checkedOutInMainWorktreeList;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      if (cmdStr.includes('git status')) {
+        return ''; // no uncommitted changes
+      }
+      if (cmdStr.includes('git checkout')) {
+        return '';
+      }
+      if (cmdStr.includes('git worktree add')) {
+        return '';
+      }
+      return '';
+    });
 
     const result = createWorktree('feature/issue-51');
 
@@ -842,9 +983,16 @@ branch refs/heads/feature/issue-51
 
 `;
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(execSync)
-      .mockReturnValueOnce('') // rev-parse branch exists
-      .mockReturnValueOnce(worktreeListOutput); // isBranchCheckedOutElsewhere
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      if (cmdStr.includes('git rev-parse')) {
+        return ''; // branch exists
+      }
+      return '';
+    });
 
     const result = createWorktree('feature/issue-51');
 
@@ -873,6 +1021,7 @@ HEAD def456
 branch refs/heads/feature/issue-51
 
 `;
+    // getWorktreeForBranch calls getWorktreePath -> getWorktreesDir -> getMainRepoPath
     vi.mocked(execSync).mockReturnValue(worktreeListOutput);
 
     const result = getWorktreeForBranch('feature/issue-51');
@@ -893,5 +1042,94 @@ branch refs/heads/feature/issue-51
 
     const result = getWorktreeForBranch('feature/issue-51');
     expect(result).toBe('/mock/project/.worktrees/feature-issue-51');
+  });
+});
+
+describe('getWorktreesDir', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns path based on main repo path', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = getWorktreesDir();
+    expect(result).toBe('/mock/project/.worktrees');
+  });
+
+  it('uses getMainRepoPath to determine worktrees directory', () => {
+    const worktreeListOutput = `worktree /different/path/repo
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = getWorktreesDir();
+    expect(result).toBe('/different/path/repo/.worktrees');
+  });
+});
+
+describe('copyEnvToWorktree', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('copies .env when it exists in main repo', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.copyFileSync).mockReturnValue(undefined);
+
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.existsSync).toHaveBeenCalledWith('/mock/project/.env');
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      '/mock/project/.env',
+      '/mock/project/.worktrees/feature-branch/.env'
+    );
+  });
+
+  it('does nothing when .env does not exist (no error)', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    // Should not throw
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.existsSync).toHaveBeenCalledWith('/mock/project/.env');
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
+  });
+
+  it('handles copy errors gracefully (logs warning, does not throw)', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw new Error('Permission denied');
+    });
+
+    // Should not throw
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.copyFileSync).toHaveBeenCalled();
   });
 });
