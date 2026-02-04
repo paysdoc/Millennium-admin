@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import CharacterDetails from '@/components/CharacterDetails'
+import EditableCharacterDetails from '@/components/EditableCharacterDetails'
 import CharacterImage from '@/components/CharacterImage'
 import ConnectionsTable from '@/components/ConnectionsTable'
 import { fetchCharacterById, fetchAllCharacters } from '@/lib/characters'
@@ -57,7 +57,7 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
               <h2 className="section-heading">Character Information</h2>
               <div className="character-info-section">
                 <div className="character-info-left">
-                  <CharacterDetails character={character} />
+                  <EditableCharacterDetails character={character} imageUrl={getSupabaseStorageUrl(character.image_link)} />
                 </div>
                 <div className="character-info-right">
                   <CharacterImage
