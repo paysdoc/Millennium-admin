@@ -7,7 +7,7 @@
 
 import { fetchGitHubIssue } from '../github/githubApi';
 import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
-import { IssueClassSlashCommand, log } from '../core';
+import { IssueClassSlashCommand, log, GitHubIssue } from '../core';
 
 /**
  * Result of classifying an issue for trigger purposes.
@@ -61,6 +61,59 @@ export async function classifyIssueForTrigger(
     return { issueType: '/feature', success: false };
   } catch (error) {
     log(`Error classifying issue #${issueNumber}: ${error}`, 'error');
+    return { issueType: '/feature', success: false };
+  }
+}
+
+/**
+ * Classifies a pre-fetched GitHub issue to determine its type.
+ *
+ * This function is useful when the issue has already been fetched and
+ * you want to avoid an additional API call. Used by orchestrator scripts.
+ *
+ * @param issue - The pre-fetched GitHub issue
+ * @returns Classification result with issue type and success status
+ */
+export async function classifyGitHubIssue(
+  issue: GitHubIssue
+): Promise<IssueClassificationResult> {
+  try {
+    log(`Classifying issue #${issue.number} (${issue.title})...`);
+
+    const labelsText = issue.labels.map((l) => l.name).join(', ') || 'none';
+    const issueContext = `**Title:** ${issue.title}
+**Labels:** ${labelsText}
+
+${issue.body || 'No description provided.'}`;
+
+    // Run the classifier agent with haiku for fast, cost-effective classification
+    const result = await runClaudeAgentWithCommand(
+      '/classify_issue',
+      issueContext,
+      `classifier-${issue.number}`,
+      `/tmp/adw-classifier-${issue.number}.jsonl`,
+      'haiku'
+    );
+
+    if (!result.success) {
+      log(`Classification failed for issue #${issue.number}, defaulting to /feature`, 'error');
+      return { issueType: '/feature', success: false };
+    }
+
+    // Parse the classification result - expect a slash command response
+    const output = result.output.trim();
+    const validCommands: IssueClassSlashCommand[] = ['/chore', '/bug', '/feature', '/pr_review'];
+    const matchedCommand = validCommands.find((cmd) => output.includes(cmd));
+
+    if (matchedCommand) {
+      log(`Issue #${issue.number} classified as ${matchedCommand}`, 'success');
+      return { issueType: matchedCommand, success: true };
+    }
+
+    log(`Could not parse classification for issue #${issue.number}, defaulting to /feature`, 'error');
+    return { issueType: '/feature', success: false };
+  } catch (error) {
+    log(`Error classifying issue #${issue.number}: ${error}`, 'error');
     return { issueType: '/feature', success: false };
   }
 }
