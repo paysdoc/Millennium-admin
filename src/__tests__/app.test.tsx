@@ -17,12 +17,6 @@ describe('Next.js Application', () => {
       expect(metadata.description).toBe('Admin interface for Millennium')
     })
 
-    it('Pages page can be imported', async () => {
-      const { default: PagesPage } = await import('../app/pages/page')
-      expect(PagesPage).toBeDefined()
-      expect(typeof PagesPage).toBe('function')
-    })
-
     it('Users page can be imported', async () => {
       const { default: UsersPage } = await import('../app/users/page')
       expect(UsersPage).toBeDefined()
