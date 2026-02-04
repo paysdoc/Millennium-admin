@@ -53,11 +53,17 @@ import {
 /**
  * Classifies a GitHub issue as feature, bug, or chore using the haiku model.
  * Uses the /classify_issue slash command from .claude/commands/classify_issue.md
+ *
+ * @param issue - GitHub issue to classify
+ * @param logsDir - Directory to write agent logs
+ * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 async function classifyIssue(
   issue: GitHubIssue,
   logsDir: string,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<IssueClassSlashCommand> {
   const labelsText = issue.labels.map(l => l.name).join(', ') || 'none';
 
@@ -74,7 +80,8 @@ ${issue.body || 'No description provided.'}`;
     outputFile,
     'haiku',
     undefined,
-    statePath
+    statePath,
+    cwd
   );
 
   if (!result.success) {
@@ -305,7 +312,7 @@ async function main(): Promise<void> {
         execution: AgentStateManager.createExecutionState('running'),
       });
 
-      issueType = await classifyIssue(issue, logsDir, classifierStatePath);
+      issueType = await classifyIssue(issue, logsDir, classifierStatePath, cwd || undefined);
       log(`Issue classified as: ${issueType}`, 'success');
       ctx.issueType = issueType;
 
@@ -366,7 +373,7 @@ async function main(): Promise<void> {
         execution: AgentStateManager.createExecutionState('running'),
       });
 
-      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath);
+      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath, cwd || undefined);
 
       if (!planResult.success) {
         AgentStateManager.writeState(planAgentStatePath, {

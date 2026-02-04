@@ -139,6 +139,7 @@ function parseJsonlOutput(
  * @param model - The model to use (default: 'sonnet')
  * @param onProgress - Optional callback for progress updates
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runClaudeAgent(
   prompt: string,
@@ -146,7 +147,8 @@ export async function runClaudeAgent(
   outputFile: string,
   model: string = 'sonnet',
   onProgress?: ProgressCallback,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   // Write initial state if state path provided
   if (statePath) {
@@ -170,7 +172,7 @@ export async function runClaudeAgent(
     log(`  Prompt length: ${prompt.length} characters`, 'info');
 
     const claude = spawn(CLAUDE_CODE_PATH, args, {
-      cwd: process.cwd(),
+      cwd: cwd || process.cwd(),
       env: { ...process.env }
     });
 
@@ -279,6 +281,7 @@ export async function runClaudeAgent(
  * @param model - The model to use ('opus', 'sonnet', 'haiku')
  * @param onProgress - Optional callback for progress updates
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runClaudeAgentWithCommand(
   command: string,
@@ -287,7 +290,8 @@ export async function runClaudeAgentWithCommand(
   outputFile: string,
   model: string = 'sonnet',
   onProgress?: ProgressCallback,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   // Build the prompt as "command 'args'" for the CLI
   // The args are single-quoted to preserve formatting
@@ -317,7 +321,7 @@ export async function runClaudeAgentWithCommand(
     log(`  Args length: ${args.length} characters`, 'info');
 
     const claude = spawn(CLAUDE_CODE_PATH, cliArgs, {
-      cwd: process.cwd(),
+      cwd: cwd || process.cwd(),
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe']
     });
