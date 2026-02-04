@@ -22,22 +22,26 @@ So that I can understand a character's full profile and relationships at a glanc
 9. **Verify** the character details section is displayed:
    - Character name heading
    - Infobox with character fields (first names, dates, biography, category, link)
-   - If character has an image, it is displayed in the right column (separate from infobox)
 
 10. Take a screenshot of the character details section
-11. **Verify** the connections section is displayed:
+11. **Verify** if character has an image:
+    - Image element is displayed without 404 errors
+    - Image `src` attribute contains the Supabase storage URL pattern (`/storage/v1/object/public/`)
+
+13. **Verify** the connections section is displayed:
     - Section heading for connections
     - Connections table (or empty state message if no connections)
 
-12. Take a screenshot of the connections section
-13. **Verify** the "Back to Overview" link is present
-14. Click the "Back to Overview" link
-15. Take a screenshot after returning to overview
-16. **Verify** navigation back to home page occurred
+14. Take a screenshot of the connections section
+15. **Verify** the "Back to Overview" link is present
+16. Click the "Back to Overview" link
+17. Take a screenshot after returning to overview
+18. **Verify** navigation back to home page occurred
 
 ## Success Criteria
 - Character links on overview page navigate to detail page
 - Detail page displays character information in infobox format
+- Character images load successfully (no 404 errors)
 - Detail page displays connections table
 - Back navigation works correctly
 - 5 screenshots are taken

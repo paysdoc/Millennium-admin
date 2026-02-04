@@ -1,156 +1,72 @@
-# Feature: Add Images to Character Details Page
+# PR-Review: Fix image retrieval from Supabase Storage bucket (Revision 2)
 
-## Feature Description
-Enhance the character detail page by moving the character image from inside the infobox to a dedicated space on the right side of the character description section. The layout will be restructured so that the character information infobox takes up two-thirds of the section width, with the image displayed in the remaining one-third space to the right. Both elements will align at the top, and the image will respect a maximum width of 450px while maintaining its aspect ratio.
+## PR-Review Description
+The PR #63 implemented adding images to the character details page, but images are not being displayed with 404 errors. The original fix suggested using a `SUPABASE_BUCKET_NAME` environment variable, but the reviewer clarified that this approach is incorrect.
 
-## User Story
-As a user
-I want to see character images prominently displayed next to their information
-So that I can visually identify characters while reading their details
+**Key insight from PR review comment:** The bucket name is already embedded in the `image_link` path stored in the database. The path format is `{bucket_name}/{filename}` (e.g., `character_images/image.jpg`). Therefore, we don't need a separate environment variable for the bucket name.
 
-## Problem Statement
-Currently, character images are displayed inside the infobox component at a small 280x280 size. The image is embedded within the character information, which limits visibility and doesn't take advantage of the available horizontal space on the detail page. Users would benefit from a larger, more prominent image display that complements rather than competes with the character information.
+The correct fix is to construct the full Supabase Storage URL by prepending `{SUPABASE_URL}/storage/v1/object/public/` to the existing `image_link` value, which already contains the bucket name as part of the path.
 
-## Solution Statement
-Restructure the "Character Information" section layout to use a two-column design:
-1. **Left column (2/3 width)**: Character information infobox (without the embedded image)
-2. **Right column (1/3 width)**: Character image displayed prominently with a maximum width of 450px
+## Summary of Original Implementation Plan
+The original implementation plan (issue-61-plan.md revision 1) detailed:
+- Adding a `getSupabaseStorageUrl` function using a `SUPABASE_BUCKET_NAME` environment variable
+- Updating `.env.sample` with the new `SUPABASE_BUCKET_NAME` variable
+- Updating the character detail page to use the utility function
 
-The image will be removed from the `CharacterDetails` component and instead rendered as a sibling element within a flex container that aligns both elements at the top. CSS will be updated to create the new responsive layout.
+**Why it failed:** The approach assumed the bucket name needed to be configured separately, but the bucket name is already part of the `image_link` path in the database.
 
 ## Relevant Files
-Use these files to implement the feature:
+Use these files to resolve the review:
 
-- `src/app/characters/[id]/page.tsx` - Character detail page; needs layout restructuring to add the image container alongside the infobox
-- `src/components/CharacterDetails.tsx` - CharacterDetails component; needs removal of the embedded image rendering
-- `src/app/globals.css` - Global styles; needs new CSS for the two-column layout and image styling
-- `src/types/character.ts` - Character type definitions; reference for `image_link` field (no changes needed)
-- `e2e-tests/test_character_detail.md` - Existing E2E test; may need updates to verify new image location
+- `src/lib/supabase.ts` - Supabase client configuration; add a utility function to construct storage URLs using only `SUPABASE_URL` (no bucket name needed)
+- `src/components/CharacterDetails.tsx` - Character details component; update to transform `image_link` to a full storage URL before passing to the Image component
+- `e2e-tests/test_character_detail.md` - E2E test specification; add verification for image display
 
 ### New Files
-- `src/components/CharacterImage.tsx` - New component to display the character image with proper styling and constraints
-- `e2e-tests/test_character_image_display.md` - E2E test specification for the new image display feature
-
-## Implementation Plan
-### Phase 1: Foundation
-- Create the E2E test specification to define expected behavior for the new image layout
-- Create the `CharacterImage` component to handle image display with proper constraints (max 450px, aspect ratio preservation)
-
-### Phase 2: Core Implementation
-- Remove the embedded image from the `CharacterDetails` component
-- Update the character detail page layout to use a two-column flex container
-- Add CSS styles for the new layout (2/3 - 1/3 split, top alignment)
-
-### Phase 3: Integration
-- Ensure responsive design works on mobile devices (stack vertically on smaller screens)
-- Test with characters that have images and without images
-- Verify the layout maintains consistency with the Wikipedia-style design
+None required - all changes are modifications to existing files.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Create E2E Test Specification
-- Create `e2e-tests/test_character_image_display.md`
-- Define test steps to:
-  - Navigate to a character detail page for a character with an image
-  - Verify the character infobox is displayed on the left side
-  - Verify the character image is displayed on the right side
-  - Verify the image does not exceed 450px width
-  - Verify the infobox and image align at the top
-  - Take screenshots for verification
+### Step 1: Add Storage URL Utility Function
+- Edit `src/lib/supabase.ts`
+- Add a new exported function `getSupabaseStorageUrl(path: string | null): string | null`
+- The function should:
+  - Return `null` if path is null or empty
+  - If path already starts with `http://` or `https://`, return it unchanged (backwards compatibility)
+  - Otherwise, construct the full URL: `${SUPABASE_URL}/storage/v1/object/public/${path}`
+  - Use the existing `SUPABASE_URL` environment variable (already available in the file)
+- The `path` parameter already includes the bucket name (e.g., `character_images/filename.jpg`)
 
-### Step 2: Create CharacterImage Component
-- Create `src/components/CharacterImage.tsx`
-- Accept props: `imageUrl: string | null`, `characterName: string`
-- Use Next.js `Image` component for optimized loading
-- Apply max-width of 450px while preserving aspect ratio
-- Handle null/undefined image gracefully (render nothing)
-- Add appropriate CSS class for styling
-- Keep component under 50 lines (simple presentation component)
-
-### Step 3: Remove Image from CharacterDetails Component
+### Step 2: Update CharacterDetails Component
 - Edit `src/components/CharacterDetails.tsx`
-- Remove the `Image` import from `next/image`
-- Remove the `infobox-image` div block that renders the image (lines 13-25)
-- Keep all other character information display logic intact
+- Import `getSupabaseStorageUrl` from `@/lib/supabase`
+- Before using `character.image_link` in the Image component, transform it using `getSupabaseStorageUrl(character.image_link)`
+- Store the result in a variable (e.g., `const imageUrl = getSupabaseStorageUrl(character.image_link)`)
+- Update the conditional render to use `imageUrl` instead of `character.image_link`
+- Update the Image component `src` prop to use `imageUrl`
 
-### Step 4: Add CSS Styles for New Layout
-- Edit `src/app/globals.css`
-- Add new styles:
-  - `.character-info-section` - Flex container for the two-column layout
-  - `.character-info-left` - Left column taking 2/3 width
-  - `.character-info-right` - Right column taking 1/3 width
-  - `.character-image-container` - Container for the image
-  - `.character-detail-image` - Image styling (max-width 450px, height auto)
-- Ensure top alignment with `align-items: flex-start`
-- Update `.infobox` to not float when inside the new layout
-- Add responsive styles to stack columns on mobile (<768px)
-
-### Step 5: Update Character Detail Page Layout
-- Edit `src/app/characters/[id]/page.tsx`
-- Import the new `CharacterImage` component
-- Wrap the "Character Information" section content in a new flex container
-- Structure:
-  - `<div className="character-info-section">`
-    - `<div className="character-info-left">` containing `<CharacterDetails>`
-    - `<div className="character-info-right">` containing `<CharacterImage>`
-- Pass `character.image_link` and `character.name` to the CharacterImage component
-
-### Step 6: Update Existing E2E Test
+### Step 3: Update E2E Test Specification
 - Edit `e2e-tests/test_character_detail.md`
-- Update the character details verification step to reflect that the image is now displayed separately
-- Add a verification step for the image being in the right column (if character has an image)
+- Add a step to verify that if the character has an image, it is displayed without 404 errors
+- Add verification that the image `src` attribute contains the Supabase storage URL pattern (`/storage/v1/object/public/`)
+- Update success criteria to include "Character images load successfully (no 404 errors)"
 
-### Step 7: Run Validation Commands
+### Step 4: Run Validation Commands
 - Run `npm run lint` to check for code quality issues
 - Run `npm run build` to verify no build errors
-- Run `npm test` to validate the feature works with zero regressions
-
-### Step 8: Execute E2E Test
-- Read `.claude/commands/test_e2e.md`
-- Execute the new `e2e-tests/test_character_image_display.md` test
-- Verify all test steps pass and screenshots show correct layout
-
-## Testing Strategy
-### Unit Tests
-- Test CharacterImage component renders correctly with valid image URL
-- Test CharacterImage component handles null/undefined image gracefully
-- Test CharacterDetails component no longer renders an image
-
-### Integration Tests
-- Test character detail page renders with the new two-column layout
-- Test responsive layout stacks correctly on mobile viewports
-- Test page layout is consistent whether character has an image or not
-
-### Edge Cases
-- Character with no image (image_link is null) - right column should be empty or hidden
-- Character with a very tall image - should maintain aspect ratio without breaking layout
-- Character with a very wide image - should be constrained to 450px max width
-- Mobile viewport - columns should stack vertically
-- Character with very long biography text - layout should remain stable
-
-## Acceptance Criteria
-- [ ] Character image is displayed to the right of the character information infobox
-- [ ] Character information infobox takes up approximately 2/3 of the section width
-- [ ] Character image takes up approximately 1/3 of the section width
-- [ ] Image and infobox align at the top of the section
-- [ ] Image does not exceed 450px in width
-- [ ] Image maintains its aspect ratio
-- [ ] Layout handles characters without images gracefully (no broken layout)
-- [ ] Layout is responsive and stacks vertically on mobile devices
-- [ ] Wikipedia-style design consistency is maintained
-- [ ] All validation commands pass without errors
+- Run `npm test` to validate the review is complete with zero regressions
 
 ## Validation Commands
-Execute every command to validate the feature works correctly with zero regressions.
+Execute every command to validate the review is complete with zero regressions.
 
-- Read `.claude/commands/test_e2e.md`, then read and execute `e2e-tests/test_character_image_display.md` to validate the new image display functionality
 - `npm run lint` - Run linter to check for code quality issues
 - `npm run build` - Build the application to verify no build errors
-- `npm test` - Run tests to validate the feature works with zero regressions
+- `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `image_link` field contains URLs to Supabase bucket images, which are already configured with the `unoptimized` prop in the current implementation - this may need to be retained depending on Supabase image domain configuration
-- The existing infobox CSS uses `float: left` which will need to be overridden or removed when inside the new flex container
-- Consider adding a placeholder or graceful empty state for the right column when a character has no image to maintain layout consistency
-- Future enhancement: Add lightbox functionality to view the image in full size on click
+- **No environment variable changes needed**: The `SUPABASE_URL` environment variable is already configured and available. No new environment variables are required.
+- **URL construction format**: `{SUPABASE_URL}/storage/v1/object/public/{image_link}` where `image_link` already includes the bucket name
+- **Example**: If `SUPABASE_URL=https://gownillwfbtrbnkrvrxi.supabase.co` and `image_link=character_images/photo.jpg`, the resulting URL would be `https://gownillwfbtrbnkrvrxi.supabase.co/storage/v1/object/public/character_images/photo.jpg`
+- **Backwards compatibility**: The utility function handles the case where `image_link` might already be a full URL (starts with `http`) by returning it unchanged
+- The `unoptimized` prop on the Next.js Image component is already set, which is correct for external Supabase Storage URLs

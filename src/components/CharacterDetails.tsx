@@ -1,13 +1,31 @@
+import Image from 'next/image'
 import { Character } from '@/types/character'
+import { getSupabaseStorageUrl } from '@/lib/supabase'
 
 interface CharacterDetailsProps {
   character: Character
 }
 
 export default function CharacterDetails({ character }: CharacterDetailsProps) {
+  const imageUrl = getSupabaseStorageUrl(character.image_link)
+
   return (
     <div className="infobox">
       <h2 className="infobox-title">{character.name}</h2>
+
+      {imageUrl && (
+        <div className="infobox-image">
+          <Image
+            src={imageUrl}
+            alt={character.name}
+            className="character-image"
+            width={280}
+            height={280}
+            style={{ objectFit: 'contain' }}
+            unoptimized
+          />
+        </div>
+      )}
 
       <div className="infobox-content">
         {character.first_names && (
