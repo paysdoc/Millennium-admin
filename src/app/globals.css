@@ -334,10 +334,10 @@ a:visited {
 
 /* Wikipedia-style Infobox */
 .infobox {
-  float: right;
-  clear: right;
+  float: left;
+  clear: left;
   width: 300px;
-  margin: 0 0 15px 20px;
+  margin: 0 20px 15px 0;
   padding: 0;
   background-color: #f8f9fa;
   border: 1px solid #a7d7f9;

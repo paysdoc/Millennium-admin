@@ -40,7 +40,7 @@ export default function ConnectionsTable({
     <table className="table">
       <thead>
         <tr>
-          <th>Connected Character</th>
+          <th>Name</th>
           <th>Value</th>
           <th>Description</th>
           <th>Shorthand</th>

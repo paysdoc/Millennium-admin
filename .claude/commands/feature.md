@@ -72,7 +72,7 @@ IMPORTANT: Execute every step in order, top to bottom.
 
 <list step by step tasks as h3 headers plus bullet points. use as many h3 headers as needed to implement the feature. Order matters, start with the foundational shared changes required then move on to the specific implementation. Include creating tests throughout the implementation process.> 
 
-<If the feature affects UI, include a task to create a E2E test file (like `.claude/commands/e2e-examples/example_test_sql_injection.md` and `.claude/commands/e2e-examples/example_test_basic_query.md`) as one of your early tasks. That e2e test should validate the feature works as expected, be specific with the steps to demonstrate the new functionality. We want the minimal set of steps to validate the feature works as expected and screen shots to prove it if possible.>
+<If the feature affects UI, include a task to create a E2E test file (like `.claude/commands/e2e-examples/example_test_sql_injection.md` and `.claude/commands/e2e-examples/example_test_basic_query.md`) as one of your early tasks. That e2e test should validate the feature works as expected, be specific with the steps to demonstrate the new functionality. We want the minimal set of steps to validate the feature works as expected and screen shots to prove it if possible. The test should be created in the `e2e-tests/` folder with a descriptive name starting with `test_`.>
 
 <Your last step should be running the `Validation Commands` to validate the feature works correctly with zero regressions.>
 
