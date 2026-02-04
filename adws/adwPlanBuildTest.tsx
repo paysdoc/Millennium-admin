@@ -166,8 +166,8 @@ async function main(): Promise<void> {
     // Post workflow comment indicating PR creation is starting
     postWorkflowComment(issueNumber, 'pr_creating', ctx);
 
-    // Create the PR
-    const prUrl = createPullRequest(issue, '', '');
+    // Create the PR (in worktree context)
+    const prUrl = createPullRequest(issue, '', '', defaultBranch, worktreePath);
     ctx.prUrl = prUrl;
 
     // Post workflow comment indicating PR was created

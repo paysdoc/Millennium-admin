@@ -45,6 +45,8 @@ export {
   getMainRepoPath,
   isBranchCheckedOutElsewhere,
   freeBranchFromMainRepo,
+  getWorktreesDir,
+  copyEnvToWorktree,
   type BranchCheckoutStatus,
 } from './worktreeOperations';
 
