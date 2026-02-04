@@ -4,8 +4,11 @@ Execute end-to-end (E2E) tests using Playwright browser automation (MCP Server).
 
 ## Variables
 
-e2e_test_file: $1
-application_url: $2 if provided, otherwise use http://localhost:3000
+adw_id: $1 if provided, otherwise generate a random 8 character hex string
+agent_name: $2 if provided, otherwise use 'test_e2e'
+e2e_test_file: $3
+application_url: $4 if provided, otherwise use http://localhost:3000
+port: $5 if provided, otherwise find an open port on localhost starting from 3000
 
 ## Instructions
 
@@ -20,15 +23,17 @@ application_url: $2 if provided, otherwise use http://localhost:3000
 - Use the `application_url`
 - Allow time for async operations and element visibility
 - IMPORTANT: After taking each screenshot, save it to `Screenshot Directory` with descriptive names. Use absolute paths to move the files to the `Screenshot Directory` with the correct name.
+- Log the progress of each step to the console
 - Capture and report any errors encountered
 - Ultra think about the `Test Steps` and execute them in order
-- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "query-input" on page "http://localhost:3000"'
+- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "query-input" on page `application_url`'
 - Use `pwd` or equivalent to get the absolute path to the codebase for writing and displaying the correct paths to the screenshots
 
 ## Setup
 
 - Ensure the Next.js development server is running on port 3000 (`npm run dev`)
-- If the server is not running, start it in a background process before executing the test steps
+- Start the server in the background using `port` for the Playwright server 
+- ensure that the server is runningbefore executing the test steps 
 - Verify the application is accessible at `application_url` before proceeding with tests
 
 ## Screenshot Directory

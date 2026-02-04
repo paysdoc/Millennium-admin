@@ -30,6 +30,7 @@ TEST_COMMAND_TIMEOUT: 5 minutes
   - Timeout commands after `TEST_COMMAND_TIMEOUT`
   - IMPORTANT: If a test fails, stop processing tests and return the results thus far
 - Test execution order is important - dependencies should be validated first
+- log the start, end and result of each test to the console for visibility
 - All file paths are relative to the project root
 
 ## Test Execution Sequence
