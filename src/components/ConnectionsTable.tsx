@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Connection } from '@/types/connection'
-import { Character } from '@/types/character'
+import { Character, CATEGORY_ORDER } from '@/types/character'
 
 interface ConnectionsTableProps {
   connections: Connection[]
@@ -40,6 +40,35 @@ export default function ConnectionsTable({
     )
   }
 
+  // Sort connections by category (using CATEGORY_ORDER), then by name alphabetically
+  const sortedConnections = [...connections].sort((a, b) => {
+    const charA = getConnectedCharacter(a, characterId, allCharacters)
+    const charB = getConnectedCharacter(b, characterId, allCharacters)
+
+    // Handle edge cases where connected character is not found (place at end)
+    if (!charA && !charB) return 0
+    if (!charA) return 1
+    if (!charB) return -1
+
+    // Sort by category using CATEGORY_ORDER index
+    const categoryIndexA = CATEGORY_ORDER.indexOf(
+      charA.category as (typeof CATEGORY_ORDER)[number]
+    )
+    const categoryIndexB = CATEGORY_ORDER.indexOf(
+      charB.category as (typeof CATEGORY_ORDER)[number]
+    )
+    // Categories not in CATEGORY_ORDER go to the end
+    const effectiveIndexA = categoryIndexA === -1 ? CATEGORY_ORDER.length : categoryIndexA
+    const effectiveIndexB = categoryIndexB === -1 ? CATEGORY_ORDER.length : categoryIndexB
+
+    if (effectiveIndexA !== effectiveIndexB) {
+      return effectiveIndexA - effectiveIndexB
+    }
+
+    // Then sort by name alphabetically
+    return charA.name.localeCompare(charB.name)
+  })
+
   return (
     <table className="table">
       <thead>
@@ -53,7 +82,7 @@ export default function ConnectionsTable({
         </tr>
       </thead>
       <tbody>
-        {connections.map((connection) => {
+        {sortedConnections.map((connection) => {
           const connectedCharacter = getConnectedCharacter(
             connection,
             characterId,
