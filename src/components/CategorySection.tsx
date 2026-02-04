@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Character, CategoryKey } from '@/types/character'
 
 interface CategorySectionProps {
@@ -15,7 +16,9 @@ export default function CategorySection({
       <ul className="character-list">
         {characters.map((character) => (
           <li key={character.id} className="character-item">
-            {character.name}
+            <Link href={`/characters/${character.id}`} className="character-link">
+              {character.name}
+            </Link>
           </li>
         ))}
       </ul>
