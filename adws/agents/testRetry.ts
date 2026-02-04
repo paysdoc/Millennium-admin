@@ -27,6 +27,8 @@ export interface TestRetryOptions {
   orchestratorStatePath: string;
   maxRetries: number;
   onTestFailed?: (attempt: number, maxAttempts: number) => void;
+  /** Optional working directory for agent operations (defaults to process.cwd()) */
+  cwd?: string;
 }
 
 function getAdwId(statePath: string): string {
@@ -38,14 +40,14 @@ function initState(statePath: string, agentName: AgentIdentifier): string {
 }
 
 export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
-  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed } = opts;
+  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd } = opts;
   let retryCount = 0, costUsd = 0, lastFailedTests: TestResult[] = [];
 
   while (retryCount < maxRetries) {
     log(`Running unit tests (attempt ${retryCount + 1}/${maxRetries})...`, 'info');
     AgentStateManager.appendLog(statePath, `Unit test attempt ${retryCount + 1}/${maxRetries}`);
 
-    const testResult = await runTestAgent(logsDir, initState(statePath, 'test-agent'));
+    const testResult = await runTestAgent(logsDir, initState(statePath, 'test-agent'), cwd);
     costUsd += testResult.totalCostUsd || 0;
 
     if (!testResult.success) {
@@ -69,7 +71,7 @@ export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<Tes
     for (const failedTest of lastFailedTests) {
       log(`Resolving: ${failedTest.test_name}`, 'info');
       AgentStateManager.appendLog(statePath, `Resolving failed test: ${failedTest.test_name}`);
-      const result = await runResolveTestAgent(failedTest, logsDir, initState(statePath, 'test-resolver-agent'));
+      const result = await runResolveTestAgent(failedTest, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
       costUsd += result.totalCostUsd || 0;
       const msg = result.success ? 'Resolution attempted for' : 'Failed to resolve';
       log(`${msg}: ${failedTest.test_name}`, result.success ? 'success' : 'error');
@@ -84,8 +86,8 @@ export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<Tes
 }
 
 export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
-  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed } = opts;
-  const e2eTestFiles = discoverE2ETestFiles();
+  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd } = opts;
+  const e2eTestFiles = discoverE2ETestFiles(cwd);
   let costUsd = 0, totalRetries = 0;
 
   if (e2eTestFiles.length === 0) {
@@ -102,7 +104,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
   for (const testFile of e2eTestFiles) {
     log(`Running E2E test: ${testFile}`, 'info');
     AgentStateManager.appendLog(statePath, `Running E2E test: ${testFile}`);
-    const e2eResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'));
+    const e2eResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
     costUsd += e2eResult.totalCostUsd || 0;
 
     if (!e2eResult.passed && e2eResult.e2eResult) {
@@ -139,12 +141,12 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       log(`Resolving E2E test: ${result.test_name ?? 'unknown'} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
       AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.test_name ?? 'unknown'}`);
 
-      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initState(statePath, 'test-resolver-agent'));
+      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
       costUsd += resolveResult.totalCostUsd || 0;
       totalRetries++;
 
       log(`Re-running E2E test: ${testFile}`, 'info');
-      const retryResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'));
+      const retryResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
       costUsd += retryResult.totalCostUsd || 0;
 
       if (retryResult.passed) {
