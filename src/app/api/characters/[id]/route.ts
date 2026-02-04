@@ -10,8 +10,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
 ): Promise<NextResponse> {
+  const { id } = await params
+  let updateData: Partial<Omit<Character, 'id'>> = {}
+
   try {
-    const { id } = await params
     const body = await request.json()
 
     if (!body || typeof body !== 'object') {
@@ -33,7 +35,6 @@ export async function PATCH(
       'image_link',
     ]
 
-    const updateData: Partial<Omit<Character, 'id'>> = {}
     for (const field of allowedFields) {
       if (field in body) {
         updateData[field] = body[field]
@@ -51,13 +52,18 @@ export async function PATCH(
     return NextResponse.json(updatedCharacter)
   } catch (error) {
     if (error instanceof Error && error.message === 'Character not found') {
+      console.error('Character not found for update:', { characterId: id })
       return NextResponse.json(
         { error: 'Character not found' },
         { status: 404 }
       )
     }
 
-    console.error('Error updating character:', error)
+    console.error('Error updating character:', {
+      characterId: id,
+      updateFields: Object.keys(updateData),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    })
     return NextResponse.json(
       { error: 'Failed to update character' },
       { status: 500 }

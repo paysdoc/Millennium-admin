@@ -34,7 +34,12 @@ export function getSupabaseClient(): SupabaseClient {
   const supabaseKey = process.env.SUPABASE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)')
+    const missing = [
+      !supabaseUrl && 'SUPABASE_URL',
+      !supabaseKey && 'SUPABASE_KEY',
+    ].filter(Boolean)
+    console.error(`Missing Supabase environment variables: ${missing.join(', ')}`)
+    throw new Error('Missing Supabase environment variables')
   }
 
   supabaseClient = createClient(supabaseUrl, supabaseKey)
@@ -55,6 +60,11 @@ export function getSupabaseServiceClient(): SupabaseClient {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
 
   if (!supabaseUrl || !supabaseServiceKey) {
+    const missing = [
+      !supabaseUrl && 'SUPABASE_URL',
+      !supabaseServiceKey && 'SUPABASE_SERVICE_KEY',
+    ].filter(Boolean)
+    console.error(`Missing Supabase service environment variables: ${missing.join(', ')}`)
     throw new Error('Missing Supabase service environment variables')
   }
 

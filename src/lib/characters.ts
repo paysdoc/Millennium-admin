@@ -124,8 +124,21 @@ export async function updateCharacter(
 
     if (error) {
       if (error.code === 'PGRST116') {
+        console.error('Supabase update returned no rows (PGRST116):', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          characterId: id,
+        })
         throw new Error('Character not found')
       }
+      console.error('Supabase update error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        characterId: id,
+      })
       throw new Error(`Failed to update character: ${error.message}`)
     }
 
