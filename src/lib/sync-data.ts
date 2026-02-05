@@ -11,8 +11,16 @@
 
 import 'dotenv/config'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { isBucketAlreadyExistsError, isBucketNotFoundError, isTableNotFoundError } from './schema'
-import { getProductionSupabaseClient, getStagingServiceClient, getStagingSupabaseClient } from './supabase'
+import {
+  isBucketAlreadyExistsError,
+  isBucketNotFoundError,
+  isTableNotFoundError,
+} from './schema'
+import {
+  getProductionSupabaseClient,
+  getStagingServiceClient,
+  getStagingSupabaseClient,
+} from './supabase'
 import { getCreateTableSQL } from './table-schemas'
 
 const TABLES_TO_SYNC = ['character', 'connection', 'game_players', 'games', 'profiles'] as const
@@ -96,7 +104,9 @@ async function syncBucket(
   if (bucketError) {
     if (isBucketNotFoundError(bucketError)) {
       console.log(`  Bucket ${bucketName} does not exist in staging, creating...`)
-      const { error: createError } = await stagingService.storage.createBucket(bucketName, { public: true })
+      const { error: createError } = await stagingService.storage.createBucket(bucketName, {
+        public: true,
+      })
       if (createError) {
         if (isBucketAlreadyExistsError(createError)) {
           console.log(`  Bucket ${bucketName} already exists in staging, continuing...`)
@@ -162,7 +172,14 @@ async function syncBucket(
 }
 
 async function main(): Promise<void> {
-  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_URL_STAGING', 'SUPABASE_KEY_STAGING', 'SUPABASE_SERVICE_KEY_STAGING']
+  const requiredVars = [
+    'SUPABASE_URL',
+    'SUPABASE_KEY',
+    'SUPABASE_SERVICE_KEY',
+    'SUPABASE_URL_STAGING',
+    'SUPABASE_KEY_STAGING',
+    'SUPABASE_SERVICE_KEY_STAGING',
+  ]
   const missingVars = requiredVars.filter((v) => !process.env[v])
 
   if (missingVars.length > 0) {
