@@ -62,6 +62,7 @@ const profilesTable = createTableConfig('profiles', [
   ['display_name', 'name'],
   ['full_name', 'name'],
   ['bio', 'text'],
+  ['email', 'email'],
 ])
 
 /**

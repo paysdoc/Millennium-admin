@@ -1,30 +1,30 @@
-# PR-Review: Add Storage Bucket Sync for Character Images
+# PR-Review: Add email anonymization to profiles table
 
 ## PR-Review Description
-The PR review comment on `.github/workflows/sync-supabase.yml` (line 1) from paysdoc requests:
+The PR review comment on `scripts/sync-config.ts` (line 64) from paysdoc requests:
 
-> "The script should also copy the 'character images' bucket with content"
+> "profiles table contains an email address. That also needs to be anonymized"
 
-This requires extending the current sync functionality from database tables only to also include Supabase Storage bucket synchronization. The 'character images' bucket contains image files associated with characters and needs to be copied from production to staging along with the database data.
+The profiles table currently has PII anonymization configured for `username`, `display_name`, `full_name`, and `bio` fields, but is missing the `email` field. Email addresses are sensitive PII that must be anonymized when syncing production data to staging to prevent exposure of user contact information.
 
 ## Summary of Original Implementation Plan
 The original implementation plan created a Supabase data sync system with the following key components:
 - TypeScript sync script (`scripts/sync-supabase.ts`) to copy production data to staging
 - Configuration file (`scripts/sync-config.ts`) defining tables to sync with PII field mappings
 - PII anonymization logic for sensitive fields (names, text content)
+- Storage bucket sync for character images
 - GitHub Action for monthly automated synchronization
 - Explicit exclusion of the `users` table for privacy
 
-The implementation was later extended to sync additional tables: `character`, `connection`, `game_players`, `games`, and `profiles` (with PII anonymization). The current implementation only handles database tables, not storage buckets.
+The profiles table was configured with anonymization for username, display_name, full_name (using 'name' rule) and bio (using 'text' rule), but email was inadvertently omitted.
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `scripts/sync-types.ts` - Type definitions that need new interfaces for bucket configuration and bucket sync results.
-- `scripts/sync-config.ts` - Configuration file that needs to add bucket configuration with the 'character images' bucket.
-- `scripts/sync-supabase.ts` - Main sync script that needs new functions for storage bucket operations (list, download, upload, delete).
-- `scripts/__tests__/sync-supabase.test.ts` - Unit tests that need new tests for bucket configuration and helper functions.
-- `.github/workflows/sync-supabase.yml` - GitHub Action workflow. No changes needed as it already runs `npm run sync:supabase`.
+- `scripts/sync-types.ts` - Type definitions that need a new 'email' anonymization rule added to the `AnonymizationRule` type.
+- `scripts/sync-supabase.ts` - Main sync script that needs a new `anonymizeEmail` function and updated `anonymizeField` function to handle the email rule.
+- `scripts/sync-config.ts` - Configuration file that needs to add `['email', 'email']` to the profiles table PII fields.
+- `scripts/__tests__/sync-supabase.test.ts` - Unit tests that need new tests for email anonymization.
 
 ### New Files
 None required - all changes will be in existing files.
@@ -32,79 +32,63 @@ None required - all changes will be in existing files.
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Add storage bucket types to sync-types.ts
-- Add a new `BucketConfig` interface with:
-  - `name: string` - The bucket name (e.g., 'character images')
-  - `syncContent: boolean` - Whether to sync files within the bucket
-- Add a new `BucketSyncResult` interface with:
-  - `bucketName: string`
-  - `filesProcessed: number`
-  - `success: boolean`
-  - `error?: string`
-- Update `SyncConfig` interface to include:
-  - `bucketsToSync: readonly BucketConfig[]`
-- Update `SyncResult` interface to include:
-  - `bucketsProcessed: readonly BucketSyncResult[]`
+### Step 1: Add 'email' to AnonymizationRule type in sync-types.ts
+- Update the `AnonymizationRule` type union on line 8 to include 'email':
+  ```typescript
+  export type AnonymizationRule = 'name' | 'text' | 'email' | 'none'
+  ```
 
-### Step 2: Add bucket configuration to sync-config.ts
-- Add a `createBucketConfig` helper function similar to `createTableConfig`
-- Add a `characterImagesBucket` configuration:
-  - `name: 'character images'`
-  - `syncContent: true`
-- Add `bucketsToSync` array to `syncConfig` containing:
-  - `characterImagesBucket`
-- Export a `getBucketConfig` function to retrieve bucket config by name
+### Step 2: Add anonymizeEmail function to sync-supabase.ts
+- Add a new constant `EMAIL_DOMAINS` array with common test domains:
+  ```typescript
+  const EMAIL_DOMAINS = [
+    'example.com', 'test.com', 'staging.local', 'demo.org', 'sample.net',
+  ] as const
+  ```
+- Add a new `anonymizeEmail` function after `anonymizeText` that:
+  - Returns null/empty for null or empty input (preserve these values)
+  - Uses the deterministic `hashString` function to ensure same email always maps to same fake email
+  - Generates a fake email in format: `user{hash}@{domain}` where domain is selected from EMAIL_DOMAINS
+  - Example: `user123456@example.com`
+- Export the function for testing
 
-### Step 3: Add storage sync functions to sync-supabase.ts
-- Add a `listBucketFiles` function that:
-  - Uses Supabase Storage API to list all files in a bucket
-  - Handles pagination for large buckets (list returns max 1000 files at a time)
-  - Returns array of file paths
-- Add a `downloadFile` function that:
-  - Downloads a single file from production bucket
-  - Returns the file data as a Blob/Buffer
-- Add a `uploadFile` function that:
-  - Uploads a single file to staging bucket
-  - Handles content-type preservation
-- Add a `clearBucket` function that:
-  - Lists all files in staging bucket
-  - Deletes all files in batches
-- Add a `syncBucket` function that:
-  - Lists files from production bucket
-  - Clears staging bucket
-  - Downloads and re-uploads each file
-  - Logs progress
-  - Returns `BucketSyncResult`
+### Step 3: Update anonymizeField to handle 'email' rule
+- Add a new case in the `anonymizeField` switch statement (around line 83):
+  ```typescript
+  case 'email':
+    return typeof value === 'string' ? anonymizeEmail(value) : value
+  ```
 
-### Step 4: Integrate bucket sync into main runSync function
-- In `runSync` function, after table sync completes:
-  - Loop through `syncConfig.bucketsToSync`
-  - Call `syncBucket` for each bucket
-  - Collect results into `bucketsProcessed` array
-- Update the final result object to include `bucketsProcessed`
-- Update console logging to show bucket sync progress and summary
+### Step 4: Add email to profiles table PII fields in sync-config.ts
+- Update the `profilesTable` configuration (line 60-65) to include email:
+  ```typescript
+  const profilesTable = createTableConfig('profiles', [
+    ['username', 'name'],
+    ['display_name', 'name'],
+    ['full_name', 'name'],
+    ['bio', 'text'],
+    ['email', 'email'],
+  ])
+  ```
 
-### Step 5: Update help message with bucket information
-- In `showHelp` function, add:
-  - Buckets synced information: `syncConfig.bucketsToSync.map(b => b.name).join(', ')`
+### Step 5: Add unit tests for email anonymization
+- In `scripts/__tests__/sync-supabase.test.ts`:
+  - Add `anonymizeEmail` to the imports from '../sync-supabase'
+  - Add a new describe block for `anonymizeEmail`:
+    - Test that `anonymizeEmail` returns null for null input
+    - Test that `anonymizeEmail` returns empty string for empty input
+    - Test that `anonymizeEmail` returns whitespace-only string unchanged
+    - Test that `anonymizeEmail` returns a valid email format (contains @)
+    - Test that `anonymizeEmail` is deterministic (same input produces same output)
+    - Test that different emails produce different anonymized outputs
+  - Update `describe('anonymizeField')` tests:
+    - Add test that `anonymizeField` handles the 'email' rule correctly
+    - Add test that returns non-string values unchanged for email rule
+    - Update the null check test (line 128-131) to include: `expect(anonymizeField(null, 'email')).toBeNull()`
+  - Update the test `'has correct PII field anonymization rules for profiles table'` (line 319-329):
+    - Add assertion: `expect(profilesConfig!.piiFields.get('email')).toBe('email')`
 
-### Step 6: Add unit tests for bucket configuration
-- In `scripts/__tests__/sync-supabase.test.ts`, add a new describe block for bucket config:
-  - Test that `syncConfig.bucketsToSync` exists and is an array
-  - Test that 'character images' bucket is included
-  - Test that `getBucketConfig('character images')` returns the correct config
-  - Test that `getBucketConfig` returns undefined for unknown buckets
-
-### Step 7: Add unit tests for bucket sync helper functions
-- Add tests for `listBucketFiles` (mocked Supabase client):
-  - Returns empty array for empty bucket
-  - Returns file paths for bucket with files
-  - Handles pagination for large buckets
-- Add tests for `clearBucket` (mocked):
-  - Handles empty bucket gracefully
-  - Deletes all files in batches
-
-### Step 8: Run validation commands
+### Step 6: Run validation commands
 - Run all validation commands to ensure the changes are correct and introduce no regressions
 
 ## Validation Commands
@@ -115,14 +99,7 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- **Bucket naming**: The bucket name 'character images' contains a space, which is valid in Supabase Storage. Ensure the code handles this correctly.
-- **File size considerations**: Storage sync may take longer than database sync depending on the number and size of images. The script should log progress for visibility.
-- **No PII in images**: Character images are public historical data (like character portraits), so no anonymization is needed for storage files.
-- **Supabase Storage API**: Uses `supabase.storage.from(bucketName)` for bucket operations:
-  - `.list()` to list files
-  - `.download(path)` to download a file
-  - `.upload(path, file)` to upload a file
-  - `.remove([paths])` to delete files
-- **Error handling**: Individual file failures should not stop the entire bucket sync. Log errors and continue with remaining files, then report partial success.
-- **Rate limiting**: Supabase Storage API has rate limits. Consider adding small delays between operations if issues arise during large syncs.
-- **Existing bucket**: The staging bucket 'character images' must already exist in the staging Supabase project. The script syncs content, not bucket creation.
+- **Deterministic anonymization**: The email anonymization uses the same `hashString` function as name/text anonymization to ensure referential integrity - the same email always produces the same fake email.
+- **Test domains**: Using domains like `example.com` follows RFC 2606 which reserves these domains for documentation and testing purposes.
+- **Email format**: The anonymized email should be a valid email format to avoid downstream issues if the staging environment validates email formats.
+- **No @ extraction**: Unlike some email anonymization approaches, we don't preserve the original domain or username structure - we generate a completely new fake email to prevent any information leakage.

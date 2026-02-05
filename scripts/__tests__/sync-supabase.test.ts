@@ -3,6 +3,7 @@ import {
   hashString,
   anonymizeName,
   anonymizeText,
+  anonymizeEmail,
   anonymizeField,
   anonymizeRecord,
   listBucketFiles,
@@ -123,10 +124,61 @@ describe('anonymizeText', () => {
   })
 })
 
+describe('anonymizeEmail', () => {
+  it('returns null for null input', () => {
+    const result = anonymizeEmail(null)
+
+    expect(result).toBeNull()
+  })
+
+  it('returns empty string for empty input', () => {
+    const result = anonymizeEmail('')
+
+    expect(result).toBe('')
+  })
+
+  it('returns whitespace-only string unchanged', () => {
+    const result = anonymizeEmail('   ')
+
+    expect(result).toBe('   ')
+  })
+
+  it('returns a valid email format for valid input', () => {
+    const result = anonymizeEmail('user@example.com')
+
+    expect(result).not.toBeNull()
+    expect(result).not.toBe('user@example.com')
+    expect(result).toContain('@')
+  })
+
+  it('returns consistent fake email for same input', () => {
+    const input = 'test@domain.com'
+
+    const result1 = anonymizeEmail(input)
+    const result2 = anonymizeEmail(input)
+
+    expect(result1).toBe(result2)
+  })
+
+  it('returns different fake emails for different inputs', () => {
+    const result1 = anonymizeEmail('alice@example.com')
+    const result2 = anonymizeEmail('bob@example.com')
+
+    expect(result1).not.toBe(result2)
+  })
+
+  it('generates email with expected format', () => {
+    const result = anonymizeEmail('original@test.com')
+
+    expect(result).toMatch(/^user\d+@[\w.]+$/)
+  })
+})
+
 describe('anonymizeField', () => {
   it('returns null for null value regardless of rule', () => {
     expect(anonymizeField(null, 'name')).toBeNull()
     expect(anonymizeField(null, 'text')).toBeNull()
+    expect(anonymizeField(null, 'email')).toBeNull()
     expect(anonymizeField(null, 'none')).toBeNull()
   })
 
@@ -145,6 +197,19 @@ describe('anonymizeField', () => {
 
     expect(result).not.toBe('Some sensitive text')
     expect(String(result).startsWith('[Anonymized:')).toBe(true)
+  })
+
+  it('anonymizes email fields', () => {
+    const result = anonymizeField('user@example.com', 'email')
+
+    expect(result).not.toBe('user@example.com')
+    expect(String(result)).toContain('@')
+  })
+
+  it('returns non-string values unchanged for email rule', () => {
+    const result = anonymizeField(123, 'email')
+
+    expect(result).toBe(123)
   })
 
   it('returns value unchanged for none rule', () => {
@@ -326,6 +391,7 @@ describe('syncConfig', () => {
     expect(profilesConfig!.piiFields.get('display_name')).toBe('name')
     expect(profilesConfig!.piiFields.get('full_name')).toBe('name')
     expect(profilesConfig!.piiFields.get('bio')).toBe('text')
+    expect(profilesConfig!.piiFields.get('email')).toBe('email')
   })
 })
 

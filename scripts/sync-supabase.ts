@@ -29,6 +29,10 @@ const LAST_NAMES = [
   'Rodriguez', 'Martinez', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson',
 ] as const
 
+const EMAIL_DOMAINS = [
+  'example.com', 'test.com', 'staging.local', 'demo.org', 'sample.net',
+] as const
+
 /**
  * Creates a deterministic hash from input string.
  * Same input always produces same output for referential integrity.
@@ -70,6 +74,19 @@ export const anonymizeText = (text: string | null): string | null => {
 }
 
 /**
+ * Anonymizes an email address using deterministic hash-based generation.
+ * Preserves null values and empty strings.
+ */
+export const anonymizeEmail = (email: string | null): string | null => {
+  if (email === null || email.trim() === '') {
+    return email
+  }
+  const hash = hashString(email)
+  const domain = EMAIL_DOMAINS[hash % EMAIL_DOMAINS.length]
+  return `user${hash % 1000000}@${domain}`
+}
+
+/**
  * Anonymizes a field based on its anonymization rule.
  */
 export const anonymizeField = (
@@ -85,6 +102,8 @@ export const anonymizeField = (
       return typeof value === 'string' ? anonymizeName(value) : value
     case 'text':
       return typeof value === 'string' ? anonymizeText(value) : value
+    case 'email':
+      return typeof value === 'string' ? anonymizeEmail(value) : value
     case 'none':
       return value
     default:

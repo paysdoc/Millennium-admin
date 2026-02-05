@@ -5,7 +5,7 @@
 /**
  * Rules for anonymizing specific field types.
  */
-export type AnonymizationRule = 'name' | 'text' | 'none'
+export type AnonymizationRule = 'name' | 'text' | 'email' | 'none'
 
 /**
  * Configuration for a single table to sync.
