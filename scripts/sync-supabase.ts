@@ -12,8 +12,10 @@ import type {
   SyncEnvironment,
   SyncResult,
   TableSyncResult,
+  BucketSyncResult,
   AnonymizationRule,
   TableConfig,
+  BucketConfig,
 } from './sync-types'
 
 // Constants for anonymization
@@ -224,6 +226,181 @@ const insertStagingData = async (
 }
 
 /**
+ * Lists all files in a storage bucket with pagination.
+ * Supabase Storage API returns max 1000 files per request.
+ */
+export const listBucketFiles = async (
+  client: SupabaseClient,
+  bucketName: string
+): Promise<string[]> => {
+  const pageSize = 1000
+  const allFiles: string[] = []
+  let offset = 0
+  let hasMore = true
+
+  while (hasMore) {
+    const { data, error } = await client.storage
+      .from(bucketName)
+      .list('', { limit: pageSize, offset })
+
+    if (error) {
+      throw new Error(`Failed to list files in ${bucketName}: ${error.message}`)
+    }
+
+    if (data && data.length > 0) {
+      const filePaths = data
+        .filter((item) => item.name !== '.emptyFolderPlaceholder')
+        .map((item) => item.name)
+      allFiles.push(...filePaths)
+      offset += pageSize
+      hasMore = data.length === pageSize
+    } else {
+      hasMore = false
+    }
+  }
+
+  return allFiles
+}
+
+/**
+ * Downloads a file from a storage bucket.
+ */
+const downloadFile = async (
+  client: SupabaseClient,
+  bucketName: string,
+  filePath: string
+): Promise<Blob> => {
+  const { data, error } = await client.storage.from(bucketName).download(filePath)
+
+  if (error) {
+    throw new Error(`Failed to download ${filePath}: ${error.message}`)
+  }
+
+  if (!data) {
+    throw new Error(`No data returned for ${filePath}`)
+  }
+
+  return data
+}
+
+/**
+ * Uploads a file to a storage bucket.
+ */
+const uploadFile = async (
+  client: SupabaseClient,
+  bucketName: string,
+  filePath: string,
+  fileData: Blob
+): Promise<void> => {
+  const { error } = await client.storage
+    .from(bucketName)
+    .upload(filePath, fileData, { upsert: true })
+
+  if (error) {
+    throw new Error(`Failed to upload ${filePath}: ${error.message}`)
+  }
+}
+
+/**
+ * Clears all files from a storage bucket.
+ * Deletes files in batches to avoid API limits.
+ */
+export const clearBucket = async (
+  client: SupabaseClient,
+  bucketName: string
+): Promise<void> => {
+  const files = await listBucketFiles(client, bucketName)
+
+  if (files.length === 0) {
+    return
+  }
+
+  const batchSize = 100
+  const batches = Array.from(
+    { length: Math.ceil(files.length / batchSize) },
+    (_, i) => files.slice(i * batchSize, (i + 1) * batchSize)
+  )
+
+  for (const batch of batches) {
+    const { error } = await client.storage.from(bucketName).remove(batch)
+
+    if (error) {
+      throw new Error(`Failed to clear files from ${bucketName}: ${error.message}`)
+    }
+  }
+}
+
+/**
+ * Syncs a single storage bucket from production to staging.
+ */
+const syncBucket = async (
+  productionClient: SupabaseClient,
+  stagingClient: SupabaseClient,
+  bucketConfig: BucketConfig
+): Promise<BucketSyncResult> => {
+  const { name: bucketName, syncContent } = bucketConfig
+
+  if (!syncContent) {
+    return {
+      bucketName,
+      filesProcessed: 0,
+      success: true,
+    }
+  }
+
+  try {
+    console.log(`  Syncing bucket: ${bucketName}`)
+
+    // List files from production
+    const productionFiles = await listBucketFiles(productionClient, bucketName)
+    console.log(`    Found ${productionFiles.length} files in production`)
+
+    // Clear staging bucket
+    await clearBucket(stagingClient, bucketName)
+    console.log(`    Cleared staging bucket`)
+
+    // Download and upload each file
+    let successCount = 0
+    let errorCount = 0
+
+    for (const filePath of productionFiles) {
+      try {
+        const fileData = await downloadFile(productionClient, bucketName, filePath)
+        await uploadFile(stagingClient, bucketName, filePath, fileData)
+        successCount++
+      } catch (fileError) {
+        errorCount++
+        const errorMessage =
+          fileError instanceof Error ? fileError.message : 'Unknown error'
+        console.error(`    Error syncing file ${filePath}: ${errorMessage}`)
+      }
+    }
+
+    console.log(
+      `    Synced ${successCount} files (${errorCount} errors) to staging`
+    )
+
+    const hasErrors = errorCount > 0
+    return {
+      bucketName,
+      filesProcessed: successCount,
+      success: !hasErrors,
+      error: hasErrors ? `${errorCount} files failed to sync` : undefined,
+    }
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error'
+    console.error(`    Error syncing bucket ${bucketName}: ${errorMessage}`)
+    return {
+      bucketName,
+      filesProcessed: 0,
+      success: false,
+      error: errorMessage,
+    }
+  }
+}
+
+/**
  * Syncs a single table from production to staging.
  */
 const syncTable = async (
@@ -276,7 +453,8 @@ const syncTable = async (
  */
 const runSync = async (): Promise<SyncResult> => {
   const startTime = new Date()
-  const results: TableSyncResult[] = []
+  const tableResults: TableSyncResult[] = []
+  const bucketResults: BucketSyncResult[] = []
 
   try {
     console.log('Starting Supabase data sync...')
@@ -292,6 +470,7 @@ const runSync = async (): Promise<SyncResult> => {
     console.log('Supabase clients created')
 
     // Sync each configured table
+    console.log('\nSyncing tables...')
     for (const tableConfig of syncConfig.tablesToSync) {
       if (!isTableAllowed(tableConfig.name)) {
         console.log(`  Skipping excluded table: ${tableConfig.name}`)
@@ -303,23 +482,40 @@ const runSync = async (): Promise<SyncResult> => {
         stagingClient,
         tableConfig
       )
-      results.push(result)
+      tableResults.push(result)
+    }
+
+    // Sync each configured bucket
+    console.log('\nSyncing storage buckets...')
+    for (const bucketConfig of syncConfig.bucketsToSync) {
+      const result = await syncBucket(
+        productionClient,
+        stagingClient,
+        bucketConfig
+      )
+      bucketResults.push(result)
     }
 
     const endTime = new Date()
-    const allSuccess = results.every((r) => r.success)
+    const tablesSuccess = tableResults.every((r) => r.success)
+    const bucketsSuccess = bucketResults.every((r) => r.success)
+    const allSuccess = tablesSuccess && bucketsSuccess
 
     console.log('\nSync completed!')
-    console.log(`  Tables processed: ${results.length}`)
-    console.log(`  Successful: ${results.filter((r) => r.success).length}`)
-    console.log(`  Failed: ${results.filter((r) => !r.success).length}`)
+    console.log(`  Tables processed: ${tableResults.length}`)
+    console.log(`  Tables successful: ${tableResults.filter((r) => r.success).length}`)
+    console.log(`  Tables failed: ${tableResults.filter((r) => !r.success).length}`)
+    console.log(`  Buckets processed: ${bucketResults.length}`)
+    console.log(`  Buckets successful: ${bucketResults.filter((r) => r.success).length}`)
+    console.log(`  Buckets failed: ${bucketResults.filter((r) => !r.success).length}`)
     console.log(
       `  Duration: ${(endTime.getTime() - startTime.getTime()) / 1000}s`
     )
 
     return {
       success: allSuccess,
-      tablesProcessed: results,
+      tablesProcessed: tableResults,
+      bucketsProcessed: bucketResults,
       startTime,
       endTime,
     }
@@ -330,7 +526,8 @@ const runSync = async (): Promise<SyncResult> => {
 
     return {
       success: false,
-      tablesProcessed: results,
+      tablesProcessed: tableResults,
+      bucketsProcessed: bucketResults,
       startTime,
       endTime: new Date(),
       error: errorMessage,
@@ -355,6 +552,7 @@ Description:
 
   Tables synced: ${syncConfig.tablesToSync.map((t) => t.name).join(', ')}
   Tables excluded: ${syncConfig.excludedTables.join(', ')}
+  Buckets synced: ${syncConfig.bucketsToSync.map((b) => b.name).join(', ')}
 
 Environment Variables Required:
   SUPABASE_URL              Production Supabase URL

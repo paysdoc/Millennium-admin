@@ -3,7 +3,12 @@
  * Defines which tables to sync and how to anonymize PII fields.
  */
 
-import type { SyncConfig, TableConfig, AnonymizationRule } from './sync-types'
+import type {
+  SyncConfig,
+  TableConfig,
+  BucketConfig,
+  AnonymizationRule,
+} from './sync-types'
 
 /**
  * Creates a TableConfig with PII field mappings.
@@ -14,6 +19,14 @@ const createTableConfig = (
 ): TableConfig => ({
   name,
   piiFields: new Map(piiFieldEntries),
+})
+
+/**
+ * Creates a BucketConfig for storage bucket sync.
+ */
+const createBucketConfig = (name: string, syncContent: boolean): BucketConfig => ({
+  name,
+  syncContent,
 })
 
 /**
@@ -52,6 +65,12 @@ const profilesTable = createTableConfig('profiles', [
 ])
 
 /**
+ * Character images bucket configuration.
+ * Contains public historical character portraits - no anonymization needed.
+ */
+const characterImagesBucket = createBucketConfig('character images', true)
+
+/**
  * Main sync configuration.
  *
  * - tablesToSync: Tables that will be copied from production to staging
@@ -66,6 +85,7 @@ export const syncConfig: SyncConfig = {
     profilesTable,
   ],
   excludedTables: ['users'],
+  bucketsToSync: [characterImagesBucket],
 }
 
 /**
@@ -81,3 +101,10 @@ export const isTableAllowed = (tableName: string): boolean =>
  */
 export const getTableConfig = (tableName: string): TableConfig | undefined =>
   syncConfig.tablesToSync.find((t) => t.name === tableName)
+
+/**
+ * Gets the configuration for a specific bucket.
+ * Returns undefined if the bucket is not configured for sync.
+ */
+export const getBucketConfig = (bucketName: string): BucketConfig | undefined =>
+  syncConfig.bucketsToSync.find((b) => b.name === bucketName)

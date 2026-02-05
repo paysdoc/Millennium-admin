@@ -16,11 +16,20 @@ export interface TableConfig {
 }
 
 /**
+ * Configuration for a storage bucket to sync.
+ */
+export interface BucketConfig {
+  readonly name: string
+  readonly syncContent: boolean
+}
+
+/**
  * Global configuration for the sync operation.
  */
 export interface SyncConfig {
   readonly tablesToSync: readonly TableConfig[]
   readonly excludedTables: readonly string[]
+  readonly bucketsToSync: readonly BucketConfig[]
 }
 
 /**
@@ -34,11 +43,22 @@ export interface TableSyncResult {
 }
 
 /**
+ * Result of syncing a storage bucket.
+ */
+export interface BucketSyncResult {
+  readonly bucketName: string
+  readonly filesProcessed: number
+  readonly success: boolean
+  readonly error?: string
+}
+
+/**
  * Overall result of the sync operation.
  */
 export interface SyncResult {
   readonly success: boolean
   readonly tablesProcessed: readonly TableSyncResult[]
+  readonly bucketsProcessed: readonly BucketSyncResult[]
   readonly startTime: Date
   readonly endTime: Date
   readonly error?: string

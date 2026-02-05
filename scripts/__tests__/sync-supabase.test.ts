@@ -1,12 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   hashString,
   anonymizeName,
   anonymizeText,
   anonymizeField,
   anonymizeRecord,
+  listBucketFiles,
+  clearBucket,
 } from '../sync-supabase'
-import { syncConfig, isTableAllowed, getTableConfig } from '../sync-config'
+import { syncConfig, isTableAllowed, getTableConfig, getBucketConfig } from '../sync-config'
 import type { TableConfig, AnonymizationRule } from '../sync-types'
 
 describe('hashString', () => {
@@ -411,5 +413,213 @@ describe('deterministic anonymization', () => {
     const result2 = anonymizeName(name)
 
     expect(result1).toBe(result2)
+  })
+})
+
+describe('bucket configuration', () => {
+  it('has bucketsToSync array in syncConfig', () => {
+    expect(syncConfig.bucketsToSync).toBeDefined()
+    expect(Array.isArray(syncConfig.bucketsToSync)).toBe(true)
+  })
+
+  it('includes character images bucket', () => {
+    const bucketNames = syncConfig.bucketsToSync.map((b) => b.name)
+
+    expect(bucketNames).toContain('character images')
+  })
+
+  it('has syncContent enabled for character images bucket', () => {
+    const characterImagesBucket = syncConfig.bucketsToSync.find(
+      (b) => b.name === 'character images'
+    )
+
+    expect(characterImagesBucket).toBeDefined()
+    expect(characterImagesBucket!.syncContent).toBe(true)
+  })
+})
+
+describe('getBucketConfig', () => {
+  it('returns config for character images bucket', () => {
+    const config = getBucketConfig('character images')
+
+    expect(config).toBeDefined()
+    expect(config!.name).toBe('character images')
+    expect(config!.syncContent).toBe(true)
+  })
+
+  it('returns undefined for unknown buckets', () => {
+    const config = getBucketConfig('unknown-bucket')
+
+    expect(config).toBeUndefined()
+  })
+
+  it('returns undefined for empty bucket name', () => {
+    const config = getBucketConfig('')
+
+    expect(config).toBeUndefined()
+  })
+})
+
+describe('listBucketFiles', () => {
+  it('returns empty array for empty bucket', async () => {
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: [], error: null }),
+        }),
+      },
+    }
+
+    const result = await listBucketFiles(mockClient as never, 'test-bucket')
+
+    expect(result).toEqual([])
+  })
+
+  it('returns file paths for bucket with files', async () => {
+    const mockFiles = [
+      { name: 'image1.png' },
+      { name: 'image2.jpg' },
+      { name: 'folder/image3.png' },
+    ]
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: mockFiles, error: null }),
+        }),
+      },
+    }
+
+    const result = await listBucketFiles(mockClient as never, 'test-bucket')
+
+    expect(result).toEqual(['image1.png', 'image2.jpg', 'folder/image3.png'])
+  })
+
+  it('filters out .emptyFolderPlaceholder files', async () => {
+    const mockFiles = [
+      { name: 'image1.png' },
+      { name: '.emptyFolderPlaceholder' },
+      { name: 'image2.jpg' },
+    ]
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: mockFiles, error: null }),
+        }),
+      },
+    }
+
+    const result = await listBucketFiles(mockClient as never, 'test-bucket')
+
+    expect(result).toEqual(['image1.png', 'image2.jpg'])
+  })
+
+  it('handles pagination for large buckets', async () => {
+    const firstPage = Array.from({ length: 1000 }, (_, i) => ({ name: `file${i}.png` }))
+    const secondPage = [{ name: 'file1000.png' }, { name: 'file1001.png' }]
+    const listMock = vi
+      .fn()
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: secondPage, error: null })
+
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: listMock,
+        }),
+      },
+    }
+
+    const result = await listBucketFiles(mockClient as never, 'test-bucket')
+
+    expect(result).toHaveLength(1002)
+    expect(listMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws error when storage API fails', async () => {
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Storage error' },
+          }),
+        }),
+      },
+    }
+
+    await expect(listBucketFiles(mockClient as never, 'test-bucket')).rejects.toThrow(
+      'Failed to list files in test-bucket: Storage error'
+    )
+  })
+})
+
+describe('clearBucket', () => {
+  it('handles empty bucket gracefully', async () => {
+    const listMock = vi.fn().mockResolvedValue({ data: [], error: null })
+    const removeMock = vi.fn()
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: listMock,
+          remove: removeMock,
+        }),
+      },
+    }
+
+    await clearBucket(mockClient as never, 'test-bucket')
+
+    expect(removeMock).not.toHaveBeenCalled()
+  })
+
+  it('deletes all files from bucket', async () => {
+    const mockFiles = [{ name: 'file1.png' }, { name: 'file2.png' }]
+    const removeMock = vi.fn().mockResolvedValue({ error: null })
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: mockFiles, error: null }),
+          remove: removeMock,
+        }),
+      },
+    }
+
+    await clearBucket(mockClient as never, 'test-bucket')
+
+    expect(removeMock).toHaveBeenCalledWith(['file1.png', 'file2.png'])
+  })
+
+  it('deletes files in batches for large buckets', async () => {
+    const mockFiles = Array.from({ length: 150 }, (_, i) => ({ name: `file${i}.png` }))
+    const removeMock = vi.fn().mockResolvedValue({ error: null })
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: mockFiles, error: null }),
+          remove: removeMock,
+        }),
+      },
+    }
+
+    await clearBucket(mockClient as never, 'test-bucket')
+
+    expect(removeMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws error when remove fails', async () => {
+    const mockFiles = [{ name: 'file1.png' }]
+    const mockClient = {
+      storage: {
+        from: vi.fn().mockReturnValue({
+          list: vi.fn().mockResolvedValue({ data: mockFiles, error: null }),
+          remove: vi.fn().mockResolvedValue({
+            error: { message: 'Remove failed' },
+          }),
+        }),
+      },
+    }
+
+    await expect(clearBucket(mockClient as never, 'test-bucket')).rejects.toThrow(
+      'Failed to clear files from test-bucket: Remove failed'
+    )
   })
 })
