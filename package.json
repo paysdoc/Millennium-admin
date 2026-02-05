@@ -12,7 +12,8 @@
     "adw:trigger-webhook": "tsx adws/triggers/trigger_webhook.ts",
     "adw:trigger-cron": "tsx adws/triggers/trigger_cron.ts",
     "adw:pr-review": "tsx adws/adwPrReview.tsx",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync:data": "tsx src/lib/sync-data.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",
