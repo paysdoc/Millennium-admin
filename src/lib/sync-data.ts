@@ -1,11 +1,32 @@
+/**
+ * Supabase Data Sync Script
+ *
+ * Syncs tables and storage buckets from production to staging.
+ *
+ * OPTIONAL: To enable automatic table creation on staging, create this RPC function
+ * in Supabase SQL Editor on staging:
+ *
+ * ```sql
+ * CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
+ * RETURNS VOID AS $$
+ * BEGIN
+ *   EXECUTE sql_query;
+ * END;
+ * $$ LANGUAGE plpgsql SECURITY DEFINER;
+ * ```
+ *
+ * Without this function, the script will still work but will require manual table creation.
+ */
+
 import 'dotenv/config'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { isTableNotFoundError } from './schema'
 import { getProductionSupabaseClient, getStagingSupabaseClient } from './supabase'
+import { getCreateTableSQL } from './table-schemas'
 
 const TABLES_TO_SYNC = ['character', 'connection', 'game_players', 'games', 'profiles'] as const
 const EXCLUDED_TABLES = ['users'] as const
-const BUCKETS_TO_SYNC = ['character images'] as const
+const BUCKETS_TO_SYNC = ['character_images'] as const
 
 interface SyncResult {
   success: boolean
@@ -13,6 +34,27 @@ interface SyncResult {
   rowCount?: number
   fileCount?: number
   error?: string
+}
+
+interface SQLExecutionResult {
+  success: boolean
+  error?: string
+}
+
+/**
+ * Execute raw SQL on staging via the exec_sql RPC function.
+ * This is used to create tables that don't exist on staging.
+ *
+ * @param sql - The SQL statement to execute
+ * @param staging - The staging Supabase client
+ * @returns Result indicating success or failure with error message
+ */
+async function executeSQLOnStaging(sql: string, staging: SupabaseClient): Promise<SQLExecutionResult> {
+  const { error } = await staging.rpc('exec_sql', { sql_query: sql })
+  if (error) {
+    return { success: false, error: error.message }
+  }
+  return { success: true }
 }
 
 async function syncTable(
@@ -53,8 +95,32 @@ async function syncTable(
 
   if (insertError) {
     if (isTableNotFoundError(insertError)) {
-      console.error(`  Table ${tableName} does not exist in staging - cannot insert data`)
-      return { success: false, name: tableName, error: `Table does not exist in staging` }
+      console.log(`  Table ${tableName} does not exist in staging, attempting to create...`)
+
+      const createSQL = getCreateTableSQL(tableName)
+      if (!createSQL) {
+        console.error(`  No schema definition found for table ${tableName}`)
+        return { success: false, name: tableName, error: 'No schema definition available' }
+      }
+
+      const { success: created, error: createError } = await executeSQLOnStaging(createSQL, staging)
+      if (!created) {
+        console.error(`  Could not auto-create table. Please create manually in Supabase Dashboard.`)
+        console.error(`  Error: ${createError}`)
+        console.error(`  Required SQL:\n${createSQL}`)
+        return { success: false, name: tableName, error: `Table must be created manually: ${createError}` }
+      }
+
+      console.log(`  Created table ${tableName} on staging`)
+
+      const { error: retryError } = await staging.from(tableName).insert(rows)
+      if (retryError) {
+        console.error(`  Error inserting into staging after table creation: ${retryError.message}`)
+        return { success: false, name: tableName, error: retryError.message }
+      }
+
+      console.log(`  Successfully synced ${rows.length} rows`)
+      return { success: true, name: tableName, rowCount: rows.length }
     }
     console.error(`  Error inserting into staging: ${insertError.message}`)
     return { success: false, name: tableName, error: insertError.message }
@@ -70,6 +136,17 @@ async function syncBucket(
   staging: SupabaseClient
 ): Promise<SyncResult> {
   console.log(`\nSyncing bucket: ${bucketName}`)
+
+  const { error: bucketError } = await staging.storage.getBucket(bucketName)
+  if (bucketError) {
+    console.log(`  Bucket ${bucketName} does not exist in staging, creating...`)
+    const { error: createError } = await staging.storage.createBucket(bucketName, { public: true })
+    if (createError) {
+      console.error(`  Error creating bucket: ${createError.message}`)
+      return { success: false, name: bucketName, error: createError.message }
+    }
+    console.log(`  Created bucket ${bucketName} on staging`)
+  }
 
   const { data: files, error: listError } = await production.storage.from(bucketName).list()
 
