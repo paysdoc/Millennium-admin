@@ -27,8 +27,10 @@ jobs:
       - name: Run sync script
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPABASE_URL_STAGING: ${{ secrets.SUPABASE_URL_STAGING }}
+          SUPABASE_KEY_STAGING: ${{ secrets.SUPABASE_KEY_STAGING }}
           SUPABASE_SERVICE_KEY_STAGING: ${{ secrets.SUPABASE_SERVICE_KEY_STAGING }}
         run: npm run sync:data
 
