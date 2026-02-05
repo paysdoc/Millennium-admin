@@ -1,53 +1,90 @@
-# PR-Review: Remove PII Anonymization from Character and Connection Tables
+# PR-Review: Add Additional Tables to Sync Configuration
 
 ## PR-Review Description
-The PR review comment from paysdoc on `scripts/sync-config.ts` line 23 indicates that the `character` and `connection` tables do not contain PII data. These tables store historical data that is public knowledge, so the PII anonymization rules configured for these tables are unnecessary and should be removed. The sync script should copy this data as-is without any anonymization.
+The PR review on `scripts/sync-config.ts` contains two comments from paysdoc:
+
+1. **Line 23:** Confirms that `character` and `connection` tables do not have PII data - these are historical data that are public knowledge. This comment has already been addressed in the current implementation.
+
+2. **Line 43:** Requests adding three additional tables to the sync configuration:
+   - `game_players` - No PII, sync as-is
+   - `games` - No PII, sync as-is
+   - `profiles` - Contains PII data, requires anonymization
+
+The second comment requires implementation changes to add these three new tables to the `syncConfig.tablesToSync` array with appropriate PII handling.
 
 ## Summary of Original Implementation Plan
-The original implementation plan (`specs/issue-71-plan.md`) created a Supabase data sync system with the following key components:
+The original implementation plan created a Supabase data sync system with the following key components:
 - TypeScript sync script (`scripts/sync-supabase.ts`) to copy production data to staging
 - Configuration file (`scripts/sync-config.ts`) defining tables to sync with PII field mappings
 - PII anonymization logic for sensitive fields (names, text content)
 - GitHub Action for monthly automated synchronization
 - Explicit exclusion of the `users` table for privacy
 
-The plan configured PII anonymization for `character` (fields: `first_names`, `biography`) and `connection` (fields: `why`, `why_short`) tables. However, per the review, this anonymization is not needed since the data is historical public knowledge.
+The current implementation syncs `character` and `connection` tables (both with no PII fields) and excludes the `users` table. The architecture supports adding new tables with or without PII anonymization.
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `scripts/sync-config.ts` - Contains the table configurations with PII field mappings that need to be updated. The `characterTable` and `connectionTable` definitions need their PII fields removed.
-- `scripts/sync-types.ts` - Contains TypeScript types for sync configuration. May need to verify if `TableConfig` can support empty PII field mappings.
-- `scripts/sync-supabase.ts` - Main sync script that uses the configuration. Should already handle tables with no PII fields correctly, but verify behavior.
-- `scripts/__tests__/sync-supabase.test.ts` - Unit tests that may need updating if they test PII anonymization for character/connection fields.
+- `scripts/sync-config.ts` - Main configuration file where new table definitions need to be added. Must add `game_players`, `games`, and `profiles` table configurations.
+- `scripts/__tests__/sync-supabase.test.ts` - Unit tests that need to be updated to verify the new table configurations are properly set up.
+- `scripts/sync-supabase.ts` - Main sync script. No changes needed as it already handles tables with and without PII fields correctly.
+- `scripts/sync-types.ts` - Type definitions. No changes needed as existing types support the new configurations.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Update character table configuration
-- Modify `scripts/sync-config.ts` to remove PII field mappings from `characterTable`
-- Change `characterTable` to use an empty array for `piiFieldEntries`
-- Update the JSDoc comment above `characterTable` to reflect that this table contains public historical data
+### Step 1: Add game_players table configuration
+- In `scripts/sync-config.ts`, add a new table configuration for `game_players`
+- Use `createTableConfig('game_players', [])` since this table has no PII data
+- Add a JSDoc comment explaining this table contains game player relationship data
 
-### Step 2: Update connection table configuration
-- Modify `scripts/sync-config.ts` to remove PII field mappings from `connectionTable`
-- Change `connectionTable` to use an empty array for `piiFieldEntries`
-- Update the JSDoc comment above `connectionTable` to reflect that this table contains public historical data
+### Step 2: Add games table configuration
+- In `scripts/sync-config.ts`, add a new table configuration for `games`
+- Use `createTableConfig('games', [])` since this table has no PII data
+- Add a JSDoc comment explaining this table contains game data
 
-### Step 3: Verify sync script handles empty PII fields correctly
-- Read `scripts/sync-supabase.ts` to verify the anonymization logic handles tables with no PII fields
-- The script should simply copy data without transformation when `piiFields` map is empty
-- Make corrections if needed to handle the empty case
+### Step 3: Add profiles table configuration with PII anonymization
+- In `scripts/sync-config.ts`, add a new table configuration for `profiles`
+- Configure PII fields for anonymization. Based on typical profile tables, include:
+  - `username` field with 'name' anonymization rule
+  - `display_name` field with 'name' anonymization rule (if exists)
+  - `full_name` field with 'name' anonymization rule (if exists)
+  - `bio` field with 'text' anonymization rule (if exists)
+- Add a JSDoc comment explaining this table contains user profile data requiring PII anonymization
+- Note: The exact PII field names should be confirmed against the actual Supabase schema. If uncertain, start with common profile fields like `username`, `display_name`, `full_name`, and `bio`.
 
-### Step 4: Update unit tests
-- Update `scripts/__tests__/sync-supabase.test.ts` test "has PII field configuration for character table" (lines 237-245):
-  - Rename test to "has no PII fields for character table (public historical data)"
-  - Change assertions to verify `piiFields.size` equals 0 instead of checking for specific fields
-- Update test "has PII field configuration for connection table" (lines 247-255):
-  - Rename test to "has no PII fields for connection table (public historical data)"
-  - Change assertions to verify `piiFields.size` equals 0 instead of checking for specific fields
+### Step 4: Update tablesToSync array
+- In `scripts/sync-config.ts`, update the `tablesToSync` array to include all five tables:
+  - `characterTable`
+  - `connectionTable`
+  - `gamePlayersTable`
+  - `gamesTable`
+  - `profilesTable`
 
-### Step 5: Run validation commands
+### Step 5: Add unit tests for new table configurations
+- In `scripts/__tests__/sync-supabase.test.ts`, add tests for `game_players` table:
+  - Test that `syncConfig.tablesToSync` includes `game_players`
+  - Test that `game_players` has no PII fields (size 0)
+  - Test that `getTableConfig('game_players')` returns the correct config
+
+- Add tests for `games` table:
+  - Test that `syncConfig.tablesToSync` includes `games`
+  - Test that `games` has no PII fields (size 0)
+  - Test that `getTableConfig('games')` returns the correct config
+
+- Add tests for `profiles` table:
+  - Test that `syncConfig.tablesToSync` includes `profiles`
+  - Test that `profiles` has PII fields configured (size > 0)
+  - Test that PII fields include the expected field names with correct anonymization rules
+  - Test that `getTableConfig('profiles')` returns the correct config
+
+### Step 6: Update isTableAllowed tests
+- In `scripts/__tests__/sync-supabase.test.ts`, update the `isTableAllowed` test that checks non-excluded tables to include the new tables:
+  - `game_players`
+  - `games`
+  - `profiles`
+
+### Step 7: Run validation commands
 - Run all validation commands to ensure the changes are correct and introduce no regressions
 
 ## Validation Commands
@@ -58,7 +95,8 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `users` table remains excluded from sync as per original requirements - this is actual user data that should not be synced.
-- The sync script architecture remains unchanged; only the configuration data is being modified.
-- If future tables with actual PII are added, the same `createTableConfig` pattern can still be used with populated PII field mappings.
-- This change simplifies the sync process for character and connection tables by eliminating unnecessary anonymization overhead.
+- The `users` table remains excluded from sync as per original requirements - this is actual user authentication data that should never be synced.
+- The `profiles` table PII field configuration should be verified against the actual Supabase schema. Common profile fields like `username`, `display_name`, `full_name`, and `bio` are good starting points but may need adjustment based on the actual table structure.
+- The sync script architecture (pagination, batching, anonymization) remains unchanged - only configuration is being extended.
+- If the Supabase schema for `profiles` uses different field names, update Step 3 accordingly before implementation.
+- The existing anonymization functions (`anonymizeName` for names, `anonymizeText` for text content) support the `profiles` table PII requirements without modification.

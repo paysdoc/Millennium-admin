@@ -29,13 +29,42 @@ const characterTable = createTableConfig('character', [])
 const connectionTable = createTableConfig('connection', [])
 
 /**
+ * Game players table configuration.
+ * Contains game player relationship data - no PII anonymization needed.
+ */
+const gamePlayersTable = createTableConfig('game_players', [])
+
+/**
+ * Games table configuration.
+ * Contains game data - no PII anonymization needed.
+ */
+const gamesTable = createTableConfig('games', [])
+
+/**
+ * Profiles table configuration.
+ * Contains user profile data - requires PII anonymization.
+ */
+const profilesTable = createTableConfig('profiles', [
+  ['username', 'name'],
+  ['display_name', 'name'],
+  ['full_name', 'name'],
+  ['bio', 'text'],
+])
+
+/**
  * Main sync configuration.
  *
  * - tablesToSync: Tables that will be copied from production to staging
  * - excludedTables: Tables explicitly excluded from sync (e.g., users for privacy)
  */
 export const syncConfig: SyncConfig = {
-  tablesToSync: [characterTable, connectionTable],
+  tablesToSync: [
+    characterTable,
+    connectionTable,
+    gamePlayersTable,
+    gamesTable,
+    profilesTable,
+  ],
   excludedTables: ['users'],
 }
 

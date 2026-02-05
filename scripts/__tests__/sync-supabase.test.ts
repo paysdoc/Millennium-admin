@@ -268,6 +268,63 @@ describe('syncConfig', () => {
     expect(connectionConfig).toBeDefined()
     expect(connectionConfig!.piiFields.size).toBe(0)
   })
+
+  it('includes game_players table', () => {
+    const tableNames = syncConfig.tablesToSync.map((t) => t.name)
+
+    expect(tableNames).toContain('game_players')
+  })
+
+  it('has no PII fields for game_players table', () => {
+    const gamePlayersConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'game_players'
+    )
+
+    expect(gamePlayersConfig).toBeDefined()
+    expect(gamePlayersConfig!.piiFields.size).toBe(0)
+  })
+
+  it('includes games table', () => {
+    const tableNames = syncConfig.tablesToSync.map((t) => t.name)
+
+    expect(tableNames).toContain('games')
+  })
+
+  it('has no PII fields for games table', () => {
+    const gamesConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'games'
+    )
+
+    expect(gamesConfig).toBeDefined()
+    expect(gamesConfig!.piiFields.size).toBe(0)
+  })
+
+  it('includes profiles table', () => {
+    const tableNames = syncConfig.tablesToSync.map((t) => t.name)
+
+    expect(tableNames).toContain('profiles')
+  })
+
+  it('has PII fields configured for profiles table', () => {
+    const profilesConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'profiles'
+    )
+
+    expect(profilesConfig).toBeDefined()
+    expect(profilesConfig!.piiFields.size).toBeGreaterThan(0)
+  })
+
+  it('has correct PII field anonymization rules for profiles table', () => {
+    const profilesConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'profiles'
+    )
+
+    expect(profilesConfig).toBeDefined()
+    expect(profilesConfig!.piiFields.get('username')).toBe('name')
+    expect(profilesConfig!.piiFields.get('display_name')).toBe('name')
+    expect(profilesConfig!.piiFields.get('full_name')).toBe('name')
+    expect(profilesConfig!.piiFields.get('bio')).toBe('text')
+  })
 })
 
 describe('isTableAllowed', () => {
@@ -278,6 +335,9 @@ describe('isTableAllowed', () => {
   it('returns true for non-excluded tables', () => {
     expect(isTableAllowed('character')).toBe(true)
     expect(isTableAllowed('connection')).toBe(true)
+    expect(isTableAllowed('game_players')).toBe(true)
+    expect(isTableAllowed('games')).toBe(true)
+    expect(isTableAllowed('profiles')).toBe(true)
   })
 
   it('returns true for unknown tables', () => {
@@ -298,6 +358,27 @@ describe('getTableConfig', () => {
 
     expect(config).toBeDefined()
     expect(config!.name).toBe('connection')
+  })
+
+  it('returns config for game_players table', () => {
+    const config = getTableConfig('game_players')
+
+    expect(config).toBeDefined()
+    expect(config!.name).toBe('game_players')
+  })
+
+  it('returns config for games table', () => {
+    const config = getTableConfig('games')
+
+    expect(config).toBeDefined()
+    expect(config!.name).toBe('games')
+  })
+
+  it('returns config for profiles table', () => {
+    const config = getTableConfig('profiles')
+
+    expect(config).toBeDefined()
+    expect(config!.name).toBe('profiles')
   })
 
   it('returns undefined for unknown tables', () => {
