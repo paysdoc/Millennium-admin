@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let stagingClient: SupabaseClient | null = null
+let stagingServiceClient: SupabaseClient | null = null
 let productionClient: SupabaseClient | null = null
 
 export function getSupabaseClient(): SupabaseClient {
@@ -21,6 +22,22 @@ export function getStagingSupabaseClient(): SupabaseClient {
 
   stagingClient = createClient(supabaseUrl, supabaseKey)
   return stagingClient
+}
+
+export function getStagingServiceClient(): SupabaseClient {
+  if (stagingServiceClient) {
+    return stagingServiceClient
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL_STAGING
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY_STAGING
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing staging Supabase service environment variables (SUPABASE_URL_STAGING, SUPABASE_SERVICE_KEY_STAGING)')
+  }
+
+  stagingServiceClient = createClient(supabaseUrl, supabaseServiceKey)
+  return stagingServiceClient
 }
 
 export function getProductionSupabaseClient(): SupabaseClient {

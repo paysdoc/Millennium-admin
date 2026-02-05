@@ -1,130 +1,88 @@
-# Bug: Database Sync Fails in GitHub Actions
+# PR-Review: Database Sync Type Mismatch and RLS Policy Errors
 
-## Bug Description
-The database sync script (`npm run sync:data`) fails during GitHub Actions execution with multiple errors:
-1. Tables fail to sync because the `exec_sql` RPC function cannot be found in the schema cache
-2. Storage bucket creation fails with "The resource already exists" error
+## PR-Review Description
+The PR review reports that the database sync script (`npm run sync:data`) is still failing with three distinct errors after the initial implementation attempt:
 
-The script attempts to copy production Supabase data to staging but fails to auto-create tables and mishandles bucket existence checks.
+1. **Type mismatch errors for `character` and `connection` tables**: `invalid input syntax for type bigint: ""`
+2. **Type mismatch error for `profiles` table**: `invalid input syntax for type uuid: ""`
+3. **RLS policy violation for `character_images` bucket**: `new row violates row-level security policy`
 
-**Actual behavior:**
-- Tables fail with: "Could not find the function public.exec_sql(sql_query) in the schema cache"
-- Bucket fails with: "The resource already exists"
-- Sync summary: 2 tables successful, 3 failed; 0 buckets successful, 1 failed
+These errors occur during the "clear staging table" phase and bucket creation phase respectively. The root cause is that the delete filter `.neq('id', '')` compares the `id` column to an empty string, which fails for bigint and uuid column types. Additionally, bucket creation fails because the staging client uses an anon key that doesn't have permission to create buckets when RLS is enabled.
 
-**Expected behavior:**
-- All configured tables should sync successfully from production to staging
-- Storage buckets should sync without errors
-- The script should handle missing tables gracefully
+## Summary of Original Implementation Plan
+The original implementation plan (issue #79) addressed three issues:
+1. **Supabase client configuration bug**: Updated `getStagingSupabaseClient()` to use `SUPABASE_URL_STAGING` and `SUPABASE_KEY_STAGING` instead of production variables
+2. **exec_sql RPC dependency**: Removed the `exec_sql` RPC function dependency and implemented graceful failure for missing tables
+3. **Bucket existence check logic**: Added `isBucketNotFoundError()` and `isBucketAlreadyExistsError()` helper functions for proper error handling
 
-## Problem Statement
-The `src/lib/sync-data.ts` script has three critical issues:
-1. **Wrong Supabase client configuration**: `src/lib/supabase.ts` configures both `getStagingSupabaseClient()` and `getProductionSupabaseClient()` to use the same environment variables (`SUPABASE_URL` and `SUPABASE_KEY`), causing both to point to the same database instead of separate production and staging environments.
-2. **Missing RPC function dependency**: The script relies on a custom `exec_sql` RPC function that must be manually created in the staging Supabase database. This function doesn't exist by default.
-3. **Flawed bucket existence check**: The `syncBucket` function assumes any error from `getBucket()` means the bucket doesn't exist. When the bucket exists but there's a different error, the script incorrectly tries to create it and fails with "already exists".
-
-## Solution Statement
-Fix the three root causes:
-1. Update `src/lib/supabase.ts` to use the correct staging environment variables (`SUPABASE_URL_STAGING` and `SUPABASE_KEY_STAGING`) for the staging client
-2. Remove the `exec_sql` RPC function dependency by implementing proper error handling - if tables don't exist, log the required SQL and fail gracefully without attempting auto-creation (which requires admin privileges)
-3. Fix the bucket existence check to properly distinguish between "bucket not found" errors and other errors, and handle "already exists" errors as success cases
-
-## Steps to Reproduce
-1. Set up environment variables for production and staging Supabase instances
-2. Run `npm run sync:data` via GitHub Actions workflow
-3. Observe the sync failures in the logs:
-   - Tables fail with `exec_sql` function not found
-   - Bucket creation fails with "already exists"
-
-## Root Cause Analysis
-
-### Issue 1: Supabase Client Configuration Bug
-In `src/lib/supabase.ts`:
-- `getStagingSupabaseClient()` (lines 10-24) uses `SUPABASE_URL` and `SUPABASE_KEY`
-- `getProductionSupabaseClient()` (lines 26-40) ALSO uses `SUPABASE_URL` and `SUPABASE_KEY`
-- Both functions return clients connected to the same database
-
-The staging client should use `SUPABASE_URL_STAGING` and `SUPABASE_KEY_STAGING` as defined in the workflow environment variables.
-
-### Issue 2: exec_sql RPC Function Dependency
-In `src/lib/sync-data.ts`:
-- `executeSQLOnStaging()` (lines 52-58) calls `staging.rpc('exec_sql', { sql_query: sql })`
-- This custom function requires manual creation via Supabase SQL Editor
-- Without it, auto-creating tables fails entirely
-- The script should not rely on RPC functions that may not exist
-
-### Issue 3: Bucket Existence Check Logic
-In `src/lib/sync-data.ts`, `syncBucket()` (lines 140-148):
-```typescript
-const { error: bucketError } = await staging.storage.getBucket(bucketName)
-if (bucketError) {
-  // Assumes ANY error means bucket doesn't exist
-  const { error: createError } = await staging.storage.createBucket(...)
-}
-```
-This logic is flawed because:
-- `getBucket()` can return errors for many reasons (permissions, API issues, etc.)
-- If the bucket exists but `getBucket()` fails, `createBucket()` will fail with "already exists"
-- The solution should check the specific error type before attempting creation
+The client configuration fix was successful, but the table clearing logic introduced a new bug (`.neq('id', '')`) and the bucket creation still fails due to RLS policy requiring a service role key.
 
 ## Relevant Files
-Use these files to fix the bug:
+Use these files to resolve the review:
 
-- `src/lib/supabase.ts` - Contains Supabase client factory functions. Bug: staging client uses wrong environment variables.
-- `src/lib/sync-data.ts` - Main sync script. Contains table sync logic with `exec_sql` dependency and flawed bucket existence check.
-- `src/lib/schema.ts` - Contains `isTableNotFoundError()` helper for error detection.
-- `src/lib/table-schemas.ts` - Contains table SQL schemas for reference (not directly modified).
-- `.github/workflows/sync-supabase.yml` - Defines environment variables passed to the sync script.
+- `src/lib/sync-data.ts` - Contains the sync logic with the flawed `.neq('id', '')` delete filter on line 51. This file needs to be updated to use the service role client for operations that require elevated permissions.
+- `src/lib/supabase.ts` - Contains Supabase client factory functions. Needs a new `getStagingServiceClient()` function that uses the service role key to bypass RLS.
+- `src/lib/schema.ts` - Contains error detection helper functions. May need additional helpers for RLS-related errors.
+- `.github/workflows/sync-supabase.yml` - Reference file showing that `SUPABASE_SERVICE_KEY_STAGING` is already available as an environment variable.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### 1. Fix Supabase Client Configuration
-- Edit `src/lib/supabase.ts` to update `getStagingSupabaseClient()`:
-  - Change from using `SUPABASE_URL` and `SUPABASE_KEY`
-  - To using `SUPABASE_URL_STAGING` and `SUPABASE_KEY_STAGING`
-- Update the error message to reflect the correct variable names
+### 1. Add Service Role Client to supabase.ts
+- Edit `src/lib/supabase.ts` to add a new `getStagingServiceClient()` function
+- This function should use `SUPABASE_SERVICE_KEY_STAGING` environment variable instead of `SUPABASE_KEY_STAGING`
+- The service role key bypasses RLS and is required for admin operations like:
+  - Deleting all rows from tables (clearing before sync)
+  - Creating storage buckets
+- Export the new function for use in sync-data.ts
 
-### 2. Remove exec_sql RPC Dependency
-- Edit `src/lib/sync-data.ts` to remove the `executeSQLOnStaging()` function
-- Modify `syncTable()` to handle missing tables without attempting auto-creation:
-  - When a table doesn't exist in staging, log the required SQL from `getCreateTableSQL()`
-  - Return a failure result with a clear message that the table must be created manually
-  - Remove the retry logic that depends on `exec_sql`
-- Remove the `SQLExecutionResult` interface that's no longer needed
-- Update the comment block at the top of the file to remove references to `exec_sql`
+### 2. Fix Table Clearing Logic in sync-data.ts
+- Edit `src/lib/sync-data.ts` to import `getStagingServiceClient` from supabase.ts
+- Replace the flawed delete filter on line 51:
+  - Current: `.delete().neq('id', '')`
+  - Issue: Compares id (bigint/uuid) to empty string, which fails type checking
+  - Fix: Use the service role client for delete operations which bypasses RLS
+  - Alternative filter: Use `.not('id', 'is', null)` which works for all column types
+- The service role client should be used for the `delete()` operation to ensure it works regardless of RLS policies
 
-### 3. Fix Bucket Existence Check
-- Edit `src/lib/sync-data.ts` `syncBucket()` function to improve bucket handling:
-  - Add a helper function to check if an error indicates "bucket not found"
-  - Only attempt to create the bucket if the error specifically indicates it doesn't exist
-  - Handle "already exists" errors during bucket creation as success (bucket exists, continue syncing)
-  - For other `getBucket()` errors, report them and continue trying to sync files
+### 3. Fix Bucket Creation to Use Service Role Client
+- Edit `src/lib/sync-data.ts` to use `getStagingServiceClient()` for storage operations
+- The bucket creation on line 97 fails because the anon key doesn't have permission to insert into `storage.buckets` when RLS is enabled
+- Pass the service role client to `syncBucket()` or create a separate service client instance for storage operations
+- This will allow bucket creation to bypass RLS policies
 
-### 4. Add Missing Error Detection Helper
-- Edit `src/lib/schema.ts` to add a new helper function `isBucketNotFoundError()`:
-  - Check for "Bucket not found" or similar error messages
-  - Export the function for use in `sync-data.ts`
+### 4. Update syncTable Function Signature
+- Modify the `syncTable()` function to accept a separate service client for admin operations
+- Use the service client for delete operations (clearing existing data)
+- Use the regular staging client for insert operations (which may have RLS policies that should be respected)
+- This separation allows for proper permission handling
 
-### 5. Update Tests
-- Edit `scripts/__tests__/sync-supabase.test.ts` if any tests rely on removed functionality
-- Ensure all existing tests pass with the changes
+### 5. Update syncBucket Function Signature
+- Modify the `syncBucket()` function to accept a service client for admin operations
+- Use the service client for bucket creation and file deletion
+- Use the regular staging client for file uploads (to respect RLS on file uploads if any)
 
-### 6. Run Validation Commands
+### 6. Update main() Function to Create Service Client
+- Edit the `main()` function in `sync-data.ts`
+- Add `SUPABASE_SERVICE_KEY_STAGING` to the required environment variables check
+- Create both the regular staging client and service client
+- Pass both clients to sync functions as needed
+
+### 7. Run Validation Commands
 - Run `npm run lint` to ensure no linting errors
 - Run `npm run build` to verify no build errors
 - Run `npm test` to validate all tests pass
 
 ## Validation Commands
-Execute every command to validate the bug is fixed with zero regressions.
+Execute every command to validate the review is complete with zero regressions.
 
 - `npm run lint` - Run linter to check for code quality issues
 - `npm run build` - Build the application to verify no build errors
-- `npm test` - Run tests to validate the bug is fixed with zero regressions
+- `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The staging Supabase database must have tables manually created before running sync. The SQL statements are available in `src/lib/table-schemas.ts`.
-- The GitHub Actions workflow already passes the correct environment variables (`SUPABASE_URL_STAGING`, `SUPABASE_KEY_STAGING`, `SUPABASE_SERVICE_KEY_STAGING`). The bug is in the code not using them.
-- Storage buckets must also exist in staging before running sync. The script will now handle existing buckets gracefully.
-- After this fix, if tables don't exist in staging, the script will log the required SQL and fail gracefully instead of attempting auto-creation that requires admin privileges.
-- Consider future enhancement: Use Supabase migrations to manage staging schema instead of relying on manual table creation.
+- The `SUPABASE_SERVICE_KEY_STAGING` environment variable is already defined in the GitHub Actions workflow (`.github/workflows/sync-supabase.yml` line 34), so no workflow changes are needed
+- Service role keys bypass Row-Level Security (RLS), so they should only be used for necessary admin operations
+- For data insertion, the regular anon key should still be used to ensure any RLS policies on data creation are respected
+- The type mismatch error occurs because PostgreSQL cannot compare a bigint or uuid column to an empty string literal - this is a database-level type validation error
+- Consider adding a unit test for the delete filter to prevent regression

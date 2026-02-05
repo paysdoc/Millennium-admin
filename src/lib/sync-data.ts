@@ -12,7 +12,7 @@
 import 'dotenv/config'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { isBucketAlreadyExistsError, isBucketNotFoundError, isTableNotFoundError } from './schema'
-import { getProductionSupabaseClient, getStagingSupabaseClient } from './supabase'
+import { getProductionSupabaseClient, getStagingServiceClient, getStagingSupabaseClient } from './supabase'
 import { getCreateTableSQL } from './table-schemas'
 
 const TABLES_TO_SYNC = ['character', 'connection', 'game_players', 'games', 'profiles'] as const
@@ -30,7 +30,8 @@ interface SyncResult {
 async function syncTable(
   tableName: string,
   production: SupabaseClient,
-  staging: SupabaseClient
+  staging: SupabaseClient,
+  stagingService: SupabaseClient
 ): Promise<SyncResult> {
   console.log(`\nSyncing table: ${tableName}`)
 
@@ -48,7 +49,7 @@ async function syncTable(
     return { success: true, name: tableName, rowCount: 0 }
   }
 
-  const { error: clearError } = await staging.from(tableName).delete().neq('id', '')
+  const { error: clearError } = await stagingService.from(tableName).delete().not('id', 'is', null)
 
   if (clearError) {
     if (isTableNotFoundError(clearError)) {
@@ -86,15 +87,16 @@ async function syncTable(
 async function syncBucket(
   bucketName: string,
   production: SupabaseClient,
-  staging: SupabaseClient
+  staging: SupabaseClient,
+  stagingService: SupabaseClient
 ): Promise<SyncResult> {
   console.log(`\nSyncing bucket: ${bucketName}`)
 
-  const { error: bucketError } = await staging.storage.getBucket(bucketName)
+  const { error: bucketError } = await stagingService.storage.getBucket(bucketName)
   if (bucketError) {
     if (isBucketNotFoundError(bucketError)) {
       console.log(`  Bucket ${bucketName} does not exist in staging, creating...`)
-      const { error: createError } = await staging.storage.createBucket(bucketName, { public: true })
+      const { error: createError } = await stagingService.storage.createBucket(bucketName, { public: true })
       if (createError) {
         if (isBucketAlreadyExistsError(createError)) {
           console.log(`  Bucket ${bucketName} already exists in staging, continuing...`)
@@ -125,10 +127,10 @@ async function syncBucket(
     return { success: true, name: bucketName, fileCount: 0 }
   }
 
-  const { data: existingFiles } = await staging.storage.from(bucketName).list()
+  const { data: existingFiles } = await stagingService.storage.from(bucketName).list()
   if (existingFiles && existingFiles.length > 0) {
     const filePaths = existingFiles.map((f) => f.name)
-    await staging.storage.from(bucketName).remove(filePaths)
+    await stagingService.storage.from(bucketName).remove(filePaths)
     console.log(`  Cleared ${filePaths.length} existing files from staging`)
   }
 
@@ -160,7 +162,7 @@ async function syncBucket(
 }
 
 async function main(): Promise<void> {
-  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_URL_STAGING', 'SUPABASE_KEY_STAGING']
+  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_URL_STAGING', 'SUPABASE_KEY_STAGING', 'SUPABASE_SERVICE_KEY_STAGING']
   const missingVars = requiredVars.filter((v) => !process.env[v])
 
   if (missingVars.length > 0) {
@@ -174,16 +176,17 @@ async function main(): Promise<void> {
 
   const production = getProductionSupabaseClient()
   const staging = getStagingSupabaseClient()
+  const stagingService = getStagingServiceClient()
 
   const tableResults: SyncResult[] = []
   for (const table of TABLES_TO_SYNC) {
-    const result = await syncTable(table, production, staging)
+    const result = await syncTable(table, production, staging, stagingService)
     tableResults.push(result)
   }
 
   const bucketResults: SyncResult[] = []
   for (const bucket of BUCKETS_TO_SYNC) {
-    const result = await syncBucket(bucket, production, staging)
+    const result = await syncBucket(bucket, production, staging, stagingService)
     bucketResults.push(result)
   }
 
