@@ -12,11 +12,11 @@ export function getStagingSupabaseClient(): SupabaseClient {
     return stagingClient
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL_STAGING
-  const supabaseKey = process.env.SUPABASE_KEY_STAGING
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing staging Supabase environment variables (SUPABASE_URL_STAGING, SUPABASE_KEY_STAGING)')
+    throw new Error('Missing staging Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)')
   }
 
   stagingClient = createClient(supabaseUrl, supabaseKey)

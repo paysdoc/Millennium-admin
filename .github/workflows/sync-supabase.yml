@@ -30,7 +30,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPABASE_URL_STAGING: ${{ secrets.SUPABASE_URL_STAGING }}
           SUPABASE_SERVICE_KEY_STAGING: ${{ secrets.SUPABASE_SERVICE_KEY_STAGING }}
-        run: npm run sync:supabase
+        run: npm run sync:data
 
       - name: Create issue on failure
         if: failure()
