@@ -856,7 +856,7 @@ branch refs/heads/feature/issue-51
       .mockReturnValueOnce('') // git add -A
       .mockReturnValueOnce('') // git commit
       .mockReturnValueOnce('') // git push
-      .mockReturnValueOnce(''); // git checkout main
+      .mockReturnValueOnce(''); // git checkout main && git pull
 
     freeBranchFromMainRepo('feature/issue-51');
 
@@ -878,7 +878,7 @@ branch refs/heads/feature/issue-51
     vi.mocked(execSync)
       .mockReturnValueOnce(worktreeListOutput) // getMainRepoPath
       .mockReturnValueOnce('') // git status --porcelain (no changes)
-      .mockReturnValueOnce(''); // git checkout main
+      .mockReturnValueOnce(''); // git checkout main && git pull
 
     freeBranchFromMainRepo('feature/issue-51');
 
@@ -901,7 +901,7 @@ branch refs/heads/feature/issue-51
       .mockImplementationOnce(() => {
         throw new Error('push failed');
       }) // git push fails
-      .mockReturnValueOnce(''); // git checkout main
+      .mockReturnValueOnce(''); // git checkout main && git pull
 
     // Should not throw
     freeBranchFromMainRepo('feature/issue-51');
