@@ -18,21 +18,15 @@ const createTableConfig = (
 
 /**
  * Character table configuration.
- * PII fields: first_names (personal names), biography (may contain personal info)
+ * Contains historical public data - no PII anonymization needed.
  */
-const characterTable = createTableConfig('character', [
-  ['first_names', 'name'],
-  ['biography', 'text'],
-])
+const characterTable = createTableConfig('character', [])
 
 /**
  * Connection table configuration.
- * PII fields: why and why_short may contain personal information about relationships
+ * Contains historical public data - no PII anonymization needed.
  */
-const connectionTable = createTableConfig('connection', [
-  ['why', 'text'],
-  ['why_short', 'text'],
-])
+const connectionTable = createTableConfig('connection', [])
 
 /**
  * Main sync configuration.

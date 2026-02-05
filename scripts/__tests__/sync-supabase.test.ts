@@ -215,6 +215,23 @@ describe('anonymizeRecord', () => {
     expect(result.name_field).toBeNull()
     expect(result.text_field).toBeNull()
   })
+
+  it('copies all fields unchanged when table has no PII fields', () => {
+    const noPiiConfig: TableConfig = {
+      name: 'public_table',
+      piiFields: new Map(),
+    }
+    const record = {
+      id: '123',
+      first_names: 'John Doe',
+      biography: 'Some text content',
+      other_field: 42,
+    }
+
+    const result = anonymizeRecord(record, noPiiConfig)
+
+    expect(result).toEqual(record)
+  })
 })
 
 describe('syncConfig', () => {
@@ -234,24 +251,22 @@ describe('syncConfig', () => {
     expect(syncConfig.excludedTables).toContain('users')
   })
 
-  it('has PII field configuration for character table', () => {
+  it('has no PII fields for character table (public historical data)', () => {
     const characterConfig = syncConfig.tablesToSync.find(
       (t) => t.name === 'character'
     )
 
     expect(characterConfig).toBeDefined()
-    expect(characterConfig!.piiFields.has('first_names')).toBe(true)
-    expect(characterConfig!.piiFields.has('biography')).toBe(true)
+    expect(characterConfig!.piiFields.size).toBe(0)
   })
 
-  it('has PII field configuration for connection table', () => {
+  it('has no PII fields for connection table (public historical data)', () => {
     const connectionConfig = syncConfig.tablesToSync.find(
       (t) => t.name === 'connection'
     )
 
     expect(connectionConfig).toBeDefined()
-    expect(connectionConfig!.piiFields.has('why')).toBe(true)
-    expect(connectionConfig!.piiFields.has('why_short')).toBe(true)
+    expect(connectionConfig!.piiFields.size).toBe(0)
   })
 })
 
