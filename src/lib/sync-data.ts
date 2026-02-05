@@ -197,7 +197,7 @@ async function syncBucket(
 }
 
 async function main(): Promise<void> {
-  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_PROD_URL', 'SUPABASE_PROD_KEY']
+  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_URL_STAGING', 'SUPABASE_KEY_STAGING']
   const missingVars = requiredVars.filter((v) => !process.env[v])
 
   if (missingVars.length > 0) {

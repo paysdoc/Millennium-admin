@@ -1,200 +1,93 @@
-# PR-Review: Fix Bucket Name and Auto-Create Missing Tables/Buckets on Staging
+# PR-Review: Fix Environment Variable Naming Conflict with Develop Branch
 
 ## PR-Review Description
-The PR review identified two critical issues with the current Supabase sync implementation:
+The PR review identified a critical conflict in `.env.sample` between this branch and the develop branch regarding Supabase environment variable naming conventions:
 
-1. **Incorrect bucket name**: The `BUCKETS_TO_SYNC` constant uses `'character images'` (with a space), but the actual production bucket is named `'character_images'` (with an underscore). This causes the bucket sync to fail.
+**Current Branch (incorrect):**
+- `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY` = Staging (target)
+- `SUPABASE_PROD_URL`, `SUPABASE_PROD_KEY` = Production (source)
 
-2. **Missing auto-creation of tables/buckets**: When tables or buckets don't exist on staging, the sync script currently fails. The expected behavior is that the sync script should automatically create missing tables and buckets on staging based on the production schema, then sync the data.
+**Develop Branch (correct convention):**
+- `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY` = Production (source for sync, main app database)
+- `SUPABASE_URL_STAGING`, `SUPABASE_KEY_STAGING`, `SUPABASE_SERVICE_KEY_STAGING` = Staging (destination)
+
+The reviewer states that `SUPABASE_URL`, `SUPABASE_KEY` and `SUPABASE_SERVICE_KEY` are for **production** and should remain so. For staging, the variables should be suffixed with `_STAGING`. The code must be updated to align with this convention.
 
 ## Summary of Original Implementation Plan
-The original plan addressed the "table not found" error by:
-1. Using `isTableNotFoundError` utility to detect missing tables
-2. Skipping the clear step when a table doesn't exist
-3. Adding proper logging
+The original plan for issue #73 addressed:
+1. Fix bucket name typo from `'character images'` to `'character_images'`
+2. Create `table-schemas.ts` with CREATE TABLE statements for auto-creation
+3. Add `executeSQLOnStaging()` helper for executing SQL via RPC
+4. Update `syncTable` to auto-create missing tables
+5. Add bucket auto-creation to `syncBucket` function
+6. Update `.env.sample` with service role documentation
 
-However, the original plan did not address:
-- The incorrect bucket name (`'character images'` vs `'character_images'`)
-- Automatically creating missing tables on staging
-- Automatically creating missing buckets on staging
+The issue: The plan incorrectly swapped the meaning of environment variables, treating `SUPABASE_URL` as staging instead of production.
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `src/lib/sync-data.ts` - The main sync script that needs to be updated:
-  - Fix the bucket name from `'character images'` to `'character_images'`
-  - Add logic to create missing buckets on staging before syncing files
-  - Add logic to create missing tables on staging before syncing data
-- `src/lib/supabase.ts` - Contains Supabase client initialization. May need service role key for admin operations.
-- `src/lib/schema.ts` - Contains `isTableNotFoundError` utility for error detection.
-- `.env.sample` - Document service role key requirements for table/bucket creation.
+- `.env.sample` - Must be reverted to use develop branch convention:
+  - `SUPABASE_URL/KEY/SERVICE_KEY` = production
+  - `SUPABASE_URL_STAGING/KEY_STAGING/SERVICE_KEY_STAGING` = staging
+- `src/lib/supabase.ts` - Must update environment variable references:
+  - `getStagingSupabaseClient()` should use `SUPABASE_URL_STAGING`, `SUPABASE_KEY_STAGING`
+  - `getProductionSupabaseClient()` should use `SUPABASE_URL`, `SUPABASE_KEY`
+- `src/lib/sync-data.ts` - Must update the `requiredVars` array to check for correct variable names
 
-### New Files
-- `src/lib/table-schemas.ts` - SQL CREATE TABLE statements for all synced tables, allowing schema creation on staging.
+### Files NOT Requiring Changes
+- `src/__tests__/sync-data.test.ts` - Only tests `isTableNotFoundError` function, no environment variable references
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Fix the bucket name typo
-Update `src/lib/sync-data.ts` to correct the bucket name:
-- Change `BUCKETS_TO_SYNC` from `['character images']` to `['character_images']`
-- This is a one-line fix at line 8
+### Step 1: Update `.env.sample` to match develop branch convention
+Revert the environment variable naming to match the develop branch convention:
 
-### Step 2: Create table-schemas.ts with CREATE TABLE statements
-Create `src/lib/table-schemas.ts` containing SQL schemas for all tables:
-- Define `TABLE_SCHEMAS` as a `Record<string, string>` mapping table names to CREATE TABLE SQL
-- Include schemas for: `character`, `connection`, `game_players`, `games`, `profiles`
-- Base schemas on existing TypeScript interfaces in `src/types/`
-- Export `getCreateTableSQL(tableName: string): string | undefined`
+- Replace the current staging/production sections with:
+  ```
+  # Production Supabase (source for sync)
+  SUPABASE_URL=https://gownillwfbtrbnkrvrxi.supabase.co
+  SUPABASE_KEY=
+  SUPABASE_SERVICE_KEY=
 
-Example structure:
-```typescript
-export const TABLE_SCHEMAS: Record<string, string> = {
-  character: `
-    CREATE TABLE IF NOT EXISTS public.character (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT NOT NULL,
-      first_names TEXT,
-      birth_date TEXT,
-      death_date TEXT,
-      biography TEXT,
-      type TEXT NOT NULL,
-      link TEXT,
-      image_link TEXT
-    );
-  `,
-  connection: `
-    CREATE TABLE IF NOT EXISTS public.connection (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      char1_id UUID NOT NULL REFERENCES public.character(id),
-      char2_id UUID NOT NULL REFERENCES public.character(id),
-      value INTEGER,
-      why TEXT,
-      why_short TEXT,
-      active BOOLEAN DEFAULT true
-    );
-  `,
-  // ... schemas for game_players, games, profiles
-}
+  # Staging Supabase (destination for sync)
+  # NOTE: Use SERVICE ROLE key (not anon key) for full sync functionality.
+  # The service role key is required for:
+  #   - Bucket creation and management
+  #   - Table creation via exec_sql RPC (if configured)
+  # The anon key will work for data sync only.
+  SUPABASE_URL_STAGING=https://hdyqdnnwhvhmvsdqvkpu.supabase.co
+  SUPABASE_KEY_STAGING=
+  SUPABASE_SERVICE_KEY_STAGING=
+  ```
 
-export function getCreateTableSQL(tableName: string): string | undefined {
-  return TABLE_SCHEMAS[tableName]
-}
-```
+### Step 2: Update `src/lib/supabase.ts` to use correct variable names
+Update the Supabase client functions to use the correct environment variable names:
 
-### Step 3: Add RPC function check and SQL execution helper
-Add a helper function to `src/lib/sync-data.ts` to execute raw SQL via Supabase RPC:
-- Check if an `exec_sql` RPC function exists on staging
-- If it exists, use it to execute CREATE TABLE statements
-- If not, log a warning and provide manual instructions
+**For `getStagingSupabaseClient()`:**
+- Change `process.env.SUPABASE_URL` → `process.env.SUPABASE_URL_STAGING`
+- Change `process.env.SUPABASE_KEY` → `process.env.SUPABASE_KEY_STAGING`
+- Update the error message to reference `SUPABASE_URL_STAGING, SUPABASE_KEY_STAGING`
 
-```typescript
-async function executeSQLOnStaging(
-  sql: string,
-  staging: SupabaseClient
-): Promise<{ success: boolean; error?: string }> {
-  const { error } = await staging.rpc('exec_sql', { sql_query: sql })
-  if (error) {
-    // RPC function doesn't exist or execution failed
-    return { success: false, error: error.message }
-  }
-  return { success: true }
-}
-```
+**For `getProductionSupabaseClient()`:**
+- Change `process.env.SUPABASE_PROD_URL` → `process.env.SUPABASE_URL`
+- Change `process.env.SUPABASE_PROD_KEY` → `process.env.SUPABASE_KEY`
+- Update the error message to reference `SUPABASE_URL, SUPABASE_KEY`
 
-### Step 4: Update syncTable to create missing tables
-Update the `syncTable` function in `src/lib/sync-data.ts`:
-- Import `getCreateTableSQL` from `./table-schemas`
-- When insert fails due to table not found:
-  1. Get the CREATE TABLE SQL from `getCreateTableSQL(tableName)`
-  2. Attempt to execute the SQL via `executeSQLOnStaging()`
-  3. If successful, retry the insert
-  4. If RPC fails, log clear instructions for manual table creation
+### Step 3: Update `src/lib/sync-data.ts` environment variable check
+Update the `requiredVars` array in the `main()` function:
 
-```typescript
-if (insertError && isTableNotFoundError(insertError)) {
-  console.log(`  Table ${tableName} does not exist in staging, attempting to create...`)
+- Change from:
+  ```typescript
+  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_PROD_URL', 'SUPABASE_PROD_KEY']
+  ```
+- To:
+  ```typescript
+  const requiredVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'SUPABASE_URL_STAGING', 'SUPABASE_KEY_STAGING']
+  ```
 
-  const createSQL = getCreateTableSQL(tableName)
-  if (!createSQL) {
-    console.error(`  No schema definition found for table ${tableName}`)
-    return { success: false, name: tableName, error: 'No schema definition available' }
-  }
-
-  const { success: created, error: createError } = await executeSQLOnStaging(createSQL, staging)
-  if (!created) {
-    console.error(`  Could not auto-create table. Please create manually in Supabase Dashboard.`)
-    console.error(`  Required SQL:\n${createSQL}`)
-    return { success: false, name: tableName, error: `Table must be created manually: ${createError}` }
-  }
-
-  console.log(`  Created table ${tableName} on staging`)
-  // Retry insert after table creation
-  const { error: retryError } = await staging.from(tableName).insert(rows)
-  if (retryError) {
-    return { success: false, name: tableName, error: retryError.message }
-  }
-  console.log(`  Successfully synced ${rows.length} rows`)
-  return { success: true, name: tableName, rowCount: rows.length }
-}
-```
-
-### Step 5: Add bucket auto-creation to syncBucket function
-Update the `syncBucket` function in `src/lib/sync-data.ts`:
-- Before syncing, check if bucket exists on staging using `getBucket()`
-- If bucket doesn't exist, create it using `createBucket()`
-- Handle creation errors appropriately
-
-```typescript
-// At the start of syncBucket, before listing production files:
-const { error: bucketCheckError } = await staging.storage.getBucket(bucketName)
-if (bucketCheckError) {
-  console.log(`  Bucket ${bucketName} does not exist in staging, creating...`)
-  const { error: createError } = await staging.storage.createBucket(bucketName, { public: true })
-  if (createError) {
-    console.error(`  Error creating bucket: ${createError.message}`)
-    return { success: false, name: bucketName, error: `Failed to create bucket: ${createError.message}` }
-  }
-  console.log(`  Created bucket ${bucketName} on staging`)
-}
-```
-
-### Step 6: Update .env.sample with service role documentation
-Update `.env.sample`:
-- Add comments explaining that service role keys are required for:
-  - Bucket creation on staging
-  - Table creation via RPC (if using exec_sql function)
-- Document that anon keys will fail for these admin operations
-
-```
-# Staging Supabase credentials
-# NOTE: Use SERVICE ROLE key (not anon key) for sync script to work
-# The service role key is required for bucket creation and table management
-SUPABASE_URL=your_staging_supabase_url
-SUPABASE_KEY=your_staging_service_role_key
-
-# Production Supabase credentials
-# NOTE: Use SERVICE ROLE key for reading all data
-SUPABASE_PROD_URL=your_production_supabase_url
-SUPABASE_PROD_KEY=your_production_service_role_key
-```
-
-### Step 7: Add exec_sql RPC function documentation
-Add a note in the sync-data.ts file header or create documentation for setting up the `exec_sql` RPC function on staging:
-
-```sql
--- Run this in Supabase SQL Editor on staging to enable auto table creation
-CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
-RETURNS VOID AS $$
-BEGIN
-  EXECUTE sql_query;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-```
-
-This is optional - if the function doesn't exist, the script will still work but will require manual table creation.
-
-### Step 8: Run validation commands
+### Step 4: Run validation commands
 Execute all validation commands to ensure the fix works correctly:
 - `npm run lint` - Verify no linting errors
 - `npm run build` - Verify the build succeeds
@@ -208,18 +101,12 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- **Bucket Naming**: The production bucket uses underscores (`character_images`), not spaces. This is a critical fix.
+- **Convention Consistency**: The develop branch established that `SUPABASE_URL/KEY/SERVICE_KEY` without suffix refers to production. This is the main database used by the application. The `_STAGING` suffix is for the staging environment.
 
-- **Bucket Creation**: Supabase Storage API fully supports bucket creation via `createBucket()`. This will work automatically with service role keys.
+- **Sync Direction**: The sync script copies data FROM production (source) TO staging (destination). Production = `SUPABASE_URL`, Staging = `SUPABASE_URL_STAGING`.
 
-- **Table Creation Strategy**: Since Supabase PostgREST cannot execute DDL directly, we use a two-tier approach:
-  1. **Automatic**: If an `exec_sql` RPC function exists on staging, tables are created automatically
-  2. **Manual fallback**: If RPC is unavailable, clear instructions and SQL are provided for manual creation
+- **Service Key Requirement**: Both `SUPABASE_SERVICE_KEY` (production) and `SUPABASE_SERVICE_KEY_STAGING` (staging) may be needed for full functionality, but the sync script primarily needs the staging service key for creating buckets/tables.
 
-- **Service Role Key Requirement**: Both bucket creation and SQL execution via RPC require service role keys, not anon keys. Update `.env` files accordingly.
+- **No Functional Changes**: This is purely a naming convention fix. The sync functionality (auto-create tables, auto-create buckets, bucket name fix) implemented in the original PR remains unchanged - only the environment variable names are being corrected.
 
-- **Schema Definitions**: The `table-schemas.ts` file should be kept in sync with production schema. When production schema changes, this file must be updated.
-
-- **Idempotent Operations**: All operations are idempotent - using `CREATE TABLE IF NOT EXISTS` for tables and checking bucket existence before creation.
-
-- **Foreign Key Considerations**: The `connection` table has foreign keys to `character`. The sync order in `TABLES_TO_SYNC` should ensure `character` is synced before `connection`.
+- **No Test Changes Required**: The test file `src/__tests__/sync-data.test.ts` only tests the `isTableNotFoundError` utility function and does not reference any environment variables, so it requires no updates.
