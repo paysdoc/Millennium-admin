@@ -206,11 +206,11 @@ const fetchTableData = async (
 /**
  * Clears all data from a staging table.
  */
-const clearStagingTable = async (
+export const clearStagingTable = async (
   client: SupabaseClient,
   tableName: string
 ): Promise<void> => {
-  const { error } = await client.from(tableName).delete().neq('id', '')
+  const { error } = await client.from(tableName).delete().not('id', 'is', null)
 
   if (error) {
     throw new Error(`Failed to clear ${tableName}: ${error.message}`)
