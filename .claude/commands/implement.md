@@ -3,7 +3,6 @@ Follow the `Instructions` to implement the `Plan` then `Report` the completed wo
 
 ## Instructions
 - Read the plan and implement the plan.
-- IMPORTANT: strictly adhere to the coding guidelines in `/guidelines`.
 
 ## Plan
 $ARGUMENTS

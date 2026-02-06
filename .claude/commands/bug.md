@@ -1,3 +1,8 @@
+---
+name: bug
+description: Create a plan to resolve a specified bug
+---
+
 # Bug Planning
 
 Create a new plan in specs/*.md to resolve the `Bug` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files.
@@ -74,6 +79,7 @@ Execute every command to validate the bug is fixed with zero regressions.
 - `npm test` - Run tests to validate the bug is fixed with zero regressions
 
 ## Notes
+- IMPORTANT: strictly adhere to the coding guidelines in `/guidelines`. If necessary, refactor existing code to meet the coding guidelines as part of fixing the bug.
 <optionally list any additional notes or context that are relevant to the bug that will be helpful to the developer>
 ```
 

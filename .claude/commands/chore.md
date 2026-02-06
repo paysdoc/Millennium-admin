@@ -1,3 +1,8 @@
+---
+name: chore
+description: Create a plan to resolve a specified chore
+---
+
 # Chore Planning
 
 Create a new plan in specs/*.md to resolve the `Chore` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
@@ -60,6 +65,7 @@ Execute every command to validate the chore is complete with zero regressions.
 - `npm test` - Run tests to validate the chore is complete with zero regressions
 
 ## Notes
+- IMPORTANT: strictly adhere to the coding guidelines in `/guidelines`. If necessary, refactor existing code to meet the coding guidelines as part of accomplishing the chore.
 <optionally list any additional notes or context that are relevant to the chore that will be helpful to the developer>
 ```
 
