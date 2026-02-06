@@ -492,15 +492,15 @@ describe('bucket configuration', () => {
     expect(Array.isArray(syncConfig.bucketsToSync)).toBe(true)
   })
 
-  it('includes character images bucket', () => {
+  it('includes character_images bucket', () => {
     const bucketNames = syncConfig.bucketsToSync.map((b) => b.name)
 
-    expect(bucketNames).toContain('character images')
+    expect(bucketNames).toContain('character_images')
   })
 
-  it('has syncContent enabled for character images bucket', () => {
+  it('has syncContent enabled for character_images bucket', () => {
     const characterImagesBucket = syncConfig.bucketsToSync.find(
-      (b) => b.name === 'character images'
+      (b) => b.name === 'character_images'
     )
 
     expect(characterImagesBucket).toBeDefined()
@@ -509,11 +509,11 @@ describe('bucket configuration', () => {
 })
 
 describe('getBucketConfig', () => {
-  it('returns config for character images bucket', () => {
-    const config = getBucketConfig('character images')
+  it('returns config for character_images bucket', () => {
+    const config = getBucketConfig('character_images')
 
     expect(config).toBeDefined()
-    expect(config!.name).toBe('character images')
+    expect(config!.name).toBe('character_images')
     expect(config!.syncContent).toBe(true)
   })
 

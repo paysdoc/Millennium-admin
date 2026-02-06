@@ -75,7 +75,7 @@ const gamePlayersTable = createTableConfig('game_players', [], ['created_at'])
  * Character images bucket configuration.
  * Contains public historical character portraits - no anonymization needed.
  */
-const characterImagesBucket = createBucketConfig('character images', true)
+const characterImagesBucket = createBucketConfig('character_images', true)
 
 /**
  * Main sync configuration.
