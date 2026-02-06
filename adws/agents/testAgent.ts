@@ -112,10 +112,12 @@ function parseE2ETestResult(output: string): E2ETestResult | null {
  *
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runTestAgent(
   logsDir: string,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<TestAgentResult> {
   const outputFile = path.join(logsDir, 'test-agent.jsonl');
 
@@ -127,7 +129,8 @@ export async function runTestAgent(
     outputFile,
     'sonnet',
     undefined,
-    statePath
+    statePath,
+    cwd
   );
 
   // Parse the test results from the output
@@ -150,11 +153,13 @@ export async function runTestAgent(
  * @param testFilePath - Path to the E2E test file
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runE2ETestAgent(
   testFilePath: string,
   logsDir: string,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<E2ETestAgentResult> {
   const testName = path.basename(testFilePath, '.md');
   const outputFile = path.join(logsDir, `e2e-test-agent-${testName}.jsonl`);
@@ -167,7 +172,8 @@ export async function runE2ETestAgent(
     outputFile,
     'sonnet',
     undefined,
-    statePath
+    statePath,
+    cwd
   );
 
   // Parse the E2E test result from the output
@@ -193,11 +199,13 @@ export async function runE2ETestAgent(
  * @param failedTest - The test result that failed
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runResolveTestAgent(
   failedTest: TestResult,
   logsDir: string,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   const outputFile = path.join(logsDir, `resolve-test-${failedTest.test_name}.jsonl`);
 
@@ -211,7 +219,8 @@ export async function runResolveTestAgent(
     outputFile,
     'opus',
     undefined,
-    statePath
+    statePath,
+    cwd
   );
 }
 
@@ -222,11 +231,13 @@ export async function runResolveTestAgent(
  * @param failedE2ETest - The E2E test result that failed
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runResolveE2ETestAgent(
   failedE2ETest: E2ETestResult,
   logsDir: string,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   // Handle undefined or invalid test_name gracefully
   const rawTestName = failedE2ETest.test_name;
@@ -248,7 +259,8 @@ export async function runResolveE2ETestAgent(
     outputFile,
     'opus',
     undefined,
-    statePath
+    statePath,
+    cwd
   );
 }
 

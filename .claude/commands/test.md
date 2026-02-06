@@ -1,3 +1,8 @@
+---
+name: test
+description: Execute comprehensive validation tests, returning results in a standardized JSON format for automated processing.
+---
+
 # Application Validation Test Suite
 
 Execute comprehensive validation tests for both the Next.js application and ADW (AI Developer Workflow) scripts, returning results in a standardized JSON format for automated processing.

@@ -36,13 +36,21 @@ ${revisionPlan}`;
 /**
  * Runs the Build Agent to implement PR review changes.
  * Uses the /implement slash command with the revision plan as arguments.
+ *
+ * @param prDetails - PR details including number, title, branch, etc.
+ * @param revisionPlan - The revision plan to implement
+ * @param logsDir - Directory to write agent logs
+ * @param onProgress - Optional callback for progress updates
+ * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runPrReviewBuildAgent(
   prDetails: PRDetails,
   revisionPlan: string,
   logsDir: string,
   onProgress?: ProgressCallback,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   const args = formatPrReviewImplementArgs(prDetails, revisionPlan);
   const outputFile = path.join(logsDir, 'pr-review-build-agent.jsonl');
@@ -53,19 +61,27 @@ export async function runPrReviewBuildAgent(
   log(`  Revision plan length: ${revisionPlan.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgentWithCommand('/implement', args, 'PR Review Build', outputFile, 'opus', onProgress, statePath);
+  return runClaudeAgentWithCommand('/implement', args, 'PR Review Build', outputFile, 'opus', onProgress, statePath, cwd);
 }
 
 /**
  * Runs the Build Agent to implement the solution.
  * Uses the /implement slash command with the plan content as arguments.
+ *
+ * @param issue - GitHub issue to implement
+ * @param logsDir - Directory to write agent logs
+ * @param planContent - The implementation plan content
+ * @param onProgress - Optional callback for progress updates
+ * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
  */
 export async function runBuildAgent(
   issue: GitHubIssue,
   logsDir: string,
   planContent: string,
   onProgress?: ProgressCallback,
-  statePath?: string
+  statePath?: string,
+  cwd?: string
 ): Promise<AgentResult> {
   const args = formatImplementArgs(issue, planContent);
   const outputFile = path.join(logsDir, 'build-agent.jsonl');
@@ -78,5 +94,5 @@ export async function runBuildAgent(
   log(`  Plan content length: ${planContent.length} characters`, 'info');
   log(`  Model: opus`, 'info');
 
-  return runClaudeAgentWithCommand('/implement', args, 'Build', outputFile, 'opus', onProgress, statePath);
+  return runClaudeAgentWithCommand('/implement', args, 'Build', outputFile, 'opus', onProgress, statePath, cwd);
 }

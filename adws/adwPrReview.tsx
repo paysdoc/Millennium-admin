@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       metadata: { prNumber, reviewComments: unaddressedComments.length },
     });
 
-    const planResult = await runPrReviewPlanAgent(prDetails, unaddressedComments, existingPlanContent, logsDir, planAgentStatePath);
+    const planResult = await runPrReviewPlanAgent(prDetails, unaddressedComments, existingPlanContent, logsDir, planAgentStatePath, worktreePath);
 
     if (!planResult.success) {
       AgentStateManager.writeState(planAgentStatePath, {
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
       }
     };
 
-    const buildResult = await runPrReviewBuildAgent(prDetails, planResult.output, logsDir, buildProgressCallback, buildAgentStatePath);
+    const buildResult = await runPrReviewBuildAgent(prDetails, planResult.output, logsDir, buildProgressCallback, buildAgentStatePath, worktreePath);
 
     if (!buildResult.success) {
       AgentStateManager.writeState(buildAgentStatePath, {
@@ -206,6 +206,7 @@ async function main(): Promise<void> {
       orchestratorStatePath,
       maxRetries: MAX_TEST_RETRY_ATTEMPTS,
       onTestFailed,
+      cwd: worktreePath,
     });
 
     if (!unitTestsResult.passed) {
@@ -232,6 +233,7 @@ async function main(): Promise<void> {
       orchestratorStatePath,
       maxRetries: MAX_TEST_RETRY_ATTEMPTS,
       onTestFailed,
+      cwd: worktreePath,
     });
 
     if (!e2eTestsResult.passed) {
