@@ -13,6 +13,7 @@ export type AnonymizationRule = 'name' | 'text' | 'email' | 'none'
 export interface TableConfig {
   readonly name: string
   readonly piiFields: ReadonlyMap<string, AnonymizationRule>
+  readonly generatedColumns: readonly string[]
 }
 
 /**
