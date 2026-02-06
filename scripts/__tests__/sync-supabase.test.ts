@@ -6,6 +6,7 @@ import {
   anonymizeEmail,
   anonymizeField,
   anonymizeRecord,
+  stripGeneratedColumns,
   listBucketFiles,
   clearBucket,
 } from '../sync-supabase'
@@ -238,6 +239,7 @@ describe('anonymizeRecord', () => {
       ['name_field', 'name'],
       ['text_field', 'text'],
     ]),
+    generatedColumns: [],
   }
 
   it('anonymizes PII fields according to config', () => {
@@ -287,6 +289,7 @@ describe('anonymizeRecord', () => {
     const noPiiConfig: TableConfig = {
       name: 'public_table',
       piiFields: new Map(),
+      generatedColumns: [],
     }
     const record = {
       id: '123',
@@ -687,5 +690,121 @@ describe('clearBucket', () => {
     await expect(clearBucket(mockClient as never, 'test-bucket')).rejects.toThrow(
       'Failed to clear files from test-bucket: Remove failed'
     )
+  })
+})
+
+describe('table sync order', () => {
+  const tableNames = syncConfig.tablesToSync.map((t) => t.name)
+
+  it('has profiles before games', () => {
+    expect(tableNames.indexOf('profiles')).toBeLessThan(
+      tableNames.indexOf('games')
+    )
+  })
+
+  it('has profiles before game_players', () => {
+    expect(tableNames.indexOf('profiles')).toBeLessThan(
+      tableNames.indexOf('game_players')
+    )
+  })
+
+  it('has character before connection', () => {
+    expect(tableNames.indexOf('character')).toBeLessThan(
+      tableNames.indexOf('connection')
+    )
+  })
+
+  it('has games before game_players', () => {
+    expect(tableNames.indexOf('games')).toBeLessThan(
+      tableNames.indexOf('game_players')
+    )
+  })
+})
+
+describe('stripGeneratedColumns', () => {
+  it('returns the record unchanged when generated columns array is empty', () => {
+    const record = { id: '1', name: 'test', created_at: '2024-01-01' }
+
+    const result = stripGeneratedColumns(record, [])
+
+    expect(result).toBe(record)
+  })
+
+  it('strips specified columns from the record', () => {
+    const record = { id: '1', name: 'test', created_at: '2024-01-01' }
+
+    const result = stripGeneratedColumns(record, ['created_at'])
+
+    expect(result).toEqual({ id: '1', name: 'test' })
+  })
+
+  it('preserves all other columns', () => {
+    const record = {
+      id: '1',
+      name: 'test',
+      status: 'active',
+      created_at: '2024-01-01',
+      updated_at: '2024-01-02',
+    }
+
+    const result = stripGeneratedColumns(record, ['created_at', 'updated_at'])
+
+    expect(result).toEqual({ id: '1', name: 'test', status: 'active' })
+  })
+
+  it('handles records that do not contain the specified generated columns', () => {
+    const record = { id: '1', name: 'test' }
+
+    const result = stripGeneratedColumns(record, ['created_at', 'updated_at'])
+
+    expect(result).toEqual({ id: '1', name: 'test' })
+  })
+})
+
+describe('generatedColumns configuration', () => {
+  it('has created_at and updated_at for profiles table', () => {
+    const profilesConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'profiles'
+    )
+
+    expect(profilesConfig).toBeDefined()
+    expect(profilesConfig!.generatedColumns).toContain('created_at')
+    expect(profilesConfig!.generatedColumns).toContain('updated_at')
+  })
+
+  it('has created_at for games table', () => {
+    const gamesConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'games'
+    )
+
+    expect(gamesConfig).toBeDefined()
+    expect(gamesConfig!.generatedColumns).toContain('created_at')
+  })
+
+  it('has created_at for game_players table', () => {
+    const gamePlayersConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'game_players'
+    )
+
+    expect(gamePlayersConfig).toBeDefined()
+    expect(gamePlayersConfig!.generatedColumns).toContain('created_at')
+  })
+
+  it('has empty generated columns for character table', () => {
+    const characterConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'character'
+    )
+
+    expect(characterConfig).toBeDefined()
+    expect(characterConfig!.generatedColumns).toEqual([])
+  })
+
+  it('has empty generated columns for connection table', () => {
+    const connectionConfig = syncConfig.tablesToSync.find(
+      (t) => t.name === 'connection'
+    )
+
+    expect(connectionConfig).toBeDefined()
+    expect(connectionConfig!.generatedColumns).toEqual([])
   })
 })

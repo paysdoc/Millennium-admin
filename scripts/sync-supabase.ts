@@ -112,6 +112,23 @@ export const anonymizeField = (
 }
 
 /**
+ * Strips auto-generated columns from a record before inserting into staging.
+ * Returns the record unchanged when the generated columns array is empty.
+ */
+export const stripGeneratedColumns = (
+  record: Record<string, unknown>,
+  generatedColumns: readonly string[]
+): Record<string, unknown> => {
+  if (generatedColumns.length === 0) {
+    return record
+  }
+
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !generatedColumns.includes(key))
+  )
+}
+
+/**
  * Anonymizes a record based on table configuration.
  */
 export const anonymizeRecord = (
@@ -420,7 +437,25 @@ const syncBucket = async (
 }
 
 /**
+ * Clears all staging tables in reverse dependency order.
+ * Children are cleared before parents to avoid FK constraint violations.
+ */
+const clearAllStagingTables = async (
+  stagingClient: SupabaseClient,
+  tables: readonly TableConfig[]
+): Promise<void> => {
+  const reversed = [...tables].reverse()
+
+  console.log('\nPhase 1: Clearing staging tables (reverse dependency order)...')
+  for (const tableConfig of reversed) {
+    console.log(`  Clearing table: ${tableConfig.name}`)
+    await clearStagingTable(stagingClient, tableConfig.name)
+  }
+}
+
+/**
  * Syncs a single table from production to staging.
+ * Fetches data, anonymizes PII fields, strips generated columns, and inserts.
  */
 const syncTable = async (
   productionClient: SupabaseClient,
@@ -441,17 +476,18 @@ const syncTable = async (
       anonymizeRecord(record, tableConfig)
     )
 
-    // Clear staging table
-    await clearStagingTable(stagingClient, tableName)
-    console.log(`    Cleared staging table`)
+    // Strip auto-generated columns
+    const strippedData = anonymizedData.map((record) =>
+      stripGeneratedColumns(record, tableConfig.generatedColumns)
+    )
 
-    // Insert anonymized data
-    await insertStagingData(stagingClient, tableName, anonymizedData)
-    console.log(`    Inserted ${anonymizedData.length} rows into staging`)
+    // Insert into staging
+    await insertStagingData(stagingClient, tableName, strippedData)
+    console.log(`    Inserted ${strippedData.length} rows into staging`)
 
     return {
       tableName,
-      rowsProcessed: anonymizedData.length,
+      rowsProcessed: strippedData.length,
       success: true,
     }
   } catch (error) {
@@ -488,14 +524,15 @@ const runSync = async (): Promise<SyncResult> => {
     const stagingClient = createStagingClient(env)
     console.log('Supabase clients created')
 
-    // Sync each configured table
-    console.log('\nSyncing tables...')
-    for (const tableConfig of syncConfig.tablesToSync) {
-      if (!isTableAllowed(tableConfig.name)) {
-        console.log(`  Skipping excluded table: ${tableConfig.name}`)
-        continue
-      }
+    // Phase 1: Clear all staging tables in reverse dependency order
+    const allowedTables = syncConfig.tablesToSync.filter((t) =>
+      isTableAllowed(t.name)
+    )
+    await clearAllStagingTables(stagingClient, allowedTables)
 
+    // Phase 2: Insert data in forward dependency order (parents first)
+    console.log('\nPhase 2: Syncing tables (forward dependency order)...')
+    for (const tableConfig of allowedTables) {
       const result = await syncTable(
         productionClient,
         stagingClient,
