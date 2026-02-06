@@ -1,3 +1,8 @@
+---
+name: resolve_failed_e2e_test
+description: Resolve a specific failing E2E test using the provided failure details
+---
+
 # Resolve Failed E2E Test
 
 Fix a specific failing E2E test using the provided failure details.

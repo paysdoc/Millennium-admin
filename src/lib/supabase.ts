@@ -1,19 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-let supabaseClient: SupabaseClient | null = null
+let client: SupabaseClient | null = null
 
 export function getSupabaseClient(): SupabaseClient {
-  if (supabaseClient) {
-    return supabaseClient
+  if (client) {
+    return client
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables')
+    throw new Error('Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)')
   }
 
-  supabaseClient = createClient(supabaseUrl, supabaseKey)
-  return supabaseClient
+  client = createClient(supabaseUrl, supabaseKey)
+  return client
 }

@@ -1,3 +1,8 @@
+---
+name: resolve_failed_test
+description: Resolve a specific failing test using the provided failure details
+---
+
 # Resolve Failed Test
 
 Fix a specific failing test using the provided failure details.

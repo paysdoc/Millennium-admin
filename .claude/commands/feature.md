@@ -1,3 +1,8 @@
+---
+name: feature
+description: Create a plan to implement a specified feature
+---
+
 # Feature Planning
 
 Create a new plan in specs/*.md to implement the `Feature` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files.
@@ -101,6 +106,7 @@ Execute every command to validate the feature works correctly with zero regressi
 - `npm test` - Run tests to validate the feature works with zero regressions
 
 ## Notes
+- IMPORTANT: strictly adhere to the coding guidelines in `/guidelines`. If necessary, refactor existing code to meet the coding guidelines as part of implementing the feature.
 <optionally list any additional notes, future considerations, or context that are relevant to the feature that will be helpful to the developer>
 ```
 
