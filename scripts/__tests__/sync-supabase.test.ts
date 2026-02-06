@@ -8,6 +8,7 @@ import {
   anonymizeRecord,
   listBucketFiles,
   clearBucket,
+  clearStagingTable,
 } from '../sync-supabase'
 import { syncConfig, isTableAllowed, getTableConfig, getBucketConfig } from '../sync-config'
 import type { TableConfig, AnonymizationRule } from '../sync-types'
@@ -616,6 +617,43 @@ describe('listBucketFiles', () => {
     await expect(listBucketFiles(mockClient as never, 'test-bucket')).rejects.toThrow(
       'Failed to list files in test-bucket: Storage error'
     )
+  })
+})
+
+describe('clearStagingTable', () => {
+  it('calls .not("id", "is", null) to delete all rows', async () => {
+    const notMock = vi.fn().mockResolvedValue({ error: null })
+    const deleteMock = vi.fn().mockReturnValue({ not: notMock })
+    const fromMock = vi.fn().mockReturnValue({ delete: deleteMock })
+    const mockClient = { from: fromMock }
+
+    await clearStagingTable(mockClient as never, 'test_table')
+
+    expect(fromMock).toHaveBeenCalledWith('test_table')
+    expect(deleteMock).toHaveBeenCalled()
+    expect(notMock).toHaveBeenCalledWith('id', 'is', null)
+  })
+
+  it('throws when Supabase client returns an error', async () => {
+    const notMock = vi.fn().mockResolvedValue({
+      error: { message: 'Delete failed' },
+    })
+    const deleteMock = vi.fn().mockReturnValue({ not: notMock })
+    const fromMock = vi.fn().mockReturnValue({ delete: deleteMock })
+    const mockClient = { from: fromMock }
+
+    await expect(clearStagingTable(mockClient as never, 'test_table')).rejects.toThrow(
+      'Failed to clear test_table: Delete failed'
+    )
+  })
+
+  it('resolves successfully when no error is returned', async () => {
+    const notMock = vi.fn().mockResolvedValue({ error: null })
+    const deleteMock = vi.fn().mockReturnValue({ not: notMock })
+    const fromMock = vi.fn().mockReturnValue({ delete: deleteMock })
+    const mockClient = { from: fromMock }
+
+    await expect(clearStagingTable(mockClient as never, 'test_table')).resolves.toBeUndefined()
   })
 })
 
