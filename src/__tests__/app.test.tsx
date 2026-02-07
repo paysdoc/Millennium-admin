@@ -29,4 +29,16 @@ describe('Next.js Application', () => {
       expect(typeof SettingsPage).toBe('function')
     })
   })
+
+  describe('Dynamic Route Segment Configuration', () => {
+    it('Home page exports dynamic as force-dynamic', async () => {
+      const { dynamic } = await import('../app/page')
+      expect(dynamic).toBe('force-dynamic')
+    })
+
+    it('Character detail page exports dynamic as force-dynamic', async () => {
+      const { dynamic } = await import('../app/characters/[id]/page')
+      expect(dynamic).toBe('force-dynamic')
+    })
+  })
 })
