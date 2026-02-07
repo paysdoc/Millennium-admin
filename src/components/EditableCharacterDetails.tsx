@@ -7,6 +7,7 @@ import EditableField from './EditableField'
 
 interface EditableCharacterDetailsProps {
   character: Character
+  imageUrl?: string | null
   onSave?: (updated: Character) => void
 }
 
@@ -17,6 +18,7 @@ type EditableFields = Pick<
 
 export default function EditableCharacterDetails({
   character,
+  imageUrl,
   onSave,
 }: EditableCharacterDetailsProps) {
   const originalData = useRef<EditableFields>({
@@ -76,10 +78,10 @@ export default function EditableCharacterDetails({
     <div className="infobox">
       <h2 className="infobox-title">{character.name}</h2>
 
-      {character.image_link && (
+      {imageUrl && (
         <div className="infobox-image">
           <Image
-            src={character.image_link}
+            src={imageUrl}
             alt={character.name}
             className="character-image"
             width={280}
