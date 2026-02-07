@@ -1,0 +1,132 @@
+/**
+ * Base utilities and parsing functions for workflow comments.
+ */
+
+import { WorkflowStage, RecoveryState, GitHubComment } from '../core';
+
+/** Stage order for determining recovery resume point. */
+export const STAGE_ORDER: WorkflowStage[] = [
+  'starting',
+  'resuming',
+  'classified',
+  'branch_created',
+  'plan_building',
+  'plan_created',
+  'plan_file_created',
+  'plan_committing',
+  'implementing',
+  'build_progress',
+  'implemented',
+  'implementation_committing',
+  'pr_creating',
+  'pr_created',
+  'completed',
+];
+
+/** Maps comment header patterns to workflow stages. */
+const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
+  ':rocket: ADW Workflow Started': 'starting',
+  ':arrows_counterclockwise: ADW Workflow Resuming': 'resuming',
+  ':mag: Issue Classified': 'classified',
+  ':seedling: Branch Created': 'branch_created',
+  ':pencil: Building Implementation Plan': 'plan_building',
+  ':white_check_mark: Implementation Plan Created': 'plan_created',
+  ':page_facing_up: Plan File Created': 'plan_file_created',
+  ':floppy_disk: Committing Plan': 'plan_committing',
+  ':hammer_and_wrench: Implementing Solution': 'implementing',
+  ':white_check_mark: Implementation Complete': 'implemented',
+  ':floppy_disk: Committing Implementation': 'implementation_committing',
+  ':memo: Creating Pull Request': 'pr_creating',
+  ':link: Pull Request Created': 'pr_created',
+  ':tada: ADW Workflow Completed': 'completed',
+  ':x: ADW Workflow Error': 'error',
+};
+
+/** Truncates text to a maximum length with ellipsis. */
+export function truncateText(text: string, maxLength: number): string {
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
+/** Parses a workflow stage from a comment body. Returns null if not a workflow comment. */
+export function parseWorkflowStageFromComment(commentBody: string): WorkflowStage | null {
+  if (!commentBody.includes('ADW ID:')) return null;
+  const headerMatch = commentBody.match(/^## (:[a-z_]+: .+)$/m);
+  if (!headerMatch) return null;
+  return STAGE_HEADER_MAP[headerMatch[1]] || null;
+}
+
+/** Extracts the ADW ID from a comment body. Pattern: `adw-{timestamp}-{random}` */
+export function extractAdwIdFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`(adw-\d+-[a-z0-9]+)`/);
+  return match ? match[1] : null;
+}
+
+/** Extracts the branch name from a comment body. */
+export function extractBranchNameFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`((feature|bugfix|chore|review)\/issue-\d+[a-z0-9-]*)`/);
+  return match ? match[1] : null;
+}
+
+/** Extracts the PR URL from a comment body. */
+export function extractPrUrlFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/(https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+)/);
+  return match ? match[1] : null;
+}
+
+/** Extracts the plan file path from a comment body. Pattern: `specs/issue-{number}-plan.md` */
+export function extractPlanPathFromComment(commentBody: string): string | null {
+  const match = commentBody.match(/`(specs\/issue-\d+-plan\.md)`/);
+  return match ? match[1] : null;
+}
+
+/** Detects recovery state from GitHub comments. */
+export function detectRecoveryState(comments: GitHubComment[]): RecoveryState {
+  const defaultState: RecoveryState = {
+    lastCompletedStage: null,
+    adwId: null,
+    branchName: null,
+    planPath: null,
+    prUrl: null,
+    canResume: false,
+  };
+
+  const adwComments = comments.filter(c => parseWorkflowStageFromComment(c.body) !== null);
+  if (adwComments.length === 0) return defaultState;
+
+  const sortedComments = [...adwComments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  const mostRecentStage = parseWorkflowStageFromComment(sortedComments[0].body);
+  if (mostRecentStage === 'completed') return defaultState;
+
+  let lastCompletedStage: WorkflowStage | null = null;
+  let adwId: string | null = null;
+  let branchName: string | null = null;
+  let planPath: string | null = null;
+  let prUrl: string | null = null;
+
+  for (const comment of sortedComments.reverse()) {
+    const stage = parseWorkflowStageFromComment(comment.body);
+    if (!stage || stage === 'error') continue;
+
+    const stageIndex = STAGE_ORDER.indexOf(stage);
+    const lastIndex = lastCompletedStage ? STAGE_ORDER.indexOf(lastCompletedStage) : -1;
+    if (stageIndex > lastIndex) lastCompletedStage = stage;
+
+    const extractedAdwId = extractAdwIdFromComment(comment.body);
+    if (extractedAdwId) adwId = extractedAdwId;
+
+    const extractedBranch = extractBranchNameFromComment(comment.body);
+    if (extractedBranch) branchName = extractedBranch;
+
+    const extractedPlanPath = extractPlanPathFromComment(comment.body);
+    if (extractedPlanPath) planPath = extractedPlanPath;
+
+    const extractedPrUrl = extractPrUrlFromComment(comment.body);
+    if (extractedPrUrl) prUrl = extractedPrUrl;
+  }
+
+  const canResume = lastCompletedStage !== null && lastCompletedStage !== 'completed';
+  return { lastCompletedStage, adwId, branchName, planPath, prUrl, canResume };
+}

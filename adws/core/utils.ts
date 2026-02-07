@@ -1,0 +1,120 @@
+/**
+ * Utility functions for ADW Plan & Build workflow.
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { LOGS_DIR, AGENTS_STATE_DIR } from './config';
+import { AgentIdentifier } from './dataTypes';
+
+/**
+ * Generates a unique ADW session identifier.
+ * Format: adw-{timestamp}-{random}
+ */
+export function generateAdwId(): string {
+  return `adw-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+}
+
+/**
+ * Converts text to URL-friendly slug.
+ * Removes special characters, converts to lowercase, limits to 50 chars.
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 50);
+}
+
+export type LogLevel = 'info' | 'error' | 'success';
+
+const LOG_PREFIXES: Record<LogLevel, string> = {
+  info: '\u{1F4CB}',
+  error: '\u{274C}',
+  success: '\u{2705}'
+};
+
+// ANSI color codes
+const COLORS = {
+  red: '\x1b[31m',
+  reset: '\x1b[0m'
+};
+
+/**
+ * Logs a message with timestamp and emoji prefix.
+ * Error messages are displayed in red.
+ */
+export function log(message: string, level: LogLevel = 'info'): void {
+  const timestamp = new Date().toISOString();
+  const prefix = LOG_PREFIXES[level];
+  const text = `${prefix} [${timestamp}] ${message}`;
+  if (level === 'error') {
+    console.log(`${COLORS.red}${text}${COLORS.reset}`);
+  } else {
+    console.log(text);
+  }
+}
+
+/**
+ * Ensures the logs directory exists for a given ADW session.
+ * Creates the directory if it doesn't exist.
+ * @returns The path to the session logs directory.
+ */
+export function ensureLogsDirectory(adwId: string): string {
+  const sessionDir = path.join(LOGS_DIR, adwId);
+  if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+  }
+  return sessionDir;
+}
+
+/**
+ * Ensures the agent state directory exists for a given agent.
+ * Creates the directory structure: agents/{adwId}/{agentIdentifier}/
+ * For nested agents: {parentPath}/{agentIdentifier}/
+ *
+ * @param adwId - The ADW session identifier
+ * @param agentIdentifier - The agent's identifier
+ * @param parentPath - Optional parent agent's state path for nested agents
+ * @returns The path to the agent's state directory.
+ */
+export function ensureAgentStateDirectory(
+  adwId: string,
+  agentIdentifier: AgentIdentifier,
+  parentPath?: string
+): string {
+  let statePath: string;
+
+  if (parentPath) {
+    statePath = path.join(parentPath, agentIdentifier);
+  } else {
+    statePath = path.join(AGENTS_STATE_DIR, adwId, agentIdentifier);
+  }
+
+  if (!fs.existsSync(statePath)) {
+    fs.mkdirSync(statePath, { recursive: true });
+  }
+
+  return statePath;
+}
+
+/**
+ * Gets the agent state path without creating directories.
+ * Useful for reading state from a path.
+ *
+ * @param adwId - The ADW session identifier
+ * @param agentIdentifier - The agent's identifier
+ * @param parentPath - Optional parent agent's state path for nested agents
+ * @returns The path to the agent's state directory.
+ */
+export function getAgentStatePath(
+  adwId: string,
+  agentIdentifier: AgentIdentifier,
+  parentPath?: string
+): string {
+  if (parentPath) {
+    return path.join(parentPath, agentIdentifier);
+  }
+  return path.join(AGENTS_STATE_DIR, adwId, agentIdentifier);
+}

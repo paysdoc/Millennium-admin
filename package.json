@@ -6,21 +6,30 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "adw": "tsx",
+    "adw:plan-build": "tsx adws/adwPlanBuild.tsx",
+    "adw:trigger-webhook": "tsx adws/triggers/trigger_webhook.ts",
+    "adw:trigger-cron": "tsx adws/triggers/trigger_cron.ts",
+    "adw:pr-review": "tsx adws/adwPrReview.tsx",
+    "test": "vitest run",
+    "sync:data": "tsx scripts/sync-supabase.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.93.3",
+    "dotenv": "^17.2.3",
+    "next": "^14.2.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next": "^14.2.5"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.5.3",
     "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.5"
+    "eslint-config-next": "^14.2.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.3",
+    "vitest": "^4.0.18"
   }
 }
-
-
