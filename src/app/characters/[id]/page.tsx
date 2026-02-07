@@ -2,9 +2,11 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import CharacterDetails from '@/components/CharacterDetails'
+import CharacterImage from '@/components/CharacterImage'
 import ConnectionsTable from '@/components/ConnectionsTable'
 import { fetchCharacterById, fetchAllCharacters } from '@/lib/characters'
 import { fetchConnectionsByCharacter } from '@/lib/connections'
+import { getSupabaseStorageUrl } from '@/lib/supabase'
 
 interface CharacterPageProps {
   params: Promise<{ id: string }>
@@ -53,7 +55,17 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
           <div className="character-detail">
             <section className="detail-section">
               <h2 className="section-heading">Character Information</h2>
-              <CharacterDetails character={character} />
+              <div className="character-info-section">
+                <div className="character-info-left">
+                  <CharacterDetails character={character} />
+                </div>
+                <div className="character-info-right">
+                  <CharacterImage
+                    imageUrl={getSupabaseStorageUrl(character.image_link)}
+                    characterName={character.name}
+                  />
+                </div>
+              </div>
             </section>
 
             <section className="detail-section">
