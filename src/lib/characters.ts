@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabase'
+import { getSupabaseClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
 import {
   Character,
@@ -34,7 +34,9 @@ export async function fetchAllCharacters(): Promise<Character[]> {
     }
 
     // Map database rows to application Character interface
-    return (data as CharacterRow[] || []).map(mapCharacterRowToCharacter)
+    return (data as CharacterRow[] || []).map(mapCharacterRowToCharacter).map(
+      (character) => ({ ...character, image_link: getSupabaseStorageUrl(character.image_link) })
+    )
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
@@ -79,7 +81,8 @@ export async function fetchCharacterById(id: string): Promise<Character | null> 
       return null
     }
 
-    return mapCharacterRowToCharacter(data as CharacterRow)
+    const character = mapCharacterRowToCharacter(data as CharacterRow)
+    return { ...character, image_link: getSupabaseStorageUrl(character.image_link) }
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
