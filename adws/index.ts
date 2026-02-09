@@ -36,6 +36,10 @@ export {
   type PRListItem,
   type PRReviewWorkflowStage,
   type RecoveryState,
+  // Orchestrator shared utilities
+  shouldExecuteStage,
+  hasUncommittedChanges,
+  getNextStage,
 } from './core';
 
 // Agents module - Claude Code agent runners

@@ -306,6 +306,8 @@ export type AgentIdentifier =
   | 'orchestrator'
   | 'plan-orchestrator'
   | 'build-orchestrator'
+  | 'plan-build-orchestrator'
+  | 'plan-build-test-orchestrator'
   | 'classifier'
   | 'plan-agent'
   | 'build-agent'

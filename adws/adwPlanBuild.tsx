@@ -1,13 +1,15 @@
 #!/usr/bin/env npx tsx
 /**
- * ADW Plan & Build - AI Developer Workflow Orchestrator
- *
- * This script orchestrates the complete ADW workflow by calling:
- * 1. adwPlan.tsx - Planning phase (classification, branch creation, plan generation)
- * 2. adwBuild.tsx - Build phase (implementation, commit)
- * 3. Create PR after build completes
+ * ADW Plan & Build - Self-Sufficient Plan+Build+PR Orchestrator
  *
  * Usage: npx tsx adws/adwPlanBuild.tsx <github-issue-number> [adw-id]
+ *
+ * Workflow:
+ * 1. Fetch GitHub issue and classify it
+ * 2. Setup worktree and initialize state
+ * 3. Plan phase: classify, create branch, run plan agent, commit plan
+ * 4. Build phase: run build agent, commit implementation
+ * 5. PR phase: create pull request
  *
  * Environment Requirements:
  * - ANTHROPIC_API_KEY: Anthropic API key
@@ -15,18 +17,39 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { execSync, SpawnSyncReturns } from 'child_process';
-import { log, generateAdwId, IssueClassSlashCommand } from './core';
+import * as fs from 'fs';
 import {
-  createPullRequest,
+  log,
+  generateAdwId,
+  ensureLogsDirectory,
+  IssueClassSlashCommand,
+  commitPrefixMap,
+  AgentStateManager,
+  AgentState,
+  shouldExecuteStage,
+  hasUncommittedChanges,
+  getNextStage,
+} from './core';
+import {
   fetchGitHubIssue,
+  createFeatureBranch,
+  commitChanges,
+  createPullRequest,
   postWorkflowComment,
   WorkflowContext,
-  getCurrentBranch,
+  detectRecoveryState,
   getDefaultBranch,
   generateBranchName,
   ensureWorktree,
 } from './github';
+import {
+  runPlanAgent,
+  getPlanFilePath,
+  planFileExists,
+  runBuildAgent,
+  ProgressCallback,
+  ProgressInfo,
+} from './agents';
 import { classifyGitHubIssue } from './triggers/issueClassifier';
 
 /**
@@ -35,10 +58,7 @@ import { classifyGitHubIssue } from './triggers/issueClassifier';
 function printUsageAndExit(): never {
   console.error('Usage: npx tsx adws/adwPlanBuild.tsx <github-issue-number> [adw-id]');
   console.error('');
-  console.error('This orchestrator runs the complete ADW workflow:');
-  console.error('  1. adwPlan.tsx  - Plan generation');
-  console.error('  2. adwBuild.tsx - Implementation and commit');
-  console.error('  3. Create Pull Request');
+  console.error('This orchestrator runs the complete Plan+Build+PR workflow.');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -67,26 +87,6 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string } 
 }
 
 /**
- * Executes a subprocess and returns success status.
- * @param command - The command to execute
- * @param description - Description for logging
- * @param cwd - Optional working directory for the subprocess
- */
-function runSubprocess(command: string, description: string, cwd?: string): boolean {
-  log(`Starting: ${description}`, 'info');
-
-  try {
-    execSync(command, { stdio: 'inherit', cwd });
-    log(`Completed: ${description}`, 'success');
-    return true;
-  } catch (error) {
-    const execError = error as SpawnSyncReturns<Buffer>;
-    log(`Failed: ${description} (exit code: ${execError.status})`, 'error');
-    return false;
-  }
-}
-
-/**
  * Main orchestrator workflow.
  */
 async function main(): Promise<void> {
@@ -99,79 +99,298 @@ async function main(): Promise<void> {
   log(`ADW ID: ${adwId}`, 'info');
   log('===================================', 'info');
 
-  // Fetch issue details first to generate branch name
+  // Step 1: Fetch issue
+  log('Fetching GitHub issue...', 'info');
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
 
-  // Classify the issue to determine the correct branch prefix
+  // Step 2: Classify issue
+  log('Classifying issue type...', 'info');
   const classificationResult = await classifyGitHubIssue(issue);
   const issueType: IssueClassSlashCommand = classificationResult.issueType;
   log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
 
-  // Get default branch and create worktree
+  // Step 3: Setup worktree
   const defaultBranch = getDefaultBranch();
-  log(`Default branch: ${defaultBranch}`, 'info');
-
-  // Generate branch name with the correct prefix based on issue type
   const branchName = generateBranchName(issueNumber, issue.title, issueType);
-  log(`Target branch: ${branchName}`, 'info');
-
-  // Create or get worktree for this branch
   const worktreePath = ensureWorktree(branchName, defaultBranch);
+  log(`Default branch: ${defaultBranch}`, 'info');
+  log(`Target branch: ${branchName}`, 'info');
   log(`Worktree path: ${worktreePath}`, 'info');
 
-  // Phase 1: Run Plan (in worktree)
-  // Pass the issue type to skip redundant classification in adwPlan
-  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}" --issue-type "${issueType}"`;
-  if (!runSubprocess(planCommand, 'Plan Phase', worktreePath)) {
-    log('Plan phase failed. Aborting workflow.', 'error');
-    process.exit(1);
-  }
+  // Step 4: Initialize state
+  const logsDir = ensureLogsDirectory(adwId);
+  const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'plan-build-orchestrator');
+  log(`State: ${orchestratorStatePath}`, 'info');
+  log(`Logs: ${logsDir}`, 'info');
 
-  // Phase 2: Run Build (in worktree)
-  const buildCommand = `npx tsx adws/adwBuild.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}"`;
-  if (!runSubprocess(buildCommand, 'Build Phase', worktreePath)) {
-    log('Build phase failed. Aborting workflow.', 'error');
-    process.exit(1);
-  }
+  const initialState: Partial<AgentState> = {
+    adwId,
+    issueNumber,
+    agentName: 'plan-build-orchestrator',
+    execution: AgentStateManager.createExecutionState('running'),
+  };
+  AgentStateManager.writeState(orchestratorStatePath, initialState);
+  AgentStateManager.appendLog(orchestratorStatePath, `Starting ADW Plan & Build workflow for issue #${issueNumber}`);
 
-  // Phase 3: Create PR (after build completes)
-  log('Build completed! Creating Pull Request...', 'info');
+  // Step 5: Detect recovery state
+  const recoveryState = detectRecoveryState(issue.comments);
 
-  // Get current branch from worktree
-  const currentBranch = getCurrentBranch(worktreePath);
+  // Step 6: Initialize workflow context
   const ctx: WorkflowContext = {
     issueNumber,
     adwId,
-    branchName: currentBranch,
+    issueType,
   };
 
+  // Step 7: Handle recovery mode
+  if (recoveryState.canResume && recoveryState.lastCompletedStage) {
+    log(`Recovery mode active: last completed stage was '${recoveryState.lastCompletedStage}'`, 'info');
+
+    if (hasUncommittedChanges(worktreePath)) {
+      log('Warning: There are uncommitted changes in the working directory', 'info');
+    }
+
+    if (recoveryState.branchName) ctx.branchName = recoveryState.branchName;
+    if (recoveryState.planPath) ctx.planPath = recoveryState.planPath;
+    if (recoveryState.prUrl) ctx.prUrl = recoveryState.prUrl;
+
+    const nextStage = getNextStage(recoveryState.lastCompletedStage);
+    ctx.resumeFrom = nextStage;
+    postWorkflowComment(issueNumber, 'resuming', ctx);
+  } else {
+    postWorkflowComment(issueNumber, 'starting', ctx);
+  }
+
   try {
-    // Issue already fetched above
+    let totalCostUsd = 0;
 
-    // Post workflow comment indicating PR creation is starting
-    postWorkflowComment(issueNumber, 'pr_creating', ctx);
+    // === PLAN PHASE ===
 
-    // Create the PR (in worktree context)
-    const prUrl = createPullRequest(issue, '', '', defaultBranch, worktreePath);
-    ctx.prUrl = prUrl;
+    // Classify issue (post comment)
+    if (shouldExecuteStage('classified', recoveryState)) {
+      AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
+      AgentStateManager.appendLog(orchestratorStatePath, `Issue classified as: ${issueType}`);
+      ctx.issueType = issueType;
+      postWorkflowComment(issueNumber, 'classified', ctx);
+    }
 
-    // Post workflow comment indicating PR was created
-    postWorkflowComment(issueNumber, 'pr_created', ctx);
+    // Create branch
+    let currentBranch = ctx.branchName || '';
+    if (shouldExecuteStage('branch_created', recoveryState)) {
+      log('Creating branch...', 'info');
+      currentBranch = createFeatureBranch(issueNumber, issue.title, issueType, worktreePath);
+      log(`On branch: ${currentBranch}`, 'success');
+      ctx.branchName = currentBranch;
 
-    log(`Pull Request created: ${prUrl}`, 'success');
+      AgentStateManager.writeState(orchestratorStatePath, { branchName: currentBranch });
+      AgentStateManager.appendLog(orchestratorStatePath, `Branch created: ${currentBranch}`);
 
-    // Post workflow completed comment
+      postWorkflowComment(issueNumber, 'branch_created', ctx);
+    } else {
+      log('Skipping branch creation (already completed)', 'info');
+      if (recoveryState.branchName) {
+        currentBranch = createFeatureBranch(issueNumber, issue.title, issueType, worktreePath);
+        ctx.branchName = currentBranch;
+      }
+    }
+
+    // Run plan agent
+    const planPath = getPlanFilePath(issueNumber);
+    ctx.planPath = planPath;
+
+    if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber)) {
+      postWorkflowComment(issueNumber, 'plan_building', ctx);
+      log('Running Plan Agent...', 'info');
+
+      const planAgentStatePath = AgentStateManager.initializeState(adwId, 'plan-agent', orchestratorStatePath);
+      AgentStateManager.writeState(planAgentStatePath, {
+        adwId,
+        issueNumber,
+        branchName: currentBranch,
+        issueClass: issueType,
+        agentName: 'plan-agent',
+        parentAgent: 'plan-build-orchestrator',
+        execution: AgentStateManager.createExecutionState('running'),
+      });
+
+      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath, worktreePath);
+
+      if (!planResult.success) {
+        AgentStateManager.writeState(planAgentStatePath, {
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            false,
+            planResult.output
+          ),
+        });
+        throw new Error(`Plan Agent failed: ${planResult.output}`);
+      }
+
+      AgentStateManager.writeState(planAgentStatePath, {
+        planFile: planPath,
+        output: planResult.output.substring(0, 1000),
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          true
+        ),
+      });
+
+      AgentStateManager.writeState(orchestratorStatePath, { planFile: planPath });
+      AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${planPath}`);
+
+      ctx.planOutput = planResult.output;
+      totalCostUsd += planResult.totalCostUsd || 0;
+      postWorkflowComment(issueNumber, 'plan_created', ctx);
+    } else {
+      log('Skipping Plan Agent (plan already exists or completed)', 'info');
+    }
+
+    // Commit plan
+    if (shouldExecuteStage('plan_committing', recoveryState)) {
+      postWorkflowComment(issueNumber, 'plan_committing', ctx);
+      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, worktreePath);
+    } else {
+      log('Skipping plan commit (already completed)', 'info');
+    }
+
+    // === BUILD PHASE ===
+
+    // Read plan content
+    let planContent: string;
+    try {
+      planContent = fs.readFileSync(planPath, 'utf-8');
+      log(`Plan loaded from: ${planPath}`, 'success');
+    } catch (error) {
+      throw new Error(`Cannot read plan file at ${planPath}: ${error}`);
+    }
+
+    // Run build agent
+    if (shouldExecuteStage('implemented', recoveryState)) {
+      postWorkflowComment(issueNumber, 'implementing', ctx);
+      log('Running Build Agent...', 'info');
+
+      const buildAgentStatePath = AgentStateManager.initializeState(adwId, 'build-agent', orchestratorStatePath);
+      AgentStateManager.writeState(buildAgentStatePath, {
+        adwId,
+        issueNumber,
+        branchName: currentBranch,
+        planFile: planPath,
+        issueClass: issueType,
+        agentName: 'build-agent',
+        parentAgent: 'plan-build-orchestrator',
+        execution: AgentStateManager.createExecutionState('running'),
+      });
+
+      let lastProgressUpdate = Date.now();
+      const PROGRESS_UPDATE_INTERVAL_MS = 60000;
+
+      const buildProgressCallback: ProgressCallback = (info: ProgressInfo) => {
+        ctx.buildProgress = {
+          turnCount: info.turnCount || 0,
+          toolCount: info.toolCount || 0,
+          lastToolName: info.toolName,
+          lastText: info.text,
+        };
+
+        if (info.type === 'tool_use') {
+          log(`  [Turn ${info.turnCount}] Tool: ${info.toolName}`, 'info');
+        }
+
+        const now = Date.now();
+        if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL_MS) {
+          postWorkflowComment(issueNumber, 'build_progress', ctx);
+          lastProgressUpdate = now;
+        }
+      };
+
+      const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback, buildAgentStatePath);
+
+      if (!buildResult.success) {
+        AgentStateManager.writeState(buildAgentStatePath, {
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            false,
+            buildResult.output
+          ),
+        });
+        throw new Error(`Build Agent failed: ${buildResult.output}`);
+      }
+
+      AgentStateManager.writeState(buildAgentStatePath, {
+        output: buildResult.output.substring(0, 1000),
+        execution: AgentStateManager.completeExecution(
+          AgentStateManager.createExecutionState('running'),
+          true
+        ),
+      });
+
+      AgentStateManager.appendLog(orchestratorStatePath, 'Build completed');
+
+      ctx.buildOutput = buildResult.output;
+      totalCostUsd += buildResult.totalCostUsd || 0;
+      postWorkflowComment(issueNumber, 'implemented', ctx);
+    } else {
+      log('Skipping Build Agent (already completed)', 'info');
+    }
+
+    // Commit implementation
+    if (shouldExecuteStage('implementation_committing', recoveryState)) {
+      postWorkflowComment(issueNumber, 'implementation_committing', ctx);
+      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`, worktreePath);
+    } else {
+      log('Skipping implementation commit (already completed)', 'info');
+    }
+
+    // === PR PHASE ===
+
+    if (shouldExecuteStage('pr_created', recoveryState)) {
+      postWorkflowComment(issueNumber, 'pr_creating', ctx);
+      log('Creating Pull Request...', 'info');
+
+      const prUrl = createPullRequest(issue, '', '', defaultBranch, worktreePath);
+      ctx.prUrl = prUrl;
+
+      postWorkflowComment(issueNumber, 'pr_created', ctx);
+      log(`Pull Request created: ${prUrl}`, 'success');
+    } else {
+      log('Skipping PR creation (already completed)', 'info');
+    }
+
+    // === COMPLETION ===
+
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        true
+      ),
+      metadata: { totalCostUsd },
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, 'Plan & Build workflow completed successfully');
+
     postWorkflowComment(issueNumber, 'completed', ctx);
 
     log('===================================', 'info');
     log('ADW Plan & Build workflow completed!', 'success');
-    log(`PR: ${prUrl}`, 'info');
+    if (ctx.prUrl) {
+      log(`PR: ${ctx.prUrl}`, 'info');
+    }
     log('===================================', 'info');
+
   } catch (error) {
-    ctx.errorMessage = `Failed to create PR: ${error}`;
+    ctx.errorMessage = String(error);
     postWorkflowComment(issueNumber, 'error', ctx);
-    log(`Failed to create PR: ${error}`, 'error');
+
+    AgentStateManager.writeState(orchestratorStatePath, {
+      execution: AgentStateManager.completeExecution(
+        AgentStateManager.createExecutionState('running'),
+        false,
+        String(error)
+      ),
+    });
+    AgentStateManager.appendLog(orchestratorStatePath, `Plan & Build workflow failed: ${error}`);
+
+    log(`Plan & Build workflow failed: ${error}`, 'error');
     process.exit(1);
   }
 }

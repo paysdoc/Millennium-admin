@@ -6,7 +6,7 @@
  *
  * Workflow:
  * 1. Fetch GitHub issue details
- * 2. Checkout default branch and pull latest changes
+ * 2. Setup worktree or checkout default branch
  * 3. Detect recovery state from existing comments
  * 4. Classify issue type (feature, bug, chore, pr_review)
  * 5. Create feature branch: {type}/issue-{number}-{slug}
@@ -19,19 +19,17 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import * as path from 'path';
-import { execSync } from 'child_process';
 import {
   log,
   generateAdwId,
   ensureLogsDirectory,
-  GitHubIssue,
   IssueClassSlashCommand,
-  WorkflowStage,
-  RecoveryState,
   commitPrefixMap,
   AgentStateManager,
   AgentState,
+  shouldExecuteStage,
+  hasUncommittedChanges,
+  getNextStage,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -40,109 +38,17 @@ import {
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
-  STAGE_ORDER,
   checkoutDefaultBranch,
+  getDefaultBranch,
+  generateBranchName,
+  ensureWorktree,
 } from './github';
 import {
   runPlanAgent,
   getPlanFilePath,
   planFileExists,
-  runClaudeAgentWithCommand,
 } from './agents';
-
-/**
- * Classifies a GitHub issue as feature, bug, or chore using the haiku model.
- * Uses the /classify_issue slash command from .claude/commands/classify_issue.md
- *
- * @param issue - GitHub issue to classify
- * @param logsDir - Directory to write agent logs
- * @param statePath - Optional path to agent's state directory for state tracking
- * @param cwd - Optional working directory for the agent (defaults to process.cwd())
- */
-async function classifyIssue(
-  issue: GitHubIssue,
-  logsDir: string,
-  statePath?: string,
-  cwd?: string
-): Promise<IssueClassSlashCommand> {
-  const labelsText = issue.labels.map(l => l.name).join(', ') || 'none';
-
-  const args = `**Title:** ${issue.title}
-**Labels:** ${labelsText}
-
-${issue.body || 'No description provided.'}`;
-
-  const outputFile = path.join(logsDir, 'classifier-agent.jsonl');
-  const result = await runClaudeAgentWithCommand(
-    '/classify_issue',
-    args,
-    'Classifier',
-    outputFile,
-    'haiku',
-    undefined,
-    statePath,
-    cwd
-  );
-
-  if (!result.success) {
-    log('Classification failed, defaulting to /feature', 'info');
-    return '/feature';
-  }
-
-  const output = result.output.trim();
-  const validCommands: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore', '/pr_review'];
-
-  for (const cmd of validCommands) {
-    if (output.includes(cmd)) {
-      return cmd;
-    }
-  }
-
-  if (output === '0') {
-    log('Issue classified as unknown type, defaulting to /feature', 'info');
-    return '/feature';
-  }
-
-  log('Could not parse classification result, defaulting to /feature', 'info');
-  return '/feature';
-}
-
-/**
- * Determines if a stage should be executed based on recovery state.
- */
-function shouldExecuteStage(stage: WorkflowStage, recoveryState: RecoveryState): boolean {
-  if (!recoveryState.canResume || !recoveryState.lastCompletedStage) {
-    return true;
-  }
-
-  const stageIndex = STAGE_ORDER.indexOf(stage);
-  const lastCompletedIndex = STAGE_ORDER.indexOf(recoveryState.lastCompletedStage);
-
-  return stageIndex > lastCompletedIndex;
-}
-
-/**
- * Checks if there are uncommitted changes in the working directory.
- */
-function hasUncommittedChanges(): boolean {
-  try {
-    const status = execSync('git status --porcelain', { encoding: 'utf-8' });
-    return status.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Gets the next stage to resume from based on the last completed stage.
- */
-function getNextStage(lastCompletedStage: WorkflowStage): WorkflowStage {
-  const index = STAGE_ORDER.indexOf(lastCompletedStage);
-  if (index === -1 || index >= STAGE_ORDER.length - 1) {
-    return 'starting';
-  }
-  return STAGE_ORDER[index + 1];
-}
+import { classifyGitHubIssue } from './triggers/issueClassifier';
 
 /**
  * Prints usage information and exits.
@@ -257,12 +163,16 @@ async function main(): Promise<void> {
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
 
-  // Step 2: Checkout default branch and pull latest changes
-  // Skip if cwd is provided (worktree already has the correct starting point)
-  if (!cwd) {
-    checkoutDefaultBranch();
+  // Step 2: Setup working directory
+  let workingDir = cwd;
+  if (!workingDir) {
+    // Create a worktree for isolated execution
+    const defaultBranch = getDefaultBranch();
+    const tempBranchName = generateBranchName(issueNumber, issue.title, providedIssueType || '/feature');
+    workingDir = ensureWorktree(tempBranchName, defaultBranch);
+    log(`Worktree path: ${workingDir}`, 'info');
   } else {
-    log('Skipping checkout (using worktree)', 'info');
+    log('Skipping checkout (using provided worktree)', 'info');
   }
 
   // Step 3: Detect recovery state from existing comments
@@ -306,7 +216,7 @@ async function main(): Promise<void> {
   if (recoveryState.canResume && recoveryState.lastCompletedStage) {
     log(`Recovery mode active: last completed stage was '${recoveryState.lastCompletedStage}'`, 'info');
 
-    if (hasUncommittedChanges()) {
+    if (hasUncommittedChanges(workingDir || undefined)) {
       log('Warning: There are uncommitted changes in the working directory', 'info');
     }
 
@@ -338,27 +248,11 @@ async function main(): Promise<void> {
       postWorkflowComment(issueNumber, 'classified', ctx);
     } else if (shouldExecuteStage('classified', recoveryState)) {
       log('Classifying issue type...', 'info');
-      const classifierStatePath = AgentStateManager.initializeState(adwId, 'classifier', orchestratorStatePath);
-      AgentStateManager.writeState(classifierStatePath, {
-        adwId,
-        issueNumber,
-        agentName: 'classifier',
-        parentAgent: 'plan-orchestrator',
-        execution: AgentStateManager.createExecutionState('running'),
-      });
 
-      issueType = await classifyIssue(issue, logsDir, classifierStatePath, cwd || undefined);
-      log(`Issue classified as: ${issueType}`, 'success');
+      const classificationResult = await classifyGitHubIssue(issue);
+      issueType = classificationResult.issueType;
+      log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
       ctx.issueType = issueType;
-
-      AgentStateManager.writeState(classifierStatePath, {
-        issueClass: issueType,
-        output: issueType,
-        execution: AgentStateManager.completeExecution(
-          AgentStateManager.createExecutionState('running'),
-          true
-        ),
-      });
 
       AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
       AgentStateManager.appendLog(orchestratorStatePath, `Issue classified as: ${issueType}`);
@@ -373,7 +267,7 @@ async function main(): Promise<void> {
     // Step 6: Create branch
     if (shouldExecuteStage('branch_created', recoveryState)) {
       log('Creating branch...', 'info');
-      branchName = createFeatureBranch(issueNumber, issue.title, issueType, cwd || undefined);
+      branchName = createFeatureBranch(issueNumber, issue.title, issueType, workingDir || undefined);
       log(`On branch: ${branchName}`, 'success');
       ctx.branchName = branchName;
 
@@ -384,7 +278,7 @@ async function main(): Promise<void> {
     } else {
       log('Skipping branch creation (already completed)', 'info');
       if (recoveryState.branchName) {
-        branchName = createFeatureBranch(issueNumber, issue.title, issueType, cwd || undefined);
+        branchName = createFeatureBranch(issueNumber, issue.title, issueType, workingDir || undefined);
         ctx.branchName = branchName;
       }
     }
@@ -408,7 +302,7 @@ async function main(): Promise<void> {
         execution: AgentStateManager.createExecutionState('running'),
       });
 
-      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath, cwd || undefined);
+      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath, workingDir || undefined);
 
       if (!planResult.success) {
         AgentStateManager.writeState(planAgentStatePath, {
@@ -443,7 +337,7 @@ async function main(): Promise<void> {
     // Step 8: Commit plan
     if (shouldExecuteStage('plan_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'plan_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, cwd || undefined);
+      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, workingDir || undefined);
     } else {
       log('Skipping plan commit (already completed)', 'info');
     }
