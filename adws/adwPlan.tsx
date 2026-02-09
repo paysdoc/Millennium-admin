@@ -2,15 +2,15 @@
 /**
  * ADW Plan - AI Developer Workflow Planning Phase
  *
- * Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id]
+ * Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>] [--issue-type <type>]
  *
  * Workflow:
- * 1. Fetch GitHub issue details
- * 2. Setup worktree or checkout default branch
+ * 1. Fetch GitHub issue
+ * 2. Setup worktree (with latest code from default branch)
  * 3. Detect recovery state from existing comments
  * 4. Classify issue type (feature, bug, chore, pr_review)
  * 5. Create feature branch: {type}/issue-{number}-{slug}
- * 6. Run Plan Agent: Generate implementation plan
+ * 6. Run Plan Agent: generate implementation plan
  * 7. Commit the plan
  *
  * Environment Requirements:
@@ -24,30 +24,28 @@ import {
   generateAdwId,
   ensureLogsDirectory,
   IssueClassSlashCommand,
-  commitPrefixMap,
   AgentStateManager,
   AgentState,
   shouldExecuteStage,
-  hasUncommittedChanges,
-  getNextStage,
+  handleRecoveryMode,
+  executeClassifyStep,
+  executeCreateBranchStep,
+  executePlanAgentStep,
+  executeCommitPlanStep,
+  handleWorkflowError,
+  setupWorktreeWithLatestCode,
+  WorkflowParams,
 } from './core';
 import {
   fetchGitHubIssue,
-  createFeatureBranch,
-  commitChanges,
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
-  checkoutDefaultBranch,
   getDefaultBranch,
   generateBranchName,
-  ensureWorktree,
+  mergeLatestFromDefaultBranch,
 } from './github';
-import {
-  runPlanAgent,
-  getPlanFilePath,
-  planFileExists,
-} from './agents';
+import { getPlanFilePath } from './agents';
 import { classifyGitHubIssue } from './triggers/issueClassifier';
 
 /**
@@ -164,15 +162,15 @@ async function main(): Promise<void> {
   log(`Fetched issue: ${issue.title}`, 'success');
 
   // Step 2: Setup working directory
-  let workingDir = cwd;
-  if (!workingDir) {
-    // Create a worktree for isolated execution
-    const defaultBranch = getDefaultBranch();
-    const tempBranchName = generateBranchName(issueNumber, issue.title, providedIssueType || '/feature');
-    workingDir = ensureWorktree(tempBranchName, defaultBranch);
-    log(`Worktree path: ${workingDir}`, 'info');
+  const defaultBranch = getDefaultBranch();
+  let workingDir: string;
+  if (cwd) {
+    mergeLatestFromDefaultBranch(defaultBranch, cwd);
+    workingDir = cwd;
+    log('Using provided worktree (merged latest code)', 'info');
   } else {
-    log('Skipping checkout (using provided worktree)', 'info');
+    const tempBranchName = generateBranchName(issueNumber, issue.title, providedIssueType || '/feature');
+    workingDir = setupWorktreeWithLatestCode(tempBranchName, defaultBranch);
   }
 
   // Step 3: Detect recovery state from existing comments
@@ -212,135 +210,48 @@ async function main(): Promise<void> {
     adwId,
   };
 
-  // Handle recovery mode
-  if (recoveryState.canResume && recoveryState.lastCompletedStage) {
-    log(`Recovery mode active: last completed stage was '${recoveryState.lastCompletedStage}'`, 'info');
-
-    if (hasUncommittedChanges(workingDir || undefined)) {
-      log('Warning: There are uncommitted changes in the working directory', 'info');
-    }
-
-    if (recoveryState.branchName) ctx.branchName = recoveryState.branchName;
-    if (recoveryState.planPath) ctx.planPath = recoveryState.planPath;
-
-    const nextStage = getNextStage(recoveryState.lastCompletedStage);
-    ctx.resumeFrom = nextStage;
-    postWorkflowComment(issueNumber, 'resuming', ctx);
+  // Step 5: Classify issue type (adwPlan has unique --issue-type flag handling)
+  let issueType: IssueClassSlashCommand;
+  if (providedIssueType) {
+    log(`Using pre-classified issue type: ${providedIssueType}`, 'info');
+    issueType = providedIssueType;
   } else {
-    postWorkflowComment(issueNumber, 'starting', ctx);
+    log('Classifying issue type...', 'info');
+    const classificationResult = await classifyGitHubIssue(issue);
+    issueType = classificationResult.issueType;
+    log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
   }
+  ctx.issueType = issueType;
+
+  // Build workflow params
+  const params: WorkflowParams = {
+    issueNumber,
+    adwId,
+    issue,
+    issueType,
+    recoveryState,
+    orchestratorStatePath,
+    orchestratorName: 'plan-orchestrator',
+    ctx,
+    workingDir,
+    logsDir,
+  };
+
+  // Handle recovery mode
+  handleRecoveryMode(params);
 
   try {
-    let planCostUsd = 0;
-    let branchName = ctx.branchName || '';
+    // Classify step (post comment for classification)
+    executeClassifyStep(params);
 
-    // Step 5: Classify issue type
-    let issueType: IssueClassSlashCommand;
-    if (providedIssueType) {
-      // Issue type was provided via CLI (from orchestrator), skip classification
-      log(`Using pre-classified issue type: ${providedIssueType}`, 'info');
-      issueType = providedIssueType;
-      ctx.issueType = issueType;
+    // Create branch
+    const branchName = executeCreateBranchStep(params);
 
-      AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
-      AgentStateManager.appendLog(orchestratorStatePath, `Using pre-classified issue type: ${issueType}`);
+    // Run Plan Agent
+    const planCostUsd = await executePlanAgentStep(params, branchName);
 
-      postWorkflowComment(issueNumber, 'classified', ctx);
-    } else if (shouldExecuteStage('classified', recoveryState)) {
-      log('Classifying issue type...', 'info');
-
-      const classificationResult = await classifyGitHubIssue(issue);
-      issueType = classificationResult.issueType;
-      log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
-      ctx.issueType = issueType;
-
-      AgentStateManager.writeState(orchestratorStatePath, { issueClass: issueType });
-      AgentStateManager.appendLog(orchestratorStatePath, `Issue classified as: ${issueType}`);
-
-      postWorkflowComment(issueNumber, 'classified', ctx);
-    } else {
-      log('Skipping classification (already completed)', 'info');
-      issueType = '/feature';
-      ctx.issueType = issueType;
-    }
-
-    // Step 6: Create branch
-    if (shouldExecuteStage('branch_created', recoveryState)) {
-      log('Creating branch...', 'info');
-      branchName = createFeatureBranch(issueNumber, issue.title, issueType, workingDir || undefined);
-      log(`On branch: ${branchName}`, 'success');
-      ctx.branchName = branchName;
-
-      AgentStateManager.writeState(orchestratorStatePath, { branchName });
-      AgentStateManager.appendLog(orchestratorStatePath, `Branch created: ${branchName}`);
-
-      postWorkflowComment(issueNumber, 'branch_created', ctx);
-    } else {
-      log('Skipping branch creation (already completed)', 'info');
-      if (recoveryState.branchName) {
-        branchName = createFeatureBranch(issueNumber, issue.title, issueType, workingDir || undefined);
-        ctx.branchName = branchName;
-      }
-    }
-
-    // Step 7: Run Plan Agent
-    const planPath = getPlanFilePath(issueNumber);
-    ctx.planPath = planPath;
-
-    if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber)) {
-      postWorkflowComment(issueNumber, 'plan_building', ctx);
-      log('Running Plan Agent...', 'info');
-
-      const planAgentStatePath = AgentStateManager.initializeState(adwId, 'plan-agent', orchestratorStatePath);
-      AgentStateManager.writeState(planAgentStatePath, {
-        adwId,
-        issueNumber,
-        branchName,
-        issueClass: issueType,
-        agentName: 'plan-agent',
-        parentAgent: 'plan-orchestrator',
-        execution: AgentStateManager.createExecutionState('running'),
-      });
-
-      const planResult = await runPlanAgent(issue, logsDir, issueType, planAgentStatePath, workingDir || undefined);
-
-      if (!planResult.success) {
-        AgentStateManager.writeState(planAgentStatePath, {
-          execution: AgentStateManager.completeExecution(
-            AgentStateManager.createExecutionState('running'),
-            false,
-            planResult.output
-          ),
-        });
-        throw new Error(`Plan Agent failed: ${planResult.output}`);
-      }
-
-      AgentStateManager.writeState(planAgentStatePath, {
-        planFile: planPath,
-        output: planResult.output.substring(0, 1000),
-        execution: AgentStateManager.completeExecution(
-          AgentStateManager.createExecutionState('running'),
-          true
-        ),
-      });
-
-      AgentStateManager.writeState(orchestratorStatePath, { planFile: planPath });
-      AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${planPath}`);
-
-      ctx.planOutput = planResult.output;
-      planCostUsd = planResult.totalCostUsd || 0;
-      postWorkflowComment(issueNumber, 'plan_created', ctx);
-    } else {
-      log('Skipping Plan Agent (plan already exists or completed)', 'info');
-    }
-
-    // Step 8: Commit plan
-    if (shouldExecuteStage('plan_committing', recoveryState)) {
-      postWorkflowComment(issueNumber, 'plan_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, workingDir || undefined);
-    } else {
-      log('Skipping plan commit (already completed)', 'info');
-    }
+    // Commit plan
+    executeCommitPlanStep(params);
 
     // Update final state
     AgentStateManager.writeState(orchestratorStatePath, {
@@ -355,6 +266,7 @@ async function main(): Promise<void> {
     AgentStateManager.appendLog(orchestratorStatePath, 'Plan workflow completed successfully');
 
     // Print summary
+    const planPath = getPlanFilePath(issueNumber);
     printPlanSummary(
       issueNumber,
       issue.title,
@@ -366,20 +278,7 @@ async function main(): Promise<void> {
     );
 
   } catch (error) {
-    ctx.errorMessage = String(error);
-    postWorkflowComment(issueNumber, 'error', ctx);
-
-    AgentStateManager.writeState(orchestratorStatePath, {
-      execution: AgentStateManager.completeExecution(
-        AgentStateManager.createExecutionState('running'),
-        false,
-        String(error)
-      ),
-    });
-    AgentStateManager.appendLog(orchestratorStatePath, `Plan workflow failed: ${error}`);
-
-    log(`Plan workflow failed: ${error}`, 'error');
-    process.exit(1);
+    handleWorkflowError(error, orchestratorStatePath, ctx, issueNumber, 'Plan workflow');
   }
 }
 
