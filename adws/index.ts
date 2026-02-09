@@ -36,6 +36,10 @@ export {
   type PRListItem,
   type PRReviewWorkflowStage,
   type RecoveryState,
+  // Orchestrator shared utilities
+  shouldExecuteStage,
+  hasUncommittedChanges,
+  getNextStage,
 } from './core';
 
 // Agents module - Claude Code agent runners
@@ -90,3 +94,22 @@ export {
   type WorkflowContext,
   type PRReviewWorkflowContext,
 } from './github';
+
+// Workflow Phases - Composable orchestrator phase functions
+export {
+  type WorkflowConfig,
+  type PRReviewWorkflowConfig,
+  initializeWorkflow,
+  initializePRReviewWorkflow,
+  executePlanPhase,
+  executeBuildPhase,
+  executeTestPhase,
+  executePRPhase,
+  executePRReviewPlanPhase,
+  executePRReviewBuildPhase,
+  executePRReviewTestPhase,
+  completePRReviewWorkflow,
+  handlePRReviewWorkflowError,
+  completeWorkflow,
+  handleWorkflowError,
+} from './workflowPhases';

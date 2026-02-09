@@ -56,3 +56,7 @@ export {
   writeAgentRawOutput,
   readParentAgentState,
 } from './agentState';
+
+// Orchestrator shared utilities
+export { shouldExecuteStage, hasUncommittedChanges, getNextStage } from './orchestratorLib';
+
