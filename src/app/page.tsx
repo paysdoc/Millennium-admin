@@ -5,6 +5,8 @@ import CategorySection from '@/components/CategorySection'
 import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
 import { CharactersByCategory } from '@/types/character'
 
+export const dynamic = 'force-dynamic'
+
 export default async function Home() {
   let groupedCharacters: CharactersByCategory
   let error: string | null = null

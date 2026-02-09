@@ -8,6 +8,8 @@ import { fetchCharacterById, fetchAllCharacters } from '@/lib/characters'
 import { fetchConnectionsByCharacter } from '@/lib/connections'
 import { getSupabaseStorageUrl } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 interface CharacterPageProps {
   params: Promise<{ id: string }>
 }
