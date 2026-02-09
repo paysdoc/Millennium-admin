@@ -94,3 +94,15 @@ export {
   type WorkflowContext,
   type PRReviewWorkflowContext,
 } from './github';
+
+// Workflow Phases - Composable orchestrator phase functions
+export {
+  type WorkflowConfig,
+  initializeWorkflow,
+  executePlanPhase,
+  executeBuildPhase,
+  executeTestPhase,
+  executePRPhase,
+  completeWorkflow,
+  handleWorkflowError,
+} from './workflowPhases';

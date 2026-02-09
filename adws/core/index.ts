@@ -60,19 +60,3 @@ export {
 // Orchestrator shared utilities
 export { shouldExecuteStage, hasUncommittedChanges, getNextStage } from './orchestratorLib';
 
-// Workflow step functions
-export {
-  setupWorktreeWithLatestCode,
-  handleRecoveryMode,
-  executeClassifyStep,
-  executeCreateBranchStep,
-  executePlanAgentStep,
-  executeCommitPlanStep,
-  readPlanContent,
-  executeBuildAgentStep,
-  executeCommitImplementationStep,
-  executePRCreationStep,
-  completeWorkflow,
-  handleWorkflowError,
-  type WorkflowParams,
-} from './workflowSteps';

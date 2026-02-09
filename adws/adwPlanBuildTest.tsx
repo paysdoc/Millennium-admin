@@ -1,22 +1,16 @@
 #!/usr/bin/env npx tsx
 /**
- * ADW Plan, Build & Test - Self-Sufficient Plan+Build+Test+PR Orchestrator
+ * ADW Plan, Build & Test - Plan+Build+Test+PR Orchestrator
  *
  * Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issue-number> [adw-id]
  *
  * Workflow:
- * 1. Fetch GitHub issue
- * 2. Setup worktree (with latest code from default branch)
- * 3. Detect recovery state from existing comments
- * 4. Classify issue type (feature, bug, chore, pr_review)
- * 5. Create feature branch: {type}/issue-{number}-{slug}
- * 6. Run Plan Agent: generate implementation plan
- * 7. Commit the plan
- * 8. Run Build Agent: implement the plan
- * 9. Commit the implementation
- * 10. Run unit tests (with retry on failure)
- * 11. Run E2E tests (with retry on failure)
- * 12. Create Pull Request (only if all tests pass)
+ * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
+ * 2. Plan Phase: classify issue, create branch, run plan agent, commit plan
+ * 3. Build Phase: run build agent, commit implementation
+ * 4. Test Phase: run unit tests with retry, run E2E tests with retry
+ * 5. PR Phase: create pull request (only if all tests pass)
+ * 6. Finalize: update state, post completion comment
  *
  * Environment Requirements:
  * - ANTHROPIC_API_KEY: Anthropic API key
@@ -25,42 +19,16 @@
  * - MAX_TEST_RETRY_ATTEMPTS: Maximum retry attempts for tests (default: 5)
  */
 
+import { generateAdwId } from './core';
 import {
-  log,
-  generateAdwId,
-  ensureLogsDirectory,
-  IssueClassSlashCommand,
-  AgentStateManager,
-  AgentState,
-  MAX_TEST_RETRY_ATTEMPTS,
-  setupWorktreeWithLatestCode,
-  handleRecoveryMode,
-  executeClassifyStep,
-  executeCreateBranchStep,
-  executePlanAgentStep,
-  executeCommitPlanStep,
-  readPlanContent,
-  executeBuildAgentStep,
-  executeCommitImplementationStep,
-  executePRCreationStep,
+  initializeWorkflow,
+  executePlanPhase,
+  executeBuildPhase,
+  executeTestPhase,
+  executePRPhase,
   completeWorkflow,
   handleWorkflowError,
-  WorkflowParams,
-} from './core';
-import {
-  fetchGitHubIssue,
-  WorkflowContext,
-  detectRecoveryState,
-  getDefaultBranch,
-  generateBranchName,
-  postWorkflowComment,
-} from './github';
-import {
-  getPlanFilePath,
-  runUnitTestsWithRetry,
-  runE2ETestsWithRetry,
-} from './agents';
-import { classifyGitHubIssue } from './triggers/issueClassifier';
+} from './workflowPhases';
 
 /**
  * Prints usage information and exits.
@@ -104,168 +72,20 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
-  log('===================================', 'info');
-  log('ADW Plan, Build & Test Orchestrator', 'info');
-  log(`Issue: #${issueNumber}`, 'info');
-  log(`ADW ID: ${adwId}`, 'info');
-  log(`Max test retry attempts: ${MAX_TEST_RETRY_ATTEMPTS}`, 'info');
-  log('===================================', 'info');
-
-  // Step 1: Fetch issue
-  log('Fetching GitHub issue...', 'info');
-  const issue = await fetchGitHubIssue(issueNumber);
-  log(`Fetched issue: ${issue.title}`, 'success');
-
-  // Step 2: Setup worktree with latest code
-  const defaultBranch = getDefaultBranch();
-  const tempBranchName = generateBranchName(issueNumber, issue.title, '/feature');
-  const worktreePath = setupWorktreeWithLatestCode(tempBranchName, defaultBranch);
-  log(`Default branch: ${defaultBranch}`, 'info');
-
-  // Step 3: Detect recovery state
-  const recoveryState = detectRecoveryState(issue.comments);
-
-  // Step 4: Classify issue
-  log('Classifying issue type...', 'info');
-  const classificationResult = await classifyGitHubIssue(issue);
-  const issueType: IssueClassSlashCommand = classificationResult.issueType;
-  log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
-
-  // Initialize state
-  const logsDir = ensureLogsDirectory(adwId);
-  const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'plan-build-test-orchestrator');
-  log(`State: ${orchestratorStatePath}`, 'info');
-  log(`Logs: ${logsDir}`, 'info');
-
-  const initialState: Partial<AgentState> = {
-    adwId,
-    issueNumber,
-    agentName: 'plan-build-test-orchestrator',
-    execution: AgentStateManager.createExecutionState('running'),
-  };
-  AgentStateManager.writeState(orchestratorStatePath, initialState);
-  AgentStateManager.appendLog(orchestratorStatePath, `Starting ADW Plan, Build & Test workflow for issue #${issueNumber}`);
-
-  // Initialize workflow context
-  const ctx: WorkflowContext = {
-    issueNumber,
-    adwId,
-    issueType,
-  };
-
-  // Build workflow params
-  const params: WorkflowParams = {
-    issueNumber,
-    adwId,
-    issue,
-    issueType,
-    recoveryState,
-    orchestratorStatePath,
-    orchestratorName: 'plan-build-test-orchestrator',
-    ctx,
-    workingDir: worktreePath,
-    logsDir,
-  };
-
-  // Handle recovery mode
-  handleRecoveryMode(params);
+  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-orchestrator');
 
   try {
-    let totalCostUsd = 0;
-
-    // === PLAN PHASE ===
-    executeClassifyStep(params);
-    const currentBranch = executeCreateBranchStep(params);
-    totalCostUsd += await executePlanAgentStep(params, currentBranch);
-    executeCommitPlanStep(params);
-
-    // === BUILD PHASE ===
-    const planPath = getPlanFilePath(issueNumber);
-    const planContent = readPlanContent(planPath);
-    totalCostUsd += await executeBuildAgentStep(params, planContent, currentBranch);
-    executeCommitImplementationStep(params);
-
-    // === TEST PHASE ===
-
-    log('Phase: Unit Tests', 'info');
-    AgentStateManager.appendLog(orchestratorStatePath, 'Starting test phase: Unit Tests');
-
-    const unitTestsResult = await runUnitTestsWithRetry({
-      logsDir,
-      orchestratorStatePath,
-      maxRetries: MAX_TEST_RETRY_ATTEMPTS,
+    const planResult = await executePlanPhase(config);
+    const buildResult = await executeBuildPhase(config);
+    const testResult = await executeTestPhase(config);
+    executePRPhase(config);
+    completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd, {
+      unitTestsPassed: testResult.unitTestsPassed,
+      e2eTestsPassed: testResult.e2eTestsPassed,
+      totalTestRetries: testResult.totalRetries,
     });
-    totalCostUsd += unitTestsResult.costUsd;
-
-    if (!unitTestsResult.passed) {
-      const errorMsg = 'Unit tests failed after maximum retry attempts. No PR was created.';
-      log(errorMsg, 'error');
-      AgentStateManager.appendLog(orchestratorStatePath, errorMsg);
-      ctx.errorMessage = errorMsg;
-      postWorkflowComment(issueNumber, 'error', ctx);
-
-      AgentStateManager.writeState(orchestratorStatePath, {
-        execution: AgentStateManager.completeExecution(
-          AgentStateManager.createExecutionState('running'),
-          false,
-          errorMsg
-        ),
-        metadata: { totalCostUsd, unitTestsPassed: false },
-      });
-      process.exit(1);
-    }
-
-    log('Phase: E2E Tests', 'info');
-    AgentStateManager.appendLog(orchestratorStatePath, 'Starting test phase: E2E Tests');
-
-    const e2eTestsResult = await runE2ETestsWithRetry({
-      logsDir,
-      orchestratorStatePath,
-      maxRetries: MAX_TEST_RETRY_ATTEMPTS,
-    });
-    totalCostUsd += e2eTestsResult.costUsd;
-
-    if (!e2eTestsResult.passed) {
-      const errorMsg = 'E2E tests failed after maximum retry attempts. No PR was created.';
-      log(errorMsg, 'error');
-      AgentStateManager.appendLog(orchestratorStatePath, errorMsg);
-      ctx.errorMessage = errorMsg;
-      postWorkflowComment(issueNumber, 'error', ctx);
-
-      AgentStateManager.writeState(orchestratorStatePath, {
-        execution: AgentStateManager.completeExecution(
-          AgentStateManager.createExecutionState('running'),
-          false,
-          errorMsg
-        ),
-        metadata: { totalCostUsd, unitTestsPassed: true, e2eTestsPassed: false },
-      });
-      process.exit(1);
-    }
-
-    log('All tests passed!', 'success');
-    AgentStateManager.appendLog(orchestratorStatePath, 'All tests passed');
-
-    // === PR PHASE ===
-    executePRCreationStep(params, defaultBranch);
-
-    // === COMPLETION ===
-    completeWorkflow(orchestratorStatePath, ctx, issueNumber, {
-      totalCostUsd,
-      unitTestsPassed: true,
-      e2eTestsPassed: true,
-      totalTestRetries: unitTestsResult.totalRetries + e2eTestsResult.totalRetries,
-    });
-
-    log('===================================', 'info');
-    log('ADW Plan, Build & Test workflow completed!', 'success');
-    if (ctx.prUrl) {
-      log(`PR: ${ctx.prUrl}`, 'info');
-    }
-    log('===================================', 'info');
-
   } catch (error) {
-    handleWorkflowError(error, orchestratorStatePath, ctx, issueNumber, 'Plan, Build & Test workflow');
+    handleWorkflowError(config, error);
   }
 }
 
