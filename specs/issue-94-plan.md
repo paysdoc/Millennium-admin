@@ -1,79 +1,94 @@
-# Bug: Staging environment incorrectly states "No characters found."
+# PR-Review: Fix persistent "No characters found" and add backend failure logging
 
-## Bug Description
-The home page on preview and staging environments displays "No characters found." even though the staging Supabase database contains character data. The expected behavior is that the page should dynamically fetch and display all characters from the database on each request. Instead, the page serves a stale, statically-generated version that was built when the data may not have been available or when the fetch response was cached.
+## PR-Review Description
+The PR #95 attempted to fix issue #94 by adding `export const dynamic = 'force-dynamic'` to both the home page and character detail page. The reviewer reports two issues:
 
-## Problem Statement
-The home page (`src/app/page.tsx`) and character detail page (`src/app/characters/[id]/page.tsx`) are Next.js App Router server components that fetch data from Supabase. In Next.js 14, server components are **statically rendered at build time by default**. Neither page opts into dynamic rendering — there is no `export const dynamic` or `export const revalidate` configuration. As a result, the Supabase query runs once during `next build`, the HTML is cached, and all subsequent requests serve the stale static page regardless of the current database state.
+1. **The problem persists** — "No characters found" is still being shown on staging. The root cause is that `force-dynamic` only changes the page rendering strategy (from static generation to server-side rendering on each request), but does NOT disable the Next.js Data Cache. In Next.js 14, the global `fetch` API is patched to use `force-cache` by default. Since the Supabase JS client v2 uses `fetch` internally, the data fetched from Supabase is cached at the fetch level and never refreshed — even though the page itself re-renders on each request. The fix requires configuring the Supabase client to pass `cache: 'no-store'` to its internal fetch calls.
 
-## Solution Statement
-Add `export const dynamic = 'force-dynamic'` to every page that fetches data from Supabase. This tells Next.js to render these pages dynamically on every request, ensuring fresh data is always fetched from the database. This is the minimal, targeted fix — it only changes the rendering strategy for data-driven pages without modifying any data-fetching logic or component structure.
+2. **Missing console warnings** — The reviewer requests logging a warning in the console for every failed call to the backend. Currently, several error paths in `characters.ts` and `connections.ts` throw errors without logging warnings first, and the home page catch block silently captures errors without logging.
 
-## Steps to Reproduce
-1. Deploy the application to Vercel staging/preview environment (push to `develop` or a feature branch).
-2. Ensure the staging Supabase database has character data populated.
-3. Navigate to the staging URL home page.
-4. Observe "No characters found." is displayed despite the database containing data.
-5. The character detail page (`/characters/[id]`) would similarly show stale or missing data.
-
-## Root Cause Analysis
-Next.js 14 App Router statically generates server component pages at build time by default. The Supabase JS client (`@supabase/supabase-js` v2) internally uses the native `fetch` API, which Next.js 14 patches to add automatic caching (`force-cache` by default). This creates a two-layer caching problem:
-
-1. **Page-level static generation**: The page HTML is generated once during `next build` and served as a static asset for all requests.
-2. **Data Cache**: The `fetch` calls made by the Supabase client are cached by Next.js's Data Cache at build time.
-
-When the build runs on Vercel:
-- If the database was empty at build time, or the env vars were misconfigured during the build step, or the fetch was cached with an empty/error response, the page renders "No characters found."
-- This static HTML is served for all subsequent requests — the database is never queried again until a new build/deployment occurs.
-
-The pages that fetch from Supabase (`src/app/page.tsx` and `src/app/characters/[id]/page.tsx`) lack any dynamic rendering configuration (`export const dynamic = 'force-dynamic'` or `export const revalidate`), so they default to static generation.
+## Summary of Original Implementation Plan
+The original plan (committed in `5db1358` and implemented in `f49ebe8`) identified that Next.js 14 App Router statically generates server component pages at build time by default. The solution was to add `export const dynamic = 'force-dynamic'` to both `src/app/page.tsx` and `src/app/characters/[id]/page.tsx`, and add tests to verify the exports. The implementation was completed but only addressed page-level static generation — it did not address the fetch-level Data Cache applied to the Supabase client's internal HTTP requests, nor did it add console warnings for failed backend calls.
 
 ## Relevant Files
-Use these files to fix the bug:
+Use these files to resolve the review:
 
-- `src/app/page.tsx` — The home page server component. Fetches all characters via `fetchAllCharacters()` and displays them grouped by category. Shows "No characters found." when `categories.length === 0`. **Needs `export const dynamic = 'force-dynamic'` to render dynamically on every request.**
-- `src/app/characters/[id]/page.tsx` — The character detail page. Fetches a single character and its connections from Supabase. **Needs `export const dynamic = 'force-dynamic'` to render dynamically on every request.**
-- `src/__tests__/app.test.tsx` — Existing test file for page components. **Needs a new test to verify the `dynamic` export is present on data-fetching pages.**
+- `src/lib/supabase.ts` — The Supabase client singleton factory. Currently creates the client with default options, meaning the Supabase client's internal `fetch` calls inherit Next.js 14's default `cache: 'force-cache'` behavior. Must be modified to pass a custom `fetch` wrapper with `cache: 'no-store'` to bypass the Next.js Data Cache.
+- `src/lib/characters.ts` — Contains `fetchAllCharacters()` and `fetchCharacterById()`. Error paths that throw without logging need `console.warn` added before every throw statement.
+- `src/lib/connections.ts` — Contains `fetchAllConnections()` and `fetchConnectionsByCharacter()`. Same issue — error paths that throw without logging need `console.warn` added.
+- `src/app/page.tsx` — The home page catch block silently captures errors without logging. Needs `console.warn` added.
+- `src/__tests__/app.test.tsx` — Existing test file. Already has dynamic export tests. No changes needed.
+
+### New Files
+- `src/__tests__/supabase.test.ts` — If it does not already exist, create a test file to verify the Supabase client is created with `cache: 'no-store'` fetch configuration.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Add dynamic rendering to the home page
-- Open `src/app/page.tsx`.
-- Add `export const dynamic = 'force-dynamic'` before the default export function.
-- This tells Next.js to render this page dynamically on every request instead of statically generating it at build time.
-
-### Step 2: Add dynamic rendering to the character detail page
-- Open `src/app/characters/[id]/page.tsx`.
-- Add `export const dynamic = 'force-dynamic'` before the default export function.
-- This ensures the character detail page always fetches fresh data from Supabase.
-
-### Step 3: Add tests to verify dynamic exports
-- Open `src/__tests__/app.test.tsx`.
-- Add test cases that verify the `dynamic` export equals `'force-dynamic'` for both the home page (`src/app/page.tsx`) and the character detail page (`src/app/characters/[id]/page.tsx`).
-- This prevents future regressions where someone might accidentally remove the dynamic configuration.
-- Example test pattern:
+### Step 1: Configure the Supabase client to disable Next.js fetch caching
+- Open `src/lib/supabase.ts`.
+- Modify the `getSupabaseClient()` function to pass a `global.fetch` option when calling `createClient()`.
+- The custom fetch wrapper must forward all arguments to the native `fetch` but override the `cache` option to `'no-store'`, ensuring every HTTP request made by the Supabase client bypasses Next.js 14's Data Cache.
+- Implementation:
   ```typescript
-  it('Home page exports dynamic as force-dynamic', async () => {
-    const { dynamic } = await import('../app/page')
-    expect(dynamic).toBe('force-dynamic')
+  client = createClient(supabaseUrl, supabaseKey, {
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: 'no-store' }),
+    },
   })
   ```
+- Keep the singleton pattern — the `cache: 'no-store'` option applies per-request at the HTTP level, not at the client instance level.
 
-### Step 4: Run validation commands
+### Step 2: Add console.warn to all error paths in characters.ts
+- Open `src/lib/characters.ts`.
+- In `fetchAllCharacters()`:
+  - Before the `throw new Error(...)` on the Supabase error path (non-table-not-found errors), add: `console.warn('Failed to fetch characters:', error.message)`
+  - In the outer catch block, before the re-throw of non-"Failed to fetch" errors, add: `console.warn('Failed to fetch characters:', err instanceof Error ? err.message : 'Unknown error')`
+- In `fetchCharacterById()`:
+  - Before the `throw new Error(...)` on the Supabase error path, add: `console.warn('Failed to fetch character:', error.message)`
+  - In the outer catch block, before the throw, add: `console.warn('Failed to fetch character:', err instanceof Error ? err.message : 'Unknown error')`
+
+### Step 3: Add console.warn to all error paths in connections.ts
+- Open `src/lib/connections.ts`.
+- In `fetchAllConnections()`:
+  - Before the `throw new Error(...)` on the Supabase error path, add: `console.warn('Failed to fetch connections:', error.message)`
+  - In the outer catch block, before the throw, add: `console.warn('Failed to fetch connections:', err instanceof Error ? err.message : 'Unknown error')`
+- In `fetchConnectionsByCharacter()`:
+  - Before the `throw new Error(...)` on the Supabase error path, add: `console.warn('Failed to fetch connections:', error.message)`
+  - In the outer catch block, before the throw, add: `console.warn('Failed to fetch connections:', err instanceof Error ? err.message : 'Unknown error')`
+
+### Step 4: Add console.warn to the home page error catch block
+- Open `src/app/page.tsx`.
+- In the `catch (e)` block inside the `Home` component, add `console.warn('Failed to load characters:', e instanceof Error ? e.message : 'Unknown error')` before the error assignment line.
+
+### Step 5: Add a test to verify the Supabase client uses no-store fetch caching
+- Check if `src/__tests__/supabase.test.ts` already exists. If so, add the new test there. If not, create it.
+- Add a test that verifies the Supabase client is created with a custom fetch configuration that passes `cache: 'no-store'`.
+- Test approach:
+  1. Mock `@supabase/supabase-js` `createClient` to capture the options passed.
+  2. Call `getSupabaseClient()` with valid env vars.
+  3. Extract the custom `fetch` function from the captured options.
+  4. Mock the global `fetch` and call the custom fetch wrapper.
+  5. Assert that the global `fetch` was called with `cache: 'no-store'` in the init options.
+
+### Step 6: Run validation commands
 - Run `npm run lint` to check for code quality issues.
-- Run `npm run build` to verify the build succeeds with the changes.
-- Run `npm test` to verify all tests pass, including the new dynamic export tests.
+- Run `npm run build` to verify the build succeeds. Confirm that `/` and `/characters/[id]` still show as `λ` (dynamic) in the build output.
+- Run `npm test` to verify all tests pass with zero regressions.
 
 ## Validation Commands
-Execute every command to validate the bug is fixed with zero regressions.
+Execute every command to validate the review is complete with zero regressions.
 
 - `npm run lint` - Run linter to check for code quality issues
-- `npm run build` - Build the application to verify no build errors (also confirms Next.js recognizes the pages as dynamically rendered — the build output should show these routes as dynamic `λ` rather than static `○`)
-- `npm test` - Run tests to validate the bug is fixed with zero regressions
+- `npm run build` - Build the application to verify no build errors
+- `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- IMPORTANT: strictly adhere to the coding guidelines in `/guidelines`. If necessary, refactor existing code to meet the coding guidelines as part of fixing the bug.
-- The `export const dynamic = 'force-dynamic'` is a Next.js App Router route segment config option. It is the standard, documented approach for opting into dynamic rendering. See: https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config#dynamic
-- Only pages that fetch data from Supabase need this change. Static pages like `settings/page.tsx` and `users/page.tsx` do not fetch from the database and should remain statically generated.
-- During `npm run build`, the build output will indicate route rendering strategy. After the fix, the home page (`/`) and character detail page (`/characters/[id]`) should show as `λ` (Server/Dynamic) instead of `○` (Static).
+- IMPORTANT: Strictly adhere to the coding guidelines in `/guidelines`.
+- The root cause is a two-layer caching problem in Next.js 14:
+  1. **Page-level caching** (static generation) — addressed by `export const dynamic = 'force-dynamic'` (already in place from original fix).
+  2. **Fetch-level caching** (Data Cache) — addressed by passing `cache: 'no-store'` to the Supabase client's fetch wrapper (this plan's fix).
+- The `console.warn` additions follow the existing pattern in the codebase (e.g., table-not-found warnings already use `console.warn`). Each warning includes the function context and error message for debuggability.
+- The `getSupabaseStorageUrl()` function in `src/lib/supabase.ts` does not make fetch calls — it only constructs URLs. It does not need modification.
+- Only the Supabase client needs the `cache: 'no-store'` fix since it's the only external data source. The settings and users pages don't fetch from Supabase and are unaffected.

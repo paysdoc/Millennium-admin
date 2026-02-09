@@ -6,6 +6,7 @@ import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
 import { CharactersByCategory } from '@/types/character'
 
 export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
 
 export default async function Home() {
   let groupedCharacters: CharactersByCategory

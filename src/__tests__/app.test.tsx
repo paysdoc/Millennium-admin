@@ -40,5 +40,15 @@ describe('Next.js Application', () => {
       const { dynamic } = await import('../app/characters/[id]/page')
       expect(dynamic).toBe('force-dynamic')
     })
+
+    it('Home page exports fetchCache as force-no-store', async () => {
+      const { fetchCache } = await import('../app/page')
+      expect(fetchCache).toBe('force-no-store')
+    })
+
+    it('Character detail page exports fetchCache as force-no-store', async () => {
+      const { fetchCache } = await import('../app/characters/[id]/page')
+      expect(fetchCache).toBe('force-no-store')
+    })
   })
 })
