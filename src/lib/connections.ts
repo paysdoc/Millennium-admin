@@ -20,6 +20,7 @@ export async function fetchAllConnections(): Promise<Connection[]> {
         )
         return []
       }
+      console.warn('Failed to fetch connections:', error.message)
       throw new Error(`Failed to fetch connections: ${error.message}`)
     }
 
@@ -28,6 +29,7 @@ export async function fetchAllConnections(): Promise<Connection[]> {
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
     }
+    console.warn('Failed to fetch connections:', err instanceof Error ? err.message : 'Unknown error')
     throw new Error(
       `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
     )
@@ -56,6 +58,7 @@ export async function fetchConnectionsByCharacter(
         )
         return []
       }
+      console.warn('Failed to fetch connections:', error.message)
       throw new Error(`Failed to fetch connections: ${error.message}`)
     }
 
@@ -64,6 +67,7 @@ export async function fetchConnectionsByCharacter(
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
     }
+    console.warn('Failed to fetch connections:', err instanceof Error ? err.message : 'Unknown error')
     throw new Error(
       `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
     )

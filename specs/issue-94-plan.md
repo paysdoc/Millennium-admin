@@ -19,8 +19,7 @@ Use these files to resolve the review:
 - `src/app/page.tsx` — The home page catch block silently captures errors without logging. Needs `console.warn` added.
 - `src/__tests__/app.test.tsx` — Existing test file. Already has dynamic export tests. No changes needed.
 
-### New Files
-- `src/__tests__/supabase.test.ts` — If it does not already exist, create a test file to verify the Supabase client is created with `cache: 'no-store'` fetch configuration.
+- `src/__tests__/supabase.test.ts` — Existing test file for the Supabase client. Needs a new test to verify the client is created with `cache: 'no-store'` fetch configuration.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
@@ -63,8 +62,8 @@ IMPORTANT: Execute every step in order, top to bottom.
 - In the `catch (e)` block inside the `Home` component, add `console.warn('Failed to load characters:', e instanceof Error ? e.message : 'Unknown error')` before the error assignment line.
 
 ### Step 5: Add a test to verify the Supabase client uses no-store fetch caching
-- Check if `src/__tests__/supabase.test.ts` already exists. If so, add the new test there. If not, create it.
-- Add a test that verifies the Supabase client is created with a custom fetch configuration that passes `cache: 'no-store'`.
+- Open `src/__tests__/supabase.test.ts` (already exists with tests for `getSupabaseClient`).
+- Add a test in the existing `getSupabaseClient` describe block that verifies the Supabase client is created with a custom fetch configuration that passes `cache: 'no-store'`.
 - Test approach:
   1. Mock `@supabase/supabase-js` `createClient` to capture the options passed.
   2. Call `getSupabaseClient()` with valid env vars.

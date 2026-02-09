@@ -117,4 +117,37 @@ describe('getSupabaseClient', () => {
       'Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)'
     )
   })
+
+  it('creates client with cache no-store fetch to bypass Next.js Data Cache', async () => {
+    process.env.SUPABASE_URL = 'https://test.supabase.co'
+    process.env.SUPABASE_KEY = 'test-key'
+
+    let capturedOptions: Record<string, unknown> | undefined
+    vi.doMock('@supabase/supabase-js', () => ({
+      createClient: (_url: string, _key: string, options?: Record<string, unknown>) => {
+        capturedOptions = options
+        return {} as unknown
+      },
+    }))
+
+    const { getSupabaseClient } = await import('../lib/supabase')
+    getSupabaseClient()
+
+    expect(capturedOptions).toBeDefined()
+    const globalOpts = capturedOptions?.global as { fetch?: (...args: unknown[]) => unknown }
+    expect(globalOpts?.fetch).toBeTypeOf('function')
+
+    const mockFetch = vi.fn()
+    vi.stubGlobal('fetch', mockFetch)
+
+    const customFetch = globalOpts.fetch as (input: RequestInfo | URL, init?: RequestInit) => void
+    customFetch('https://example.com', { method: 'GET' })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://example.com',
+      expect.objectContaining({ method: 'GET', cache: 'no-store' })
+    )
+
+    vi.unstubAllGlobals()
+  })
 })

@@ -16,6 +16,7 @@ export default async function Home() {
     const characters = await fetchAllCharacters()
     groupedCharacters = groupCharactersByCategory(characters)
   } catch (e) {
+    console.warn('Failed to load characters:', e instanceof Error ? e.message : 'Unknown error')
     error = e instanceof Error ? e.message : 'Failed to load characters'
     groupedCharacters = new Map()
   }

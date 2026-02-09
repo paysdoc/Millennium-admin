@@ -30,6 +30,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
         )
         return []
       }
+      console.warn('Failed to fetch characters:', error.message)
       throw new Error(`Failed to fetch characters: ${error.message}`)
     }
 
@@ -39,6 +40,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
     }
+    console.warn('Failed to fetch characters:', err instanceof Error ? err.message : 'Unknown error')
     throw new Error(
       `Failed to fetch characters: ${err instanceof Error ? err.message : 'Unknown error'}`
     )
@@ -72,6 +74,7 @@ export async function fetchCharacterById(id: string): Promise<Character | null> 
         // No rows returned - character not found
         return null
       }
+      console.warn('Failed to fetch character:', error.message)
       throw new Error(`Failed to fetch character: ${error.message}`)
     }
 
@@ -84,6 +87,7 @@ export async function fetchCharacterById(id: string): Promise<Character | null> 
     if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
       throw err
     }
+    console.warn('Failed to fetch character:', err instanceof Error ? err.message : 'Unknown error')
     throw new Error(
       `Failed to fetch character: ${err instanceof Error ? err.message : 'Unknown error'}`
     )
