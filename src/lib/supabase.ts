@@ -39,3 +39,20 @@ export function getSupabaseClient(): SupabaseClient {
   client = createClient(supabaseUrl, supabaseKey)
   return client
 }
+
+export function getSupabaseStorageUrl(path: string | null): string | null {
+  if (!path) {
+    return null
+  }
+
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL
+  if (!supabaseUrl) {
+    return null
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/${path}`
+}
