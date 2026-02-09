@@ -7,10 +7,17 @@ import {
   executePRPhase,
   completeWorkflow,
   handleWorkflowError,
+  initializePRReviewWorkflow,
+  executePRReviewPlanPhase,
+  executePRReviewBuildPhase,
+  executePRReviewTestPhase,
+  completePRReviewWorkflow,
+  handlePRReviewWorkflowError,
   type WorkflowConfig,
+  type PRReviewWorkflowConfig,
 } from '../workflowPhases';
-import { RecoveryState, GitHubIssue } from '../core/dataTypes';
-import { WorkflowContext } from '../github/workflowCommentsIssue';
+import { RecoveryState, GitHubIssue, PRDetails, PRReviewComment } from '../core/dataTypes';
+import { WorkflowContext, PRReviewWorkflowContext } from '../github/workflowComments';
 
 vi.mock('fs');
 
@@ -50,9 +57,25 @@ vi.mock('../github', () => ({
     updatedAt: '2024-01-01T00:00:00Z',
     url: 'https://github.com/test/repo/issues/1',
   }),
+  fetchPRDetails: vi.fn().mockReturnValue({
+    number: 42,
+    title: 'Test PR',
+    body: 'Test PR body',
+    state: 'OPEN',
+    headBranch: 'feature/issue-10-test',
+    baseBranch: 'main',
+    url: 'https://github.com/test/repo/pull/42',
+    issueNumber: 10,
+    reviewComments: [],
+  }),
+  getUnaddressedComments: vi.fn().mockReturnValue([
+    { id: 1, author: { login: 'reviewer', isBot: false }, body: 'Fix this', path: 'src/file.ts', line: 10, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  ]),
   postWorkflowComment: vi.fn(),
+  postPRWorkflowComment: vi.fn(),
   createFeatureBranch: vi.fn().mockReturnValue('feature/issue-1-test'),
   commitChanges: vi.fn(),
+  pushBranch: vi.fn(),
   createPullRequest: vi.fn().mockReturnValue('https://github.com/test/pr/1'),
   detectRecoveryState: vi.fn().mockReturnValue({
     lastCompletedStage: null,
@@ -69,6 +92,7 @@ vi.mock('../github', () => ({
   checkoutDefaultBranch: vi.fn(),
   mergeLatestFromDefaultBranch: vi.fn(),
   copyEnvToWorktree: vi.fn(),
+  inferIssueTypeFromBranch: vi.fn().mockReturnValue('/feature'),
 }));
 
 vi.mock('../agents', () => ({
@@ -83,6 +107,16 @@ vi.mock('../agents', () => ({
     success: true,
     output: 'Build completed',
     totalCostUsd: 1.0,
+  }),
+  runPrReviewPlanAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'PR Review Plan created',
+    totalCostUsd: 0.3,
+  }),
+  runPrReviewBuildAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'PR Review Build completed',
+    totalCostUsd: 0.8,
   }),
   runUnitTestsWithRetry: vi.fn(),
   runE2ETestsWithRetry: vi.fn(),
@@ -99,16 +133,22 @@ vi.mock('../triggers/issueClassifier', () => ({
 import { shouldExecuteStage, hasUncommittedChanges, getNextStage, AgentStateManager } from '../core';
 import {
   fetchGitHubIssue,
+  fetchPRDetails,
+  getUnaddressedComments,
   postWorkflowComment,
+  postPRWorkflowComment,
   createFeatureBranch,
+  commitChanges,
+  pushBranch,
   createPullRequest,
   detectRecoveryState,
   getWorktreeForBranch,
   ensureWorktree,
   checkoutDefaultBranch,
   mergeLatestFromDefaultBranch,
+  inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent } from '../agents';
+import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
 import { classifyGitHubIssue } from '../triggers/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
@@ -405,6 +445,418 @@ describe('handleWorkflowError', () => {
     expect(AgentStateManager.appendLog).toHaveBeenCalledWith(
       '/mock/state/path',
       expect.stringContaining('plan-orchestrator workflow failed')
+    );
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
+  });
+});
+
+// ============================================================================
+// PR Review Workflow Phase Tests
+// ============================================================================
+
+function createMockPRDetails(overrides: Partial<PRDetails> = {}): PRDetails {
+  return {
+    number: 42,
+    title: 'Test PR',
+    body: 'Test PR body',
+    state: 'OPEN',
+    headBranch: 'feature/issue-10-test',
+    baseBranch: 'main',
+    url: 'https://github.com/test/repo/pull/42',
+    issueNumber: 10,
+    reviewComments: [],
+    ...overrides,
+  };
+}
+
+function createMockPRReviewComments(): PRReviewComment[] {
+  return [
+    { id: 1, author: { login: 'reviewer', isBot: false }, body: 'Fix this', path: 'src/file.ts', line: 10, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  ];
+}
+
+function createPRReviewWorkflowConfig(overrides: Partial<PRReviewWorkflowConfig> = {}): PRReviewWorkflowConfig {
+  return {
+    prNumber: 42,
+    issueNumber: 10,
+    adwId: 'test-adw-id',
+    prDetails: createMockPRDetails(),
+    unaddressedComments: createMockPRReviewComments(),
+    worktreePath: '/mock/worktree',
+    logsDir: '/mock/logs',
+    orchestratorStatePath: '/mock/state/path',
+    ctx: {
+      issueNumber: 10,
+      adwId: 'test-adw-id',
+      prNumber: 42,
+      reviewComments: 1,
+      branchName: 'feature/issue-10-test',
+    } as PRReviewWorkflowContext,
+    ...overrides,
+  };
+}
+
+describe('initializePRReviewWorkflow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails());
+    vi.mocked(getUnaddressedComments).mockReturnValue(createMockPRReviewComments());
+  });
+
+  it('fetches PR details and returns config', () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(fetchPRDetails).toHaveBeenCalledWith(42);
+    expect(config.prNumber).toBe(42);
+    expect(config.adwId).toBe('test-adw-id');
+    expect(config.prDetails.title).toBe('Test PR');
+
+    mockExit.mockRestore();
+  });
+
+  it('exits when PR is closed', () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'CLOSED' }));
+
+    initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+
+    mockExit.mockRestore();
+  });
+
+  it('exits when PR is merged', () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'MERGED' }));
+
+    initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+
+    mockExit.mockRestore();
+  });
+
+  it('exits when no unaddressed comments', () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.mocked(getUnaddressedComments).mockReturnValue([]);
+
+    initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(mockExit).toHaveBeenCalledWith(0);
+
+    mockExit.mockRestore();
+  });
+
+  it('sets up worktree via ensureWorktree with head branch', () => {
+    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-10-test');
+    expect(config.worktreePath).toBe('/mock/worktree');
+  });
+
+  it('initializes orchestrator state with correct metadata', () => {
+    initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(AgentStateManager.initializeState).toHaveBeenCalledWith('test-adw-id', 'pr-review-orchestrator');
+    expect(AgentStateManager.writeState).toHaveBeenCalledWith(
+      '/mock/state/path',
+      expect.objectContaining({
+        agentName: 'pr-review-orchestrator',
+        metadata: { prNumber: 42, reviewComments: 1 },
+      })
+    );
+  });
+
+  it('posts pr_review_starting comment', () => {
+    initializePRReviewWorkflow(42, 'test-adw-id');
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_starting', expect.objectContaining({
+      prNumber: 42,
+      reviewComments: 1,
+    }));
+  });
+});
+
+describe('executePRReviewPlanPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(runPrReviewPlanAgent).mockResolvedValue({
+      success: true,
+      output: 'PR Review Plan created',
+      totalCostUsd: 0.3,
+    });
+  });
+
+  it('reads existing plan content from file when available', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('# Existing plan');
+    const config = createPRReviewWorkflowConfig();
+
+    const result = await executePRReviewPlanPhase(config);
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('/mock/plan.md', 'utf-8');
+    expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
+      config.prDetails,
+      config.unaddressedComments,
+      '# Existing plan',
+      '/mock/logs',
+      '/mock/state/path',
+      '/mock/worktree'
+    );
+    expect(result.planOutput).toBe('PR Review Plan created');
+  });
+
+  it('falls back to PR body when no plan file exists', async () => {
+    vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('ENOENT'); });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewPlanPhase(config);
+
+    expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
+      config.prDetails,
+      config.unaddressedComments,
+      'Test PR body',
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('uses PR body when no issue number', async () => {
+    const config = createPRReviewWorkflowConfig({
+      issueNumber: 0,
+      prDetails: createMockPRDetails({ issueNumber: null }),
+    });
+
+    await executePRReviewPlanPhase(config);
+
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'Test PR body',
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('throws when plan agent fails', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('# Plan');
+    vi.mocked(runPrReviewPlanAgent).mockResolvedValue({
+      success: false,
+      output: 'Agent error',
+      totalCostUsd: 0,
+    });
+    const config = createPRReviewWorkflowConfig();
+
+    await expect(executePRReviewPlanPhase(config)).rejects.toThrow('PR Review Plan Agent failed');
+  });
+
+  it('posts planning and planned comments', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('# Plan');
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewPlanPhase(config);
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_planning', expect.anything());
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_planned', expect.anything());
+  });
+});
+
+describe('executePRReviewBuildPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(runPrReviewBuildAgent).mockResolvedValue({
+      success: true,
+      output: 'PR Review Build completed',
+      totalCostUsd: 0.8,
+    });
+  });
+
+  it('calls runPrReviewBuildAgent with plan output', async () => {
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewBuildPhase(config, 'Revision plan output');
+
+    expect(runPrReviewBuildAgent).toHaveBeenCalledWith(
+      config.prDetails,
+      'Revision plan output',
+      '/mock/logs',
+      expect.any(Function),
+      '/mock/state/path',
+      '/mock/worktree'
+    );
+  });
+
+  it('throws when build agent fails', async () => {
+    vi.mocked(runPrReviewBuildAgent).mockResolvedValue({
+      success: false,
+      output: 'Build error',
+      totalCostUsd: 0,
+    });
+    const config = createPRReviewWorkflowConfig();
+
+    await expect(executePRReviewBuildPhase(config, 'plan')).rejects.toThrow('PR Review Build Agent failed');
+  });
+
+  it('posts implementing and implemented comments', async () => {
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewBuildPhase(config, 'plan');
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_implementing', expect.anything());
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_implemented', expect.anything());
+  });
+});
+
+describe('executePRReviewTestPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls both unit and E2E test retry functions', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewTestPhase(config);
+
+    expect(runUnitTestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      logsDir: '/mock/logs',
+      cwd: '/mock/worktree',
+    }));
+    expect(runE2ETestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      logsDir: '/mock/logs',
+      cwd: '/mock/worktree',
+    }));
+  });
+
+  it('posts test_passed comment on success', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewTestPhase(config);
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_test_passed', expect.anything());
+  });
+
+  it('posts onTestFailed callback with correct PR comment', async () => {
+    let capturedCallback: ((attempt: number, maxAttempts: number) => void) | undefined;
+    vi.mocked(runUnitTestsWithRetry).mockImplementation(async (opts) => {
+      capturedCallback = opts.onTestFailed;
+      return { passed: true, failedTests: [], totalRetries: 0, costUsd: 0 };
+    });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewTestPhase(config);
+    capturedCallback?.(2, 5);
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_test_failed', expect.objectContaining({
+      testAttempt: 2,
+      maxTestAttempts: 5,
+    }));
+  });
+
+  it('exits with code 1 on unit test max retry failure', async () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['test1.ts'], totalRetries: 5, costUsd: 0 });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewTestPhase(config);
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_test_max_attempts', expect.anything());
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
+  });
+
+  it('exits with code 1 on E2E test max retry failure', async () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['e2e-test1.ts'], totalRetries: 5, costUsd: 0 });
+    const config = createPRReviewWorkflowConfig();
+
+    await executePRReviewTestPhase(config);
+
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_test_max_attempts', expect.anything());
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
+  });
+});
+
+describe('completePRReviewWorkflow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('commits with correct prefix from inferIssueTypeFromBranch', () => {
+    vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/feature');
+    const config = createPRReviewWorkflowConfig();
+
+    completePRReviewWorkflow(config);
+
+    expect(inferIssueTypeFromBranch).toHaveBeenCalledWith('feature/issue-10-test');
+    expect(commitChanges).toHaveBeenCalledWith('feat: address PR review comments for #10', '/mock/worktree');
+  });
+
+  it('builds commit message without issue number when missing', () => {
+    vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/chore');
+    const config = createPRReviewWorkflowConfig({ issueNumber: 0 });
+
+    completePRReviewWorkflow(config);
+
+    expect(commitChanges).toHaveBeenCalledWith('chore: address PR review comments', '/mock/worktree');
+  });
+
+  it('pushes branch and posts completion comments', () => {
+    const config = createPRReviewWorkflowConfig();
+
+    completePRReviewWorkflow(config);
+
+    expect(pushBranch).toHaveBeenCalledWith('feature/issue-10-test', '/mock/worktree');
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_pushed', expect.anything());
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_completed', expect.anything());
+  });
+
+  it('writes successful execution state', () => {
+    const config = createPRReviewWorkflowConfig();
+
+    completePRReviewWorkflow(config);
+
+    expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
+      execution: expect.objectContaining({ status: 'completed' }),
+    });
+    expect(AgentStateManager.appendLog).toHaveBeenCalledWith(
+      '/mock/state/path',
+      'PR Review workflow completed successfully'
+    );
+  });
+});
+
+describe('handlePRReviewWorkflowError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('posts error comment and exits with code 1', () => {
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const config = createPRReviewWorkflowConfig();
+
+    handlePRReviewWorkflowError(config, new Error('test error'));
+
+    expect(config.ctx.errorMessage).toBe('Error: test error');
+    expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_error', config.ctx);
+    expect(AgentStateManager.writeState).toHaveBeenCalled();
+    expect(AgentStateManager.appendLog).toHaveBeenCalledWith(
+      '/mock/state/path',
+      expect.stringContaining('PR Review workflow failed')
     );
     expect(mockExit).toHaveBeenCalledWith(1);
 

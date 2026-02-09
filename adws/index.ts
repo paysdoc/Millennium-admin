@@ -98,11 +98,18 @@ export {
 // Workflow Phases - Composable orchestrator phase functions
 export {
   type WorkflowConfig,
+  type PRReviewWorkflowConfig,
   initializeWorkflow,
+  initializePRReviewWorkflow,
   executePlanPhase,
   executeBuildPhase,
   executeTestPhase,
   executePRPhase,
+  executePRReviewPlanPhase,
+  executePRReviewBuildPhase,
+  executePRReviewTestPhase,
+  completePRReviewWorkflow,
+  handlePRReviewWorkflowError,
   completeWorkflow,
   handleWorkflowError,
 } from './workflowPhases';

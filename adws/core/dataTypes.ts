@@ -311,6 +311,7 @@ export type AgentIdentifier =
   | 'classifier'
   | 'plan-agent'
   | 'build-agent'
+  | 'pr-review-orchestrator'
   | 'pr-review-plan-agent'
   | 'pr-review-build-agent'
   // Test workflow agents
