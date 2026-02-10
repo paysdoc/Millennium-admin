@@ -7,7 +7,7 @@
 
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
-import { getRepoInfo, fetchPRList, hasUnaddressedComments } from '../github';
+import { getRepoInfo, fetchPRList, hasUnaddressedComments, isAdwComment, isAdwRunningForIssue } from '../github';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
@@ -36,11 +36,13 @@ function fetchOpenIssues(): RawIssue[] {
 }
 
 function isQualifyingIssue(issue: RawIssue): boolean {
-  if (issue.comments.length === 0) {
-    return true;
-  }
+  if (issue.comments.length === 0) return true;
+
   const latestComment = issue.comments[issue.comments.length - 1];
-  return /adw/i.test(latestComment.body);
+  if (/adw/i.test(latestComment.body)) return true;
+  if (!isAdwComment(latestComment.body)) return true;
+
+  return false;
 }
 
 async function checkAndTrigger(): Promise<void> {
@@ -51,9 +53,14 @@ async function checkAndTrigger(): Promise<void> {
   );
 
   for (const issue of qualifying) {
+    const running = await isAdwRunningForIssue(issue.number);
+    if (running) {
+      log(`ADW workflow already running for issue #${issue.number}, deferring`);
+      continue;
+    }
+
     processedIssues.add(issue.number);
 
-    // Classify the issue to determine which workflow to spawn
     const classification = await classifyIssueForTrigger(issue.number);
     const workflowScript = getWorkflowScript(classification.issueType);
 

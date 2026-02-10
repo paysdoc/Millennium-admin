@@ -61,6 +61,8 @@ export {
 // Workflow Comments
 export {
   STAGE_ORDER,
+  isAdwComment,
+  isAdwRunningForIssue,
   parseWorkflowStageFromComment,
   extractAdwIdFromComment,
   extractBranchNameFromComment,

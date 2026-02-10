@@ -3,6 +3,7 @@
  */
 
 import { WorkflowStage, RecoveryState, GitHubComment } from '../core';
+import { fetchGitHubIssue } from './githubApi';
 
 /** Stage order for determining recovery resume point. */
 export const STAGE_ORDER: WorkflowStage[] = [
@@ -42,6 +43,14 @@ const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
   ':x: ADW Workflow Error': 'error',
 };
 
+/** ADW comment heading pattern: `## :emoji_name: Title` */
+const ADW_COMMENT_PATTERN = /^## :[a-z_]+: /m;
+
+/** Returns true if the comment body contains an ADW workflow heading pattern. */
+export function isAdwComment(commentBody: string): boolean {
+  return ADW_COMMENT_PATTERN.test(commentBody);
+}
+
 /** Truncates text to a maximum length with ellipsis. */
 export function truncateText(text: string, maxLength: number): string {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
@@ -77,6 +86,25 @@ export function extractPrUrlFromComment(commentBody: string): string | null {
 export function extractPlanPathFromComment(commentBody: string): string | null {
   const match = commentBody.match(/`(specs\/issue-\d+-plan\.md)`/);
   return match ? match[1] : null;
+}
+
+const TERMINAL_STAGES: ReadonlyArray<WorkflowStage> = ['completed', 'error'];
+
+/** Returns true if an ADW workflow is currently active (not completed or errored) for the given issue. */
+export async function isAdwRunningForIssue(issueNumber: number): Promise<boolean> {
+  const issue = await fetchGitHubIssue(issueNumber);
+
+  const stageComments = issue.comments
+    .map((c) => ({ stage: parseWorkflowStageFromComment(c.body), createdAt: c.createdAt }))
+    .filter((entry): entry is { stage: WorkflowStage; createdAt: string } => entry.stage !== null);
+
+  if (stageComments.length === 0) return false;
+
+  const sorted = [...stageComments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return !TERMINAL_STAGES.includes(sorted[0].stage);
 }
 
 /** Detects recovery state from GitHub comments. */
