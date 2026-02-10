@@ -44,10 +44,11 @@ export function getPlanFilePath(issueNumber: number): string {
  * Checks if the plan file exists for an issue.
  * Returns true if the file exists and has content.
  */
-export function planFileExists(issueNumber: number): boolean {
+export function planFileExists(issueNumber: number, worktreePath?: string): boolean {
   const planPath = getPlanFilePath(issueNumber);
+  const fullPath = worktreePath ? path.join(worktreePath, planPath) : planPath;
   try {
-    const stats = fs.statSync(planPath);
+    const stats = fs.statSync(fullPath);
     return stats.isFile() && stats.size > 0;
   } catch {
     return false;

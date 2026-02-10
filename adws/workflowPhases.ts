@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   log,
   ensureLogsDirectory,
@@ -240,7 +241,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   ctx.planPath = planPath;
   let costUsd = 0;
 
-  if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber)) {
+  if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber, worktreePath)) {
     postWorkflowComment(issueNumber, 'plan_building', ctx);
     log('Running Plan Agent...', 'info');
 
@@ -305,7 +306,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
   const { recoveryState, orchestratorStatePath, orchestratorName, adwId, issueNumber, issue, issueType, ctx, worktreePath, logsDir } = config;
 
   // Read plan content
-  const planPath = getPlanFilePath(issueNumber);
+  const planPath = path.join(worktreePath, getPlanFilePath(issueNumber));
   let planContent: string;
   try {
     planContent = fs.readFileSync(planPath, 'utf-8');
@@ -647,7 +648,7 @@ export async function executePRReviewPlanPhase(config: PRReviewWorkflowConfig): 
 
   let existingPlanContent = '';
   if (issueNumber) {
-    const planPath = getPlanFilePath(issueNumber);
+    const planPath = path.join(worktreePath, getPlanFilePath(issueNumber));
     try {
       existingPlanContent = fs.readFileSync(planPath, 'utf-8');
       log(`Read existing plan from ${planPath}`, 'success');
