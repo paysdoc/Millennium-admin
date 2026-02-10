@@ -7,6 +7,8 @@
 export {
   STAGE_ORDER,
   truncateText,
+  isAdwComment,
+  isAdwRunningForIssue,
   parseWorkflowStageFromComment,
   extractAdwIdFromComment,
   extractBranchNameFromComment,
