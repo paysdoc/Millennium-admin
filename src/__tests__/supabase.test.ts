@@ -118,3 +118,49 @@ describe('getSupabaseClient', () => {
     )
   })
 })
+
+describe('getSupabaseStorageUrl', () => {
+  const originalEnv = process.env
+
+  beforeEach(() => {
+    vi.resetModules()
+    process.env = { ...originalEnv }
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('returns null when path is null', async () => {
+    const { getSupabaseStorageUrl } = await import('../lib/supabase')
+    expect(getSupabaseStorageUrl(null)).toBeNull()
+  })
+
+  it('returns null when SUPABASE_URL is not set', async () => {
+    delete process.env.SUPABASE_URL
+
+    const { getSupabaseStorageUrl } = await import('../lib/supabase')
+    expect(getSupabaseStorageUrl('character_images/photo.jpg')).toBeNull()
+  })
+
+  it('returns the correct full URL when given a relative path', async () => {
+    process.env.SUPABASE_URL = 'https://test.supabase.co'
+
+    const { getSupabaseStorageUrl } = await import('../lib/supabase')
+    expect(getSupabaseStorageUrl('character_images/photo.jpg')).toBe(
+      'https://test.supabase.co/storage/v1/object/public/character_images/photo.jpg'
+    )
+  })
+
+  it('returns the path as-is when it already starts with https://', async () => {
+    const { getSupabaseStorageUrl } = await import('../lib/supabase')
+    const url = 'https://example.com/image.jpg'
+    expect(getSupabaseStorageUrl(url)).toBe(url)
+  })
+
+  it('returns the path as-is when it already starts with http://', async () => {
+    const { getSupabaseStorageUrl } = await import('../lib/supabase')
+    const url = 'http://example.com/image.jpg'
+    expect(getSupabaseStorageUrl(url)).toBe(url)
+  })
+})

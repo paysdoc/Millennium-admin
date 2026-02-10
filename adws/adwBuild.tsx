@@ -23,17 +23,17 @@
  */
 
 import * as fs from 'fs';
-import { execSync } from 'child_process';
 import {
   log,
   generateAdwId,
   ensureLogsDirectory,
   IssueClassSlashCommand,
-  WorkflowStage,
-  RecoveryState,
   commitPrefixMap,
   AgentStateManager,
   AgentState,
+  shouldExecuteStage,
+  hasUncommittedChanges,
+  getNextStage,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -41,7 +41,6 @@ import {
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
-  STAGE_ORDER,
   getCurrentBranch,
   inferIssueTypeFromBranch,
 } from './github';
@@ -52,43 +51,6 @@ import {
   ProgressCallback,
   ProgressInfo,
 } from './agents';
-
-/**
- * Determines if a stage should be executed based on recovery state.
- */
-function shouldExecuteStage(stage: WorkflowStage, recoveryState: RecoveryState): boolean {
-  if (!recoveryState.canResume || !recoveryState.lastCompletedStage) {
-    return true;
-  }
-
-  const stageIndex = STAGE_ORDER.indexOf(stage);
-  const lastCompletedIndex = STAGE_ORDER.indexOf(recoveryState.lastCompletedStage);
-
-  return stageIndex > lastCompletedIndex;
-}
-
-/**
- * Checks if there are uncommitted changes in the working directory.
- */
-function hasUncommittedChanges(): boolean {
-  try {
-    const status = execSync('git status --porcelain', { encoding: 'utf-8' });
-    return status.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Gets the next stage to resume from based on the last completed stage.
- */
-function getNextStage(lastCompletedStage: WorkflowStage): WorkflowStage {
-  const index = STAGE_ORDER.indexOf(lastCompletedStage);
-  if (index === -1 || index >= STAGE_ORDER.length - 1) {
-    return 'starting';
-  }
-  return STAGE_ORDER[index + 1];
-}
 
 /**
  * Prints usage information and exits.

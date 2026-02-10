@@ -200,3 +200,30 @@ export function checkoutDefaultBranch(): string {
 
   return defaultBranch;
 }
+
+/**
+ * Merges the latest changes from origin/{defaultBranch} into the current branch.
+ * Fetches the specific branch from origin first, then merges.
+ * Logs warnings on failure instead of throwing, since a merge conflict
+ * should not prevent the workflow from attempting to continue.
+ *
+ * @param defaultBranch - The default branch name to merge from (e.g., 'main')
+ * @param cwd - The working directory to run the commands in
+ */
+export function mergeLatestFromDefaultBranch(defaultBranch: string, cwd: string): void {
+  log(`Fetching origin/${defaultBranch} in ${cwd}...`, 'info');
+  try {
+    execSync(`git fetch origin ${defaultBranch}`, { stdio: 'pipe', cwd });
+  } catch (error) {
+    log(`Warning: Failed to fetch origin/${defaultBranch}: ${error}`, 'info');
+    return;
+  }
+
+  log(`Merging origin/${defaultBranch} into current branch...`, 'info');
+  try {
+    execSync(`git merge origin/${defaultBranch} --no-edit`, { stdio: 'pipe', cwd });
+    log(`Merged latest changes from origin/${defaultBranch}`, 'success');
+  } catch (error) {
+    log(`Warning: Failed to merge origin/${defaultBranch}: ${error}`, 'info');
+  }
+}

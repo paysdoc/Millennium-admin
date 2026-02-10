@@ -1,13 +1,15 @@
 #!/usr/bin/env npx tsx
 /**
- * ADW Plan & Build - AI Developer Workflow Orchestrator
- *
- * This script orchestrates the complete ADW workflow by calling:
- * 1. adwPlan.tsx - Planning phase (classification, branch creation, plan generation)
- * 2. adwBuild.tsx - Build phase (implementation, commit)
- * 3. Create PR after build completes
+ * ADW Plan & Build - Plan+Build+PR Orchestrator
  *
  * Usage: npx tsx adws/adwPlanBuild.tsx <github-issue-number> [adw-id]
+ *
+ * Workflow:
+ * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
+ * 2. Plan Phase: classify issue, create branch, run plan agent, commit plan
+ * 3. Build Phase: run build agent, commit implementation
+ * 4. PR Phase: create pull request
+ * 5. Finalize: update state, post completion comment
  *
  * Environment Requirements:
  * - ANTHROPIC_API_KEY: Anthropic API key
@@ -15,19 +17,15 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { execSync, SpawnSyncReturns } from 'child_process';
-import { log, generateAdwId, IssueClassSlashCommand } from './core';
+import { generateAdwId } from './core';
 import {
-  createPullRequest,
-  fetchGitHubIssue,
-  postWorkflowComment,
-  WorkflowContext,
-  getCurrentBranch,
-  getDefaultBranch,
-  generateBranchName,
-  ensureWorktree,
-} from './github';
-import { classifyGitHubIssue } from './triggers/issueClassifier';
+  initializeWorkflow,
+  executePlanPhase,
+  executeBuildPhase,
+  executePRPhase,
+  completeWorkflow,
+  handleWorkflowError,
+} from './workflowPhases';
 
 /**
  * Prints usage information and exits.
@@ -35,10 +33,7 @@ import { classifyGitHubIssue } from './triggers/issueClassifier';
 function printUsageAndExit(): never {
   console.error('Usage: npx tsx adws/adwPlanBuild.tsx <github-issue-number> [adw-id]');
   console.error('');
-  console.error('This orchestrator runs the complete ADW workflow:');
-  console.error('  1. adwPlan.tsx  - Plan generation');
-  console.error('  2. adwBuild.tsx - Implementation and commit');
-  console.error('  3. Create Pull Request');
+  console.error('This orchestrator runs the complete Plan+Build+PR workflow.');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -67,112 +62,21 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string } 
 }
 
 /**
- * Executes a subprocess and returns success status.
- * @param command - The command to execute
- * @param description - Description for logging
- * @param cwd - Optional working directory for the subprocess
- */
-function runSubprocess(command: string, description: string, cwd?: string): boolean {
-  log(`Starting: ${description}`, 'info');
-
-  try {
-    execSync(command, { stdio: 'inherit', cwd });
-    log(`Completed: ${description}`, 'success');
-    return true;
-  } catch (error) {
-    const execError = error as SpawnSyncReturns<Buffer>;
-    log(`Failed: ${description} (exit code: ${execError.status})`, 'error');
-    return false;
-  }
-}
-
-/**
  * Main orchestrator workflow.
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
-  log('===================================', 'info');
-  log('ADW Plan & Build Orchestrator', 'info');
-  log(`Issue: #${issueNumber}`, 'info');
-  log(`ADW ID: ${adwId}`, 'info');
-  log('===================================', 'info');
-
-  // Fetch issue details first to generate branch name
-  const issue = await fetchGitHubIssue(issueNumber);
-  log(`Fetched issue: ${issue.title}`, 'success');
-
-  // Classify the issue to determine the correct branch prefix
-  const classificationResult = await classifyGitHubIssue(issue);
-  const issueType: IssueClassSlashCommand = classificationResult.issueType;
-  log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
-
-  // Get default branch and create worktree
-  const defaultBranch = getDefaultBranch();
-  log(`Default branch: ${defaultBranch}`, 'info');
-
-  // Generate branch name with the correct prefix based on issue type
-  const branchName = generateBranchName(issueNumber, issue.title, issueType);
-  log(`Target branch: ${branchName}`, 'info');
-
-  // Create or get worktree for this branch
-  const worktreePath = ensureWorktree(branchName, defaultBranch);
-  log(`Worktree path: ${worktreePath}`, 'info');
-
-  // Phase 1: Run Plan (in worktree)
-  // Pass the issue type to skip redundant classification in adwPlan
-  const planCommand = `npx tsx adws/adwPlan.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}" --issue-type "${issueType}"`;
-  if (!runSubprocess(planCommand, 'Plan Phase', worktreePath)) {
-    log('Plan phase failed. Aborting workflow.', 'error');
-    process.exit(1);
-  }
-
-  // Phase 2: Run Build (in worktree)
-  const buildCommand = `npx tsx adws/adwBuild.tsx ${issueNumber} ${adwId} --cwd "${worktreePath}"`;
-  if (!runSubprocess(buildCommand, 'Build Phase', worktreePath)) {
-    log('Build phase failed. Aborting workflow.', 'error');
-    process.exit(1);
-  }
-
-  // Phase 3: Create PR (after build completes)
-  log('Build completed! Creating Pull Request...', 'info');
-
-  // Get current branch from worktree
-  const currentBranch = getCurrentBranch(worktreePath);
-  const ctx: WorkflowContext = {
-    issueNumber,
-    adwId,
-    branchName: currentBranch,
-  };
+  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-orchestrator');
 
   try {
-    // Issue already fetched above
-
-    // Post workflow comment indicating PR creation is starting
-    postWorkflowComment(issueNumber, 'pr_creating', ctx);
-
-    // Create the PR (in worktree context)
-    const prUrl = createPullRequest(issue, '', '', defaultBranch, worktreePath);
-    ctx.prUrl = prUrl;
-
-    // Post workflow comment indicating PR was created
-    postWorkflowComment(issueNumber, 'pr_created', ctx);
-
-    log(`Pull Request created: ${prUrl}`, 'success');
-
-    // Post workflow completed comment
-    postWorkflowComment(issueNumber, 'completed', ctx);
-
-    log('===================================', 'info');
-    log('ADW Plan & Build workflow completed!', 'success');
-    log(`PR: ${prUrl}`, 'info');
-    log('===================================', 'info');
+    const planResult = await executePlanPhase(config);
+    const buildResult = await executeBuildPhase(config);
+    executePRPhase(config);
+    completeWorkflow(config, planResult.costUsd + buildResult.costUsd);
   } catch (error) {
-    ctx.errorMessage = `Failed to create PR: ${error}`;
-    postWorkflowComment(issueNumber, 'error', ctx);
-    log(`Failed to create PR: ${error}`, 'error');
-    process.exit(1);
+    handleWorkflowError(config, error);
   }
 }
 

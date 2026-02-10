@@ -27,6 +27,7 @@ export {
   getDefaultBranch,
   checkoutDefaultBranch,
   inferIssueTypeFromBranch,
+  mergeLatestFromDefaultBranch,
 } from './gitOperations';
 
 // Pull Request Creator
