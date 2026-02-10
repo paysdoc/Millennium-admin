@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     const { planOutput } = await executePRReviewPlanPhase(config);
     await executePRReviewBuildPhase(config, planOutput);
     await executePRReviewTestPhase(config);
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
   } catch (error) {
     handlePRReviewWorkflowError(config, error);
   }
