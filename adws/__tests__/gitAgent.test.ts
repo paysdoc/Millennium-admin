@@ -16,10 +16,6 @@ vi.mock('../agents/claudeAgent', () => ({
   }),
 }));
 
-vi.mock('../github/worktreeOperations', () => ({
-  getMainRepoPath: vi.fn().mockReturnValue('/mock/main-repo'),
-}));
-
 vi.mock('../core', () => ({
   log: vi.fn(),
 }));
@@ -152,7 +148,6 @@ describe('runGenerateBranchNameAgent', () => {
       'sonnet',
       undefined,
       undefined,
-      '/mock/main-repo'
     );
   });
 
@@ -170,11 +165,11 @@ describe('runGenerateBranchNameAgent', () => {
     expect(result.success).toBe(true);
   });
 
-  it('uses provided cwd instead of main repo path', async () => {
-    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs', undefined, '/custom/cwd');
+  it('does not pass cwd to agent (no git operations needed)', async () => {
+    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
 
     const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
-    expect(call[7]).toBe('/custom/cwd');
+    expect(call[7]).toBeUndefined();
   });
 
   it('passes statePath when provided', async () => {

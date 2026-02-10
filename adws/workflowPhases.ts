@@ -38,11 +38,12 @@ import {
   type PRReviewWorkflowContext,
   detectRecoveryState,
   getDefaultBranch,
+  checkoutDefaultBranch,
   ensureWorktree,
+  getWorktreeForBranch,
   mergeLatestFromDefaultBranch,
   copyEnvToWorktree,
   inferIssueTypeFromBranch,
-  getMainRepoPath,
 } from './github';
 import {
   runPlanAgent,
@@ -124,16 +125,26 @@ export async function initializeWorkflow(
     worktreePath = options.cwd;
     log('Using provided worktree (merged latest code)', 'info');
   } else {
-    // Use agent to generate branch name and create branch in main repo
+    // Use agent to generate branch name only (no git operations)
     const branchResult = await runGenerateBranchNameAgent(
-      issueType, adwId, issue, logsDir, undefined, getMainRepoPath()
+      issueType, adwId, issue, logsDir
     );
     branchName = branchResult.branchName;
-    log(`Branch created by agent: ${branchName}`, 'success');
+    log(`Branch name generated: ${branchName}`, 'success');
 
-    // Create worktree for the already-existing branch
-    worktreePath = ensureWorktree(branchName);
-    copyEnvToWorktree(worktreePath);
+    // Check if a worktree already exists for this branch
+    const existingWorktree = getWorktreeForBranch(branchName);
+    if (existingWorktree) {
+      log(`Reusing existing worktree at ${existingWorktree}`, 'info');
+      mergeLatestFromDefaultBranch(defaultBranch, existingWorktree);
+      copyEnvToWorktree(existingWorktree);
+      worktreePath = existingWorktree;
+    } else {
+      // Ensure main repo is on default branch with latest code
+      checkoutDefaultBranch();
+      // Create worktree with new branch atomically via git worktree add -b
+      worktreePath = ensureWorktree(branchName, defaultBranch);
+    }
     log(`Worktree path: ${worktreePath}`, 'info');
   }
   const orchestratorStatePath = AgentStateManager.initializeState(adwId, orchestratorName);

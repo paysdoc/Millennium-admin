@@ -28,13 +28,11 @@ The following variables are provided as structured text in `$ARGUMENTS`:
 
 ## Run
 
-Run `git checkout main` to switch to the main branch
-Run `git pull` to pull the latest changes from the main branch
-Run `git checkout -b <branch_name>` to create and switch to the new branch
+Generate the branch name based on the instructions above.
+Do NOT run any git commands. Only generate the branch name string.
 
 ## Report
 
-After generating the branch name:
-Return ONLY the branch name that was created (no other text)
+Return ONLY the branch name (no other text)
 
 $ARGUMENTS

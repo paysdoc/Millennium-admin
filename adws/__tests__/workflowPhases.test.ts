@@ -84,11 +84,12 @@ vi.mock('../github', () => ({
     canResume: false,
   }),
   getDefaultBranch: vi.fn().mockReturnValue('main'),
+  checkoutDefaultBranch: vi.fn().mockReturnValue('main'),
   ensureWorktree: vi.fn().mockReturnValue('/mock/worktree'),
+  getWorktreeForBranch: vi.fn().mockReturnValue(null),
   mergeLatestFromDefaultBranch: vi.fn(),
   copyEnvToWorktree: vi.fn(),
   inferIssueTypeFromBranch: vi.fn().mockReturnValue('/feature'),
-  getMainRepoPath: vi.fn().mockReturnValue('/mock/main-repo'),
 }));
 
 vi.mock('../agents', () => ({
@@ -146,8 +147,11 @@ import {
   pushBranch,
   createPullRequest,
   detectRecoveryState,
+  checkoutDefaultBranch,
   ensureWorktree,
+  getWorktreeForBranch,
   mergeLatestFromDefaultBranch,
+  copyEnvToWorktree,
   inferIssueTypeFromBranch,
 } from '../github';
 import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
@@ -205,13 +209,28 @@ describe('initializeWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('uses branch name agent and ensureWorktree when no cwd provided', async () => {
+  it('uses branch name agent, checkoutDefaultBranch, and ensureWorktree with baseBranch when no cwd provided', async () => {
+    vi.mocked(getWorktreeForBranch).mockReturnValue(null);
     const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
     expect(runGenerateBranchNameAgent).toHaveBeenCalled();
-    expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-1-test');
+    expect(checkoutDefaultBranch).toHaveBeenCalled();
+    expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-1-test', 'main');
     expect(config.worktreePath).toBe('/mock/worktree');
     expect(config.branchName).toBe('feature/issue-1-test');
+  });
+
+  it('reuses existing worktree and merges latest when worktree already exists', async () => {
+    vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
+    const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
+
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(getWorktreeForBranch).toHaveBeenCalledWith('feature/issue-1-test');
+    expect(mergeLatestFromDefaultBranch).toHaveBeenCalledWith('main', '/existing/worktree');
+    expect(copyEnvToWorktree).toHaveBeenCalledWith('/existing/worktree');
+    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(config.worktreePath).toBe('/existing/worktree');
   });
 
   it('uses provided cwd directly and merges latest changes', async () => {

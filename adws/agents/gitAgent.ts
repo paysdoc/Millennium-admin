@@ -6,7 +6,6 @@
 import * as path from 'path';
 import { GitHubIssue, IssueClassSlashCommand, log } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
-import { getMainRepoPath } from '../github/worktreeOperations';
 
 /**
  * Formats structured args for the /generate_branch_name skill.
@@ -32,14 +31,15 @@ export function extractBranchNameFromOutput(output: string): string {
 }
 
 /**
- * Runs the /generate_branch_name skill to create a branch in the main repo.
+ * Runs the /generate_branch_name skill to generate a branch name.
+ * This agent only generates the name string — it does NOT run any git operations.
+ * Branch creation happens in the orchestrator via worktree operations.
  *
  * @param issueType - Issue classification slash command
  * @param adwId - ADW session identifier
  * @param issue - GitHub issue details
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory
- * @param cwd - Optional working directory (defaults to main repo path)
  */
 export async function runGenerateBranchNameAgent(
   issueType: IssueClassSlashCommand,
@@ -47,17 +47,14 @@ export async function runGenerateBranchNameAgent(
   issue: GitHubIssue,
   logsDir: string,
   statePath?: string,
-  cwd?: string
 ): Promise<AgentResult & { branchName: string }> {
   const args = formatBranchNameArgs(issueType, adwId, issue);
   const outputFile = path.join(logsDir, 'branch-name-agent.jsonl');
-  const effectiveCwd = cwd || getMainRepoPath();
 
   log('Branch Name Agent starting:', 'info');
   log(`  Issue: #${issue.number} - ${issue.title}`, 'info');
   log(`  Issue type: ${issueType}`, 'info');
   log(`  ADW ID: ${adwId}`, 'info');
-  log(`  CWD: ${effectiveCwd}`, 'info');
 
   const result = await runClaudeAgentWithCommand(
     '/generate_branch_name',
@@ -67,7 +64,6 @@ export async function runGenerateBranchNameAgent(
     'sonnet',
     undefined,
     statePath,
-    effectiveCwd
   );
 
   const branchName = extractBranchNameFromOutput(result.output);
