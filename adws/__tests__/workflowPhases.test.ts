@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -98,7 +99,7 @@ vi.mock('../agents', () => ({
     output: 'Plan created',
     totalCostUsd: 0.5,
   }),
-  getPlanFilePath: vi.fn().mockReturnValue('/mock/plan.md'),
+  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-plan.md'),
   planFileExists: vi.fn().mockReturnValue(false),
   runBuildAgent: vi.fn().mockResolvedValue({
     success: true,
@@ -327,6 +328,14 @@ describe('executePlanPhase', () => {
     expect(result.costUsd).toBe(0);
   });
 
+  it('passes worktreePath to planFileExists', async () => {
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(planFileExists).toHaveBeenCalledWith(1, '/mock/worktree');
+  });
+
   it('throws when plan agent fails', async () => {
     vi.mocked(runPlanAgent).mockResolvedValue({
       success: false,
@@ -351,7 +360,10 @@ describe('executeBuildPhase', () => {
 
     const result = await executeBuildPhase(config);
 
-    expect(fs.readFileSync).toHaveBeenCalledWith('/mock/plan.md', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/mock/worktree', 'specs/issue-1-plan.md'),
+      'utf-8'
+    );
     expect(runBuildAgent).toHaveBeenCalled();
     expect(result.costUsd).toBe(1.0);
   });
@@ -607,7 +619,10 @@ describe('executePRReviewPlanPhase', () => {
 
     const result = await executePRReviewPlanPhase(config);
 
-    expect(fs.readFileSync).toHaveBeenCalledWith('/mock/plan.md', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/mock/worktree', 'specs/issue-1-plan.md'),
+      'utf-8'
+    );
     expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
       config.prDetails,
       config.unaddressedComments,
