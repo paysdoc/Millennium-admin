@@ -104,7 +104,7 @@ describe('getSupabaseClient', () => {
 
     const { getSupabaseClient } = await import('../lib/supabase')
     expect(() => getSupabaseClient()).toThrow(
-      'Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)'
+      'Missing Supabase environment variables (SUPABASE_URL)'
     )
   })
 
@@ -114,7 +114,7 @@ describe('getSupabaseClient', () => {
 
     const { getSupabaseClient } = await import('../lib/supabase')
     expect(() => getSupabaseClient()).toThrow(
-      'Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)'
+      'Missing Supabase environment variables (SUPABASE_KEY)'
     )
   })
 })

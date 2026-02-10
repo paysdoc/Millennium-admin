@@ -1,0 +1,2 @@
+[   20470ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/characters/data/character_images/4_R_PETER.jpg:0
+[  129567ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/characters/4:0

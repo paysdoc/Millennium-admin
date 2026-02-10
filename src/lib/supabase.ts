@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-let client: SupabaseClient | null = null
+let supabaseClient: SupabaseClient | null = null
+let supabaseServiceClient: SupabaseClient | null = null
 
 /**
  * Constructs a full Supabase Storage URL from a storage path.
@@ -25,17 +26,47 @@ export function getSupabaseStorageUrl(path: string | null): string | null {
 }
 
 export function getSupabaseClient(): SupabaseClient {
-  if (client) {
-    return client
+  if (supabaseClient) {
+    return supabaseClient
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables (SUPABASE_URL, SUPABASE_KEY)')
+    const missing = [
+      !supabaseUrl && 'SUPABASE_URL',
+      !supabaseKey && 'SUPABASE_KEY',
+    ].filter(Boolean)
+    throw new Error(`Missing Supabase environment variables (${missing.join(', ')})`)
   }
 
-  client = createClient(supabaseUrl, supabaseKey)
-  return client
+  supabaseClient = createClient(supabaseUrl, supabaseKey)
+  return supabaseClient
+}
+
+/**
+ * Get a Supabase client with service role privileges.
+ * Use this for write operations that need to bypass Row Level Security.
+ * Only use server-side in trusted contexts (e.g., API routes).
+ */
+export function getSupabaseServiceClient(): SupabaseClient {
+  if (supabaseServiceClient) {
+    return supabaseServiceClient
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    const missing = [
+      !supabaseUrl && 'SUPABASE_URL',
+      !supabaseServiceKey && 'SUPABASE_SERVICE_KEY',
+    ].filter(Boolean)
+    console.error(`Missing Supabase service environment variables: ${missing.join(', ')}`)
+    throw new Error('Missing Supabase service environment variables')
+  }
+
+  supabaseServiceClient = createClient(supabaseUrl, supabaseServiceKey)
+  return supabaseServiceClient
 }
