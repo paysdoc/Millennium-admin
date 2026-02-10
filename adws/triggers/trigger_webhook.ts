@@ -14,6 +14,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
+import { isAdwComment, isAdwRunningForIssue } from '../github';
 import { removeWorktree } from '../github/worktreeOperations';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
@@ -165,6 +166,59 @@ const server = http.createServer((req, res) => {
       log(`PR review comment on PR #${prNumber}, triggering ADW PR Review`);
       spawnDetached('npx', ['tsx', 'adws/adwPrReview.tsx', String(prNumber)]);
       jsonResponse(res, 200, { status: 'triggered', pr: prNumber });
+      return;
+    }
+
+    // Handle issue comment events (human comments trigger workflows)
+    if (event === 'issue_comment') {
+      const action = (body.action as string) || '';
+      if (action !== 'created') {
+        log(`Ignored issue_comment action: ${action}`);
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      const comment = body.comment as Record<string, unknown> | undefined;
+      const commentBody = (comment?.body as string) || '';
+      const issue = body.issue as Record<string, unknown> | undefined;
+      const issueNumber = issue?.number as number | undefined;
+
+      if (issueNumber == null) {
+        log('No issue number found in issue_comment payload');
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      if (isAdwComment(commentBody)) {
+        log(`Ignored ADW system comment on issue #${issueNumber}`);
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      // Check if workflow is already running — respond quickly, handle async
+      isAdwRunningForIssue(issueNumber)
+        .then((running) => {
+          if (running) {
+            log(`ADW workflow already running for issue #${issueNumber}, deferring comment`);
+            return;
+          }
+
+          log(`Human comment on issue #${issueNumber}, triggering ADW workflow`);
+          return classifyIssueForTrigger(issueNumber).then((classification) => {
+            const workflowScript = getWorkflowScript(classification.issueType);
+            log(
+              `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
+              'success'
+            );
+            spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
+          });
+        })
+        .catch((error) => {
+          log(`Error handling comment on issue #${issueNumber}: ${error}`, 'error');
+          spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
+        });
+
+      jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
       return;
     }
 

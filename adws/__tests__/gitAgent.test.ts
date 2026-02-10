@@ -1,0 +1,234 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  formatBranchNameArgs,
+  extractBranchNameFromOutput,
+  formatCommitArgs,
+  extractCommitMessageFromOutput,
+  runGenerateBranchNameAgent,
+  runCommitAgent,
+} from '../agents/gitAgent';
+import { GitHubIssue, IssueClassSlashCommand } from '../core/dataTypes';
+
+vi.mock('../agents/claudeAgent', () => ({
+  runClaudeAgentWithCommand: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'mock-output',
+  }),
+}));
+
+vi.mock('../core', () => ({
+  log: vi.fn(),
+}));
+
+import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
+
+function createMockIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
+  return {
+    number: 123,
+    title: 'Add user authentication',
+    body: 'Implement OAuth login',
+    state: 'open',
+    author: { login: 'testuser', isBot: false },
+    assignees: [],
+    labels: [],
+    comments: [],
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    url: 'https://github.com/test/repo/issues/123',
+    ...overrides,
+  };
+}
+
+describe('formatBranchNameArgs', () => {
+  it('includes issue_class, adw_id, and issue JSON', () => {
+    const issue = createMockIssue();
+    const result = formatBranchNameArgs('/feature', 'abc123', issue);
+
+    expect(result).toContain('issue_class: /feature');
+    expect(result).toContain('adw_id: abc123');
+    expect(result).toContain('"number":123');
+    expect(result).toContain('"title":"Add user authentication"');
+  });
+
+  it('handles different issue classes', () => {
+    const issueClasses: IssueClassSlashCommand[] = ['/bug', '/chore', '/pr_review'];
+
+    for (const issueClass of issueClasses) {
+      const result = formatBranchNameArgs(issueClass, 'id1', createMockIssue());
+      expect(result).toContain(`issue_class: ${issueClass}`);
+    }
+  });
+});
+
+describe('extractBranchNameFromOutput', () => {
+  it('extracts branch name from clean output', () => {
+    const result = extractBranchNameFromOutput('feat-issue-123-adw-abc123-add-user-auth');
+    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+
+  it('handles output with leading/trailing whitespace', () => {
+    const result = extractBranchNameFromOutput('  feat-issue-123-adw-abc123-add-user-auth  \n');
+    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+
+  it('extracts last line when output has extra text', () => {
+    const output = 'Creating branch...\nSwitching to main...\nfeat-issue-123-adw-abc123-add-user-auth';
+    const result = extractBranchNameFromOutput(output);
+    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+
+  it('handles output with empty lines', () => {
+    const output = '\n\nfeat-issue-123-adw-abc123-add-user-auth\n\n';
+    const result = extractBranchNameFromOutput(output);
+    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+});
+
+describe('formatCommitArgs', () => {
+  it('includes agent_name, issue_class, and issue context', () => {
+    const result = formatCommitArgs('plan-orchestrator', '/feature', '{"number":123}');
+
+    expect(result).toContain('agent_name: plan-orchestrator');
+    expect(result).toContain('issue_class: /feature');
+    expect(result).toContain('issue: {"number":123}');
+  });
+
+  it('handles different agent names', () => {
+    const agents = ['build-agent', 'pr-review-orchestrator', 'build-orchestrator'];
+
+    for (const agent of agents) {
+      const result = formatCommitArgs(agent, '/bug', '{}');
+      expect(result).toContain(`agent_name: ${agent}`);
+    }
+  });
+});
+
+describe('extractCommitMessageFromOutput', () => {
+  it('extracts commit message from clean output', () => {
+    const result = extractCommitMessageFromOutput('plan-orchestrator: feat: add implementation plan');
+    expect(result).toBe('plan-orchestrator: feat: add implementation plan');
+  });
+
+  it('handles output with leading/trailing whitespace', () => {
+    const result = extractCommitMessageFromOutput('  plan-orchestrator: feat: add plan  \n');
+    expect(result).toBe('plan-orchestrator: feat: add plan');
+  });
+
+  it('extracts last line when output has extra text', () => {
+    const output = 'Analyzing changes...\nStaging files...\nplan-orchestrator: feat: add implementation plan';
+    const result = extractCommitMessageFromOutput(output);
+    expect(result).toBe('plan-orchestrator: feat: add implementation plan');
+  });
+
+  it('handles output with empty lines', () => {
+    const output = '\n\nbuild-agent: fix: resolve login error\n\n';
+    const result = extractCommitMessageFromOutput(output);
+    expect(result).toBe('build-agent: fix: resolve login error');
+  });
+});
+
+describe('runGenerateBranchNameAgent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
+      success: true,
+      output: 'feat-issue-123-adw-abc123-add-user-auth',
+    });
+  });
+
+  it('calls runClaudeAgentWithCommand with /generate_branch_name', async () => {
+    const issue = createMockIssue();
+    await runGenerateBranchNameAgent('/feature', 'abc123', issue, '/logs');
+
+    expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
+      '/generate_branch_name',
+      expect.stringContaining('issue_class: /feature'),
+      'Branch Name',
+      expect.stringContaining('branch-name-agent.jsonl'),
+      'sonnet',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('uses sonnet model', async () => {
+    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[4]).toBe('sonnet');
+  });
+
+  it('extracts branch name from result', async () => {
+    const result = await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+
+    expect(result.branchName).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    expect(result.success).toBe(true);
+  });
+
+  it('does not pass cwd to agent (no git operations needed)', async () => {
+    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[7]).toBeUndefined();
+  });
+
+  it('passes statePath when provided', async () => {
+    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs', '/state/path');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[6]).toBe('/state/path');
+  });
+});
+
+describe('runCommitAgent', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
+      success: true,
+      output: 'plan-orchestrator: feat: add implementation plan',
+    });
+  });
+
+  it('calls runClaudeAgentWithCommand with /commit', async () => {
+    await runCommitAgent('plan-orchestrator', '/feature', '{"number":123}', '/logs');
+
+    expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
+      '/commit',
+      expect.stringContaining('agent_name: plan-orchestrator'),
+      'Commit',
+      expect.stringContaining('commit-agent.jsonl'),
+      'sonnet',
+      undefined,
+      undefined,
+      undefined
+    );
+  });
+
+  it('uses sonnet model', async () => {
+    await runCommitAgent('build-agent', '/bug', '{}', '/logs');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[4]).toBe('sonnet');
+  });
+
+  it('extracts commit message from result', async () => {
+    const result = await runCommitAgent('plan-orchestrator', '/feature', '{}', '/logs');
+
+    expect(result.commitMessage).toBe('plan-orchestrator: feat: add implementation plan');
+    expect(result.success).toBe(true);
+  });
+
+  it('passes cwd when provided', async () => {
+    await runCommitAgent('build-agent', '/feature', '{}', '/logs', undefined, '/worktree/path');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[7]).toBe('/worktree/path');
+  });
+
+  it('passes statePath when provided', async () => {
+    await runCommitAgent('build-agent', '/feature', '{}', '/logs', '/state/path');
+
+    const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    expect(call[6]).toBe('/state/path');
+  });
+});

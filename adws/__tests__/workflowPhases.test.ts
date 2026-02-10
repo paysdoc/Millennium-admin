@@ -73,8 +73,6 @@ vi.mock('../github', () => ({
   ]),
   postWorkflowComment: vi.fn(),
   postPRWorkflowComment: vi.fn(),
-  createFeatureBranch: vi.fn().mockReturnValue('feature/issue-1-test'),
-  commitChanges: vi.fn(),
   pushBranch: vi.fn(),
   createPullRequest: vi.fn().mockReturnValue('https://github.com/test/pr/1'),
   detectRecoveryState: vi.fn().mockReturnValue({
@@ -86,10 +84,9 @@ vi.mock('../github', () => ({
     canResume: false,
   }),
   getDefaultBranch: vi.fn().mockReturnValue('main'),
-  generateBranchName: vi.fn().mockReturnValue('feature/issue-1-test'),
+  checkoutDefaultBranch: vi.fn().mockReturnValue('main'),
   ensureWorktree: vi.fn().mockReturnValue('/mock/worktree'),
   getWorktreeForBranch: vi.fn().mockReturnValue(null),
-  checkoutDefaultBranch: vi.fn(),
   mergeLatestFromDefaultBranch: vi.fn(),
   copyEnvToWorktree: vi.fn(),
   inferIssueTypeFromBranch: vi.fn().mockReturnValue('/feature'),
@@ -118,6 +115,16 @@ vi.mock('../agents', () => ({
     output: 'PR Review Build completed',
     totalCostUsd: 0.8,
   }),
+  runGenerateBranchNameAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'feature/issue-1-test',
+    branchName: 'feature/issue-1-test',
+  }),
+  runCommitAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'plan-orchestrator: feat: add implementation plan',
+    commitMessage: 'plan-orchestrator: feat: add implementation plan',
+  }),
   runUnitTestsWithRetry: vi.fn(),
   runE2ETestsWithRetry: vi.fn(),
 }));
@@ -137,18 +144,17 @@ import {
   getUnaddressedComments,
   postWorkflowComment,
   postPRWorkflowComment,
-  createFeatureBranch,
-  commitChanges,
   pushBranch,
   createPullRequest,
   detectRecoveryState,
-  getWorktreeForBranch,
-  ensureWorktree,
   checkoutDefaultBranch,
+  ensureWorktree,
+  getWorktreeForBranch,
   mergeLatestFromDefaultBranch,
+  copyEnvToWorktree,
   inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
+import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
 import { classifyGitHubIssue } from '../triggers/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
@@ -193,6 +199,7 @@ function createWorkflowConfig(overrides: Partial<WorkflowConfig> = {}): Workflow
     orchestratorName: 'plan-orchestrator',
     recoveryState: createRecoveryState(),
     ctx: { issueNumber: 1, adwId: 'test-adw-id' } as WorkflowContext,
+    branchName: 'feature/issue-1-test',
     ...overrides,
   };
 }
@@ -202,23 +209,27 @@ describe('initializeWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('calls checkoutDefaultBranch before ensureWorktree when worktree does not exist', async () => {
+  it('uses branch name agent, checkoutDefaultBranch, and ensureWorktree with baseBranch when no cwd provided', async () => {
     vi.mocked(getWorktreeForBranch).mockReturnValue(null);
-
     const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
     expect(checkoutDefaultBranch).toHaveBeenCalled();
     expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-1-test', 'main');
     expect(config.worktreePath).toBe('/mock/worktree');
+    expect(config.branchName).toBe('feature/issue-1-test');
   });
 
-  it('merges latest from default branch when worktree already exists', async () => {
+  it('reuses existing worktree and merges latest when worktree already exists', async () => {
     vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
-
     const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
-    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(getWorktreeForBranch).toHaveBeenCalledWith('feature/issue-1-test');
     expect(mergeLatestFromDefaultBranch).toHaveBeenCalledWith('main', '/existing/worktree');
+    expect(copyEnvToWorktree).toHaveBeenCalledWith('/existing/worktree');
+    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
     expect(config.worktreePath).toBe('/existing/worktree');
   });
 
@@ -295,7 +306,6 @@ describe('executePlanPhase', () => {
     const result = await executePlanPhase(config);
 
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'classified', expect.anything());
-    expect(createFeatureBranch).toHaveBeenCalled();
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'branch_created', expect.anything());
     expect(runPlanAgent).toHaveBeenCalled();
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'plan_created', expect.anything());
@@ -796,39 +806,37 @@ describe('completePRReviewWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('commits with correct prefix from inferIssueTypeFromBranch', () => {
+  it('calls runCommitAgent with inferred issue type', async () => {
     vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/feature');
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(inferIssueTypeFromBranch).toHaveBeenCalledWith('feature/issue-10-test');
-    expect(commitChanges).toHaveBeenCalledWith('feat: address PR review comments for #10', '/mock/worktree');
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pr-review-orchestrator',
+      '/feature',
+      expect.any(String),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree'
+    );
   });
 
-  it('builds commit message without issue number when missing', () => {
-    vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/chore');
-    const config = createPRReviewWorkflowConfig({ issueNumber: 0 });
-
-    completePRReviewWorkflow(config);
-
-    expect(commitChanges).toHaveBeenCalledWith('chore: address PR review comments', '/mock/worktree');
-  });
-
-  it('pushes branch and posts completion comments', () => {
+  it('pushes branch and posts completion comments', async () => {
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(pushBranch).toHaveBeenCalledWith('feature/issue-10-test', '/mock/worktree');
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_pushed', expect.anything());
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_completed', expect.anything());
   });
 
-  it('writes successful execution state', () => {
+  it('writes successful execution state', async () => {
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),

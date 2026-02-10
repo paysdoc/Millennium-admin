@@ -28,7 +28,6 @@ import {
   generateAdwId,
   ensureLogsDirectory,
   IssueClassSlashCommand,
-  commitPrefixMap,
   AgentStateManager,
   AgentState,
   shouldExecuteStage,
@@ -37,7 +36,6 @@ import {
 } from './core';
 import {
   fetchGitHubIssue,
-  commitChanges,
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
@@ -46,6 +44,7 @@ import {
 } from './github';
 import {
   runBuildAgent,
+  runCommitAgent,
   getPlanFilePath,
   planFileExists,
   ProgressCallback,
@@ -296,7 +295,7 @@ async function main(): Promise<void> {
     // Step 6: Commit implementation
     if (shouldExecuteStage('implementation_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'implementation_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`, cwd || undefined);
+      await runCommitAgent('build-orchestrator', issueType, JSON.stringify(issue), logsDir, undefined, cwd || undefined);
     } else {
       log('Skipping implementation commit (already completed)', 'info');
     }
