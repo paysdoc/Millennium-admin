@@ -39,6 +39,12 @@ export {
   type E2ETestAgentResult,
 } from './testAgent';
 
+// Git Agent
+export {
+  runGenerateBranchNameAgent,
+  runCommitAgent,
+} from './gitAgent';
+
 // Test Retry (shared test retry logic)
 export {
   runUnitTestsWithRetry,

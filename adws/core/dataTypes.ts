@@ -317,7 +317,10 @@ export type AgentIdentifier =
   // Test workflow agents
   | 'test-orchestrator'
   | 'test-agent'
-  | 'test-resolver-agent';
+  | 'test-resolver-agent'
+  // Git workflow agents
+  | 'branch-name-agent'
+  | 'commit-agent';
 
 /**
  * Execution status for tracking agent progress.

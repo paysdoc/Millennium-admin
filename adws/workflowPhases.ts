@@ -17,7 +17,6 @@ import {
   type GitHubIssue,
   type PRDetails,
   type PRReviewComment,
-  commitPrefixMap,
   AgentStateManager,
   type AgentState,
   type AgentIdentifier,
@@ -31,8 +30,6 @@ import {
   fetchGitHubIssue,
   fetchPRDetails,
   getUnaddressedComments,
-  createFeatureBranch,
-  commitChanges,
   pushBranch,
   createPullRequest,
   postWorkflowComment,
@@ -41,13 +38,11 @@ import {
   type PRReviewWorkflowContext,
   detectRecoveryState,
   getDefaultBranch,
-  generateBranchName,
   ensureWorktree,
-  getWorktreeForBranch,
-  checkoutDefaultBranch,
   mergeLatestFromDefaultBranch,
   copyEnvToWorktree,
   inferIssueTypeFromBranch,
+  getMainRepoPath,
 } from './github';
 import {
   runPlanAgent,
@@ -56,6 +51,8 @@ import {
   runBuildAgent,
   runPrReviewPlanAgent,
   runPrReviewBuildAgent,
+  runGenerateBranchNameAgent,
+  runCommitAgent,
   type ProgressCallback,
   type ProgressInfo,
   runUnitTestsWithRetry,
@@ -79,27 +76,7 @@ export interface WorkflowConfig {
   orchestratorName: AgentIdentifier;
   recoveryState: RecoveryState;
   ctx: WorkflowContext;
-}
-
-/**
- * Sets up a worktree with the latest code from the default branch.
- * For new worktrees: checks out default branch first, then creates worktree.
- * For existing worktrees: merges latest from origin/{defaultBranch}.
- */
-function setupWorktreeWithLatestCode(branchName: string, defaultBranch: string): string {
-  const existingPath = getWorktreeForBranch(branchName);
-
-  if (existingPath) {
-    log(`Worktree for branch '${branchName}' already exists at ${existingPath}, reusing`, 'info');
-    mergeLatestFromDefaultBranch(defaultBranch, existingPath);
-    copyEnvToWorktree(existingPath);
-    return existingPath;
-  }
-
-  checkoutDefaultBranch();
-  const worktreePath = ensureWorktree(branchName, defaultBranch);
-  log(`Worktree path: ${worktreePath}`, 'info');
-  return worktreePath;
+  branchName: string;
 }
 
 /**
@@ -135,20 +112,30 @@ export async function initializeWorkflow(
     log(`Issue classified as: ${issueType}`, classificationResult.success ? 'success' : 'info');
   }
 
+  // Initialize logs early so agents can use the directory
+  const logsDir = ensureLogsDirectory(adwId);
+
   // Setup worktree with branch sync
   const defaultBranch = getDefaultBranch();
   let worktreePath: string;
+  let branchName = '';
   if (options?.cwd) {
     mergeLatestFromDefaultBranch(defaultBranch, options.cwd);
     worktreePath = options.cwd;
     log('Using provided worktree (merged latest code)', 'info');
   } else {
-    const tempBranchName = generateBranchName(issueNumber, issue.title, issueType);
-    worktreePath = setupWorktreeWithLatestCode(tempBranchName, defaultBranch);
-  }
+    // Use agent to generate branch name and create branch in main repo
+    const branchResult = await runGenerateBranchNameAgent(
+      issueType, adwId, issue, logsDir, undefined, getMainRepoPath()
+    );
+    branchName = branchResult.branchName;
+    log(`Branch created by agent: ${branchName}`, 'success');
 
-  // Initialize logs and state
-  const logsDir = ensureLogsDirectory(adwId);
+    // Create worktree for the already-existing branch
+    worktreePath = ensureWorktree(branchName);
+    copyEnvToWorktree(worktreePath);
+    log(`Worktree path: ${worktreePath}`, 'info');
+  }
   const orchestratorStatePath = AgentStateManager.initializeState(adwId, orchestratorName);
   log(`State: ${orchestratorStatePath}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
@@ -203,6 +190,7 @@ export async function initializeWorkflow(
     orchestratorName,
     recoveryState,
     ctx,
+    branchName,
   };
 }
 
@@ -220,12 +208,10 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
     postWorkflowComment(issueNumber, 'classified', ctx);
   }
 
-  // Create branch step
-  let currentBranch = ctx.branchName || '';
+  // Branch was already created during initializeWorkflow()
+  const currentBranch = ctx.branchName || config.branchName || recoveryState.branchName || '';
   if (shouldExecuteStage('branch_created', recoveryState)) {
-    log('Creating branch...', 'info');
-    currentBranch = createFeatureBranch(issueNumber, issue.title, issueType, worktreePath);
-    log(`On branch: ${currentBranch}`, 'success');
+    log(`Using branch: ${currentBranch}`, 'success');
     ctx.branchName = currentBranch;
 
     AgentStateManager.writeState(orchestratorStatePath, { branchName: currentBranch });
@@ -234,8 +220,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   } else {
     log('Skipping branch creation (already completed)', 'info');
     if (recoveryState.branchName) {
-      currentBranch = createFeatureBranch(issueNumber, issue.title, issueType, worktreePath);
-      ctx.branchName = currentBranch;
+      ctx.branchName = recoveryState.branchName;
     }
   }
 
@@ -294,7 +279,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   // Commit plan step
   if (shouldExecuteStage('plan_committing', recoveryState)) {
     postWorkflowComment(issueNumber, 'plan_committing', ctx);
-    commitChanges(`${commitPrefixMap[issueType]} add implementation plan for #${issueNumber}`, worktreePath);
+    await runCommitAgent('plan-orchestrator', issueType, JSON.stringify(issue), logsDir, undefined, worktreePath);
   } else {
     log('Skipping plan commit (already completed)', 'info');
   }
@@ -393,7 +378,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
   // Commit implementation step
   if (shouldExecuteStage('implementation_committing', recoveryState)) {
     postWorkflowComment(issueNumber, 'implementation_committing', ctx);
-    commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`, worktreePath);
+    await runCommitAgent('build-agent', issueType, JSON.stringify(issue), logsDir, undefined, worktreePath);
   } else {
     log('Skipping implementation commit (already completed)', 'info');
   }
@@ -822,16 +807,12 @@ export async function executePRReviewTestPhase(config: PRReviewWorkflowConfig): 
 /**
  * Completes the PR review workflow: commits, pushes, and posts completion comments.
  */
-export function completePRReviewWorkflow(config: PRReviewWorkflowConfig): void {
-  const { prNumber, issueNumber, prDetails, unaddressedComments, worktreePath, orchestratorStatePath, ctx } = config;
+export async function completePRReviewWorkflow(config: PRReviewWorkflowConfig): Promise<void> {
+  const { prNumber, prDetails, unaddressedComments, worktreePath, logsDir, orchestratorStatePath, ctx } = config;
 
   postPRWorkflowComment(prNumber, 'pr_review_committing', ctx);
   const issueType = inferIssueTypeFromBranch(prDetails.headBranch);
-  const commitPrefix = commitPrefixMap[issueType];
-  const commitMsg = issueNumber
-    ? `${commitPrefix} address PR review comments for #${issueNumber}`
-    : `${commitPrefix} address PR review comments`;
-  commitChanges(commitMsg, worktreePath);
+  await runCommitAgent('pr-review-orchestrator', issueType, JSON.stringify(prDetails), logsDir, undefined, worktreePath);
 
   pushBranch(prDetails.headBranch, worktreePath);
   postPRWorkflowComment(prNumber, 'pr_review_pushed', ctx);
