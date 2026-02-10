@@ -38,8 +38,7 @@ export function getSupabaseClient(): SupabaseClient {
       !supabaseUrl && 'SUPABASE_URL',
       !supabaseKey && 'SUPABASE_KEY',
     ].filter(Boolean)
-    console.error(`Missing Supabase environment variables: ${missing.join(', ')}`)
-    throw new Error('Missing Supabase environment variables')
+    throw new Error(`Missing Supabase environment variables (${missing.join(', ')})`)
   }
 
   supabaseClient = createClient(supabaseUrl, supabaseKey)

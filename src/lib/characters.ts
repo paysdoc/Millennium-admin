@@ -1,4 +1,4 @@
-import { getSupabaseClient, getSupabaseServiceClient } from './supabase'
+import { getSupabaseClient, getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
 import {
   Character,

@@ -1,15 +1,16 @@
-# PR-Review: Fix Character Update - Environment Configuration
+# PR-Review: Fix Missing Import - getSupabaseStorageUrl Build Error
 
 ## PR-Review Description
-PR #68 implements editable character information for issue #62. The initial review reported that "Updating the character data does not work" and a subsequent comment confirms the issue persists with "Character not found" error when trying to save changes.
+PR #68 implements editable character information for issue #62. The CI build fails with a TypeScript error:
 
-The code implementation is correct: `getSupabaseServiceClient()` function was added to `src/lib/supabase.ts`, and `updateCharacter()` in `src/lib/characters.ts` uses the service client. However, the update still fails with `PGRST116` error (no rows returned), which manifests as "Character not found".
+```
+./src/lib/characters.ts:38:51
+Type error: Cannot find name 'getSupabaseStorageUrl'.
+```
 
-Root cause analysis indicates the `SUPABASE_SERVICE_KEY` environment variable is not configured in Vercel's Preview environment. When the service key is missing or invalid, the Supabase client either:
-1. Throws "Missing Supabase service environment variables" (if completely missing)
-2. Creates a client that lacks permission to bypass RLS (if set to wrong value like the anon key)
+The `getSupabaseStorageUrl` function is used on lines 38 and 85 of `src/lib/characters.ts` to transform character image paths into full Supabase Storage URLs. However, the function is not imported in that file. It is defined and exported from `src/lib/supabase.ts` and already correctly imported in other files (`src/app/characters/[id]/page.tsx` and `src/components/CharacterDetails.tsx`).
 
-Since the error is "Character not found" and not "Missing Supabase service environment variables", the issue is likely that `SUPABASE_SERVICE_KEY` is either not set in Vercel Preview environment, or set to an incorrect value (possibly the anon key by mistake).
+The fix is to add `getSupabaseStorageUrl` to the existing import statement on line 1 of `src/lib/characters.ts`.
 
 ## Summary of Original Implementation Plan
 The original implementation plan for issue #62 created:
@@ -18,49 +19,36 @@ The original implementation plan for issue #62 created:
 3. An API route at `/api/characters/[id]/route.ts` to handle PATCH requests
 4. An `updateCharacter` function in `src/lib/characters.ts` for database updates
 5. A `getSupabaseServiceClient` function in `src/lib/supabase.ts` for write operations
-6. Wikipedia-style CSS for edit mode
+6. A `getSupabaseStorageUrl` function in `src/lib/supabase.ts` to construct full storage URLs from paths
+7. Wikipedia-style CSS for edit mode
 
-The code was implemented correctly but the environment configuration was incomplete.
+The code was implemented but the import of `getSupabaseStorageUrl` was missed in `src/lib/characters.ts`, causing the build to fail.
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `src/lib/supabase.ts` - Contains `getSupabaseServiceClient()` function; needs enhanced error logging to distinguish between missing env vars and invalid keys
-- `src/lib/characters.ts` - Contains `updateCharacter()` function; needs improved error handling to provide better diagnostic information
-- `src/app/api/characters/[id]/route.ts` - API route handler; needs enhanced error responses for debugging
-- `.env.sample` - Contains `SUPABASE_SERVICE_KEY` placeholder; confirms the expected environment variable name
-- Vercel Dashboard (external) - Needs `SUPABASE_SERVICE_KEY` configured for Preview environment
+- `src/lib/characters.ts` - Contains the build error. Uses `getSupabaseStorageUrl` on lines 38 and 85 but does not import it. The existing import on line 1 imports `getSupabaseClient` and `getSupabaseServiceClient` from `'./supabase'` but is missing `getSupabaseStorageUrl`.
+- `src/lib/supabase.ts` - Defines and exports `getSupabaseStorageUrl` (line 11). This is the source module that `characters.ts` must import from.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Enhance Error Logging in supabase.ts
-- Open `src/lib/supabase.ts`
-- Add console.error logging when environment variables are missing to help diagnose deployment issues
-- This helps distinguish between "env var missing" vs "env var invalid" scenarios
-- The error should log which specific variable is missing (SUPABASE_URL vs SUPABASE_SERVICE_KEY)
-
-### Step 2: Improve Error Handling in updateCharacter
+### Step 1: Add Missing Import to characters.ts
 - Open `src/lib/characters.ts`
-- In the `updateCharacter` function, add more detailed logging for the PGRST116 error case
-- Log the actual Supabase error details (code, message, details) before throwing "Character not found"
-- This helps distinguish between "row doesn't exist" vs "RLS blocking update"
+- On line 1, update the import statement from:
+  ```ts
+  import { getSupabaseClient, getSupabaseServiceClient } from './supabase'
+  ```
+  to:
+  ```ts
+  import { getSupabaseClient, getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
+  ```
+- This is the only code change needed. No other files require modification.
 
-### Step 3: Enhance API Route Error Responses
-- Open `src/app/api/characters/[id]/route.ts`
-- In the catch block, log the full error details before returning the response
-- For non-"Character not found" errors, include more context in the logged error (character ID, update data keys)
-- This aids debugging without exposing sensitive data in responses
-
-### Step 4: Document Environment Configuration Requirement
-- The `SUPABASE_SERVICE_KEY` must be configured in Vercel for both Preview and Production environments
-- Add a note in the PR description or documentation that this environment variable is required
-- The service key can be found in the Supabase project dashboard under Settings > API > service_role key
-
-### Step 5: Run Validation Commands
+### Step 2: Run Validation Commands
 - Run `npm run lint` to verify no linting errors
-- Run `npm run build` to verify the application builds successfully
-- Run `npm test` to ensure all tests pass
+- Run `npm run build` to verify the TypeScript error is resolved and the application builds successfully
+- Run `npm test` to ensure all tests pass with zero regressions
 
 ## Validation Commands
 Execute every command to validate the review is complete with zero regressions.
@@ -70,9 +58,6 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `SUPABASE_SERVICE_KEY` (service role key) bypasses Row Level Security and should only be used server-side
-- Vercel Preview deployments use the "Preview" environment variables, not "Production"
-- The service key is different from the anon key (`SUPABASE_KEY`) - ensure the correct key is used
-- When testing locally in a git worktree, ensure `.env.local` contains the Supabase credentials (copy from main directory if needed)
-- The enhanced logging will help diagnose similar issues in the future without exposing sensitive data in responses
-- After making code changes, the Vercel Preview deployment will need `SUPABASE_SERVICE_KEY` configured to fully test the fix
+- This is a single missing import fix. The `getSupabaseStorageUrl` function already exists and is correctly implemented in `src/lib/supabase.ts`.
+- The function is already correctly imported and used in `src/app/characters/[id]/page.tsx` and `src/components/CharacterDetails.tsx`, confirming the pattern is correct.
+- The function is used in two places in `characters.ts`: `fetchAllCharacters` (line 38) and `fetchCharacterById` (line 85), both to transform `image_link` paths into full Supabase Storage URLs.
