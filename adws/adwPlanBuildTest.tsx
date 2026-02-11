@@ -19,7 +19,6 @@
  * - MAX_TEST_RETRY_ATTEMPTS: Maximum retry attempts for tests (default: 5)
  */
 
-import { generateAdwId } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -49,7 +48,7 @@ function printUsageAndExit(): never {
 /**
  * Parses and validates command line arguments.
  */
-function parseArguments(args: string[]): { issueNumber: number; adwId: string } {
+function parseArguments(args: string[]): { issueNumber: number; adwId: string | null } {
   if (args.length < 1) {
     printUsageAndExit();
   }
@@ -60,7 +59,7 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string } 
     process.exit(1);
   }
 
-  const adwId = args[1] || generateAdwId();
+  const adwId = args[1] || null;
 
   return { issueNumber, adwId };
 }

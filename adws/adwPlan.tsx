@@ -15,7 +15,7 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { generateAdwId, type IssueClassSlashCommand } from './core';
+import { type IssueClassSlashCommand } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -94,7 +94,7 @@ function parseArguments(args: string[]): {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, providedAdwId, cwd, providedIssueType } = parseArguments(args);
-  const adwId = providedAdwId || generateAdwId();
+  const adwId = providedAdwId || null;
 
   const config = await initializeWorkflow(issueNumber, adwId, 'plan-orchestrator', {
     cwd: cwd || undefined,

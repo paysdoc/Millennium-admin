@@ -9,10 +9,18 @@ import { AgentIdentifier } from './dataTypes';
 
 /**
  * Generates a unique ADW session identifier.
- * Format: adw-{timestamp}-{random}
+ * When a summary is provided, format: adw-{slugified-summary}-{random}
+ * When no summary is provided, falls back to: adw-{timestamp}-{random}
  */
-export function generateAdwId(): string {
-  return `adw-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+export function generateAdwId(summary?: string): string {
+  const random = Math.random().toString(36).substring(2, 8);
+  if (summary) {
+    const slug = slugify(summary).substring(0, 20).replace(/-$/, '');
+    if (slug) {
+      return `adw-${slug}-${random}`;
+    }
+  }
+  return `adw-${Date.now()}-${random}`;
 }
 
 /**

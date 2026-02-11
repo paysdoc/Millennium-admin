@@ -26,6 +26,7 @@ vi.mock('fs');
 vi.mock('../core', () => ({
   log: vi.fn(),
   ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
+  generateAdwId: vi.fn().mockReturnValue('adw-test-issue-abc123'),
   commitPrefixMap: {
     '/feature': 'feat:',
     '/bug': 'fix:',
@@ -139,7 +140,7 @@ vi.mock('../triggers/issueClassifier', () => ({
 }));
 
 // Import mocked modules for assertions
-import { shouldExecuteStage, hasUncommittedChanges, getNextStage, AgentStateManager } from '../core';
+import { shouldExecuteStage, hasUncommittedChanges, getNextStage, AgentStateManager, generateAdwId } from '../core';
 import {
   fetchGitHubIssue,
   fetchPRDetails,
@@ -292,6 +293,13 @@ describe('initializeWorkflow', () => {
     await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
     expect(hasUncommittedChanges).toHaveBeenCalled();
+  });
+
+  it('generates ADW ID from issue title when adwId is null', async () => {
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(config.adwId).toBe('adw-test-issue-abc123');
   });
 });
 
@@ -659,6 +667,13 @@ describe('initializePRReviewWorkflow', () => {
       prNumber: 42,
       reviewComments: 1,
     }));
+  });
+
+  it('generates ADW ID from PR title when adwId is null', () => {
+    const config = initializePRReviewWorkflow(42, null);
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test PR');
+    expect(config.adwId).toBe('adw-test-issue-abc123');
   });
 });
 
