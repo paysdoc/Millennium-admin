@@ -13,7 +13,11 @@
     "adw:trigger-cron": "tsx adws/triggers/trigger_cron.ts",
     "adw:pr-review": "tsx adws/adwPrReview.tsx",
     "test": "vitest run",
-    "sync:data": "tsx scripts/sync-supabase.ts"
+    "sync:data": "tsx scripts/sync-supabase.ts",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:reset": "supabase db reset",
+    "supabase:status": "supabase status"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",

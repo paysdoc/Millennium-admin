@@ -26,6 +26,55 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Local Supabase Setup
+
+The project supports a fully local Supabase environment (Postgres + Storage) via the Supabase CLI. This lets you develop and test without depending on the hosted Supabase project.
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/) must be installed and running.
+
+### Start local Supabase
+
+```bash
+npm run supabase:start
+```
+
+This starts a local Postgres database, Storage API, and other Supabase services in Docker containers.
+
+### Get connection credentials
+
+```bash
+npm run supabase:status
+```
+
+Copy the `API URL`, `anon key`, and `service_role key` from the output into your `.env` file:
+
+```env
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_KEY=<anon key>
+SUPABASE_SERVICE_KEY=<service_role key>
+```
+
+### Reset the database
+
+To apply all migrations and seed data (including the `character_images` storage bucket):
+
+```bash
+npm run supabase:reset
+```
+
+### Stop local Supabase
+
+```bash
+npm run supabase:stop
+```
+
+### Notes
+
+- The Supabase Studio UI is available at [http://127.0.0.1:54323](http://127.0.0.1:54323) for visual database management.
+- Switching back to production requires updating `.env` with the hosted Supabase credentials — no code changes needed.
+
 ## Project Structure
 
 - `src/` - Application source code
