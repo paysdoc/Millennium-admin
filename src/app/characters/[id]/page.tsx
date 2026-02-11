@@ -57,7 +57,7 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
               <h2 className="section-heading">Character Information</h2>
               <div className="character-info-section">
                 <div className="character-info-left">
-                  <EditableCharacterDetails character={character} imageUrl={getSupabaseStorageUrl(character.image_link)} />
+                  <EditableCharacterDetails character={character} />
                 </div>
                 <div className="character-info-right">
                   <CharacterImage
