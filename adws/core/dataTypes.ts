@@ -95,6 +95,21 @@ export interface GitHubComment {
 }
 
 /**
+ * GitHub issue comment from the REST API.
+ * Uses numeric IDs required by the DELETE endpoint.
+ */
+export interface IssueCommentSummary {
+  /** Numeric comment ID from the REST API (required for deletion) */
+  readonly id: number;
+  /** Comment body text */
+  readonly body: string;
+  /** Comment author's login */
+  readonly authorLogin: string;
+  /** ISO 8601 creation timestamp */
+  readonly createdAt: string;
+}
+
+/**
  * GitHub issue model for list responses (simplified).
  */
 export interface GitHubIssueListItem {
