@@ -86,7 +86,7 @@ export function extractAdwIdFromComment(commentBody: string): string | null {
 
 /** Extracts the branch name from a comment body. */
 export function extractBranchNameFromComment(commentBody: string): string | null {
-  const match = commentBody.match(/`((feature|bugfix|chore|review)\/issue-\d+[a-z0-9-]*)`/);
+  const match = commentBody.match(/`((feat|bug|chore|review|test)-issue-\d+[a-z0-9-]*)`/);
   return match ? match[1] : null;
 }
 
