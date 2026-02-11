@@ -53,3 +53,25 @@ export {
   type TestRetryOptions,
 } from './testRetry';
 
+// Review Agent
+export {
+  runReviewAgent,
+  parseReviewResult,
+  type ReviewIssue,
+  type ReviewResult,
+  type ReviewAgentResult,
+} from './reviewAgent';
+
+// Patch Agent
+export {
+  runPatchAgent,
+  formatPatchArgs,
+} from './patchAgent';
+
+// Review Retry (review-patch retry loop)
+export {
+  runReviewWithRetry,
+  type ReviewRetryResult,
+  type ReviewRetryOptions,
+} from './reviewRetry';
+

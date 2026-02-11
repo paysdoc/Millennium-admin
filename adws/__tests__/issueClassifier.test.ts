@@ -383,4 +383,18 @@ describe('getWorkflowScript', () => {
   it('returns adwPlanBuild for /pr_review', () => {
     expect(getWorkflowScript('/pr_review')).toBe('adws/adwPlanBuild.tsx');
   });
+
+  it('returns adwPlanBuildTestReview when adwCommand is /adw_plan_build_test_review', () => {
+    expect(getWorkflowScript('/feature', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
+  });
+
+  it('ignores adwCommand when not /adw_plan_build_test_review', () => {
+    expect(getWorkflowScript('/feature', '/adw_plan_build_test')).toBe('adws/adwPlanBuildTest.tsx');
+    expect(getWorkflowScript('/bug', '/adw_patch')).toBe('adws/adwPlanBuild.tsx');
+  });
+
+  it('uses adwCommand override regardless of issueType', () => {
+    expect(getWorkflowScript('/bug', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
+    expect(getWorkflowScript('/chore', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
+  });
 });

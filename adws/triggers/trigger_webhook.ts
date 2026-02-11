@@ -209,7 +209,7 @@ const server = http.createServer((req, res) => {
 
           log(`Human comment on issue #${issueNumber}, triggering ADW workflow`);
           return classifyIssueForTrigger(issueNumber).then((classification) => {
-            const workflowScript = getWorkflowScript(classification.issueType);
+            const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
             log(
               `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
               'success'
@@ -274,7 +274,7 @@ const server = http.createServer((req, res) => {
     // Respond quickly to avoid GitHub timeout
     classifyIssueForTrigger(issueNumber)
       .then((classification) => {
-        const workflowScript = getWorkflowScript(classification.issueType);
+        const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
         log(
           `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
           'success'

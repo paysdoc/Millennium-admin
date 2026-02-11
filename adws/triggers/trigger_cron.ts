@@ -71,7 +71,7 @@ async function checkAndTrigger(): Promise<void> {
     processedIssues.add(issue.number);
 
     const classification = await classifyIssueForTrigger(issue.number);
-    const workflowScript = getWorkflowScript(classification.issueType);
+    const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
 
     log(
       `Triggering ADW workflow for issue #${issue.number} (${classification.issueType} -> ${workflowScript})`,
