@@ -7,7 +7,7 @@
 
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
-import { getRepoInfo, fetchPRList, hasUnaddressedComments, isAdwComment, isAdwRunningForIssue } from '../github';
+import { getRepoInfo, fetchPRList, hasUnaddressedComments, isAdwComment, isAdwRunningForIssue, truncateText } from '../github';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
@@ -36,21 +36,35 @@ function fetchOpenIssues(): RawIssue[] {
 }
 
 function isQualifyingIssue(issue: RawIssue): boolean {
-  if (issue.comments.length === 0) return true;
+  if (issue.comments.length === 0) {
+    log(`Issue #${issue.number}: no comments, qualifies`);
+    return true;
+  }
 
   const latestComment = issue.comments[issue.comments.length - 1];
-  if (/adw/i.test(latestComment.body)) return true;
-  if (!isAdwComment(latestComment.body)) return true;
 
-  return false;
+  if (isAdwComment(latestComment.body)) {
+    log(`Issue #${issue.number}: latest comment is ADW system comment (${truncateText(latestComment.body, 100)}), does not qualify`);
+    return false;
+  }
+
+  if (/adw/i.test(latestComment.body)) {
+    log(`Issue #${issue.number}: latest comment is human comment mentioning "adw" (${truncateText(latestComment.body, 100)}), qualifies via recovery`);
+    return true;
+  }
+
+  log(`Issue #${issue.number}: latest comment is human comment (${truncateText(latestComment.body, 100)}), qualifies`);
+  return true;
 }
 
 async function checkAndTrigger(): Promise<void> {
   log('Polling for new issues...');
   const issues = fetchOpenIssues();
+  log(`Fetched ${issues.length} open issue(s)`);
   const qualifying = issues.filter(
     (issue) => isQualifyingIssue(issue) && !processedIssues.has(issue.number)
   );
+  log(`Found ${qualifying.length} qualifying issue(s) out of ${issues.length} open`);
 
   for (const issue of qualifying) {
     const running = await isAdwRunningForIssue(issue.number);

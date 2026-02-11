@@ -46,9 +46,15 @@ const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
 /** ADW comment heading pattern: `## :emoji_name: Title` */
 const ADW_COMMENT_PATTERN = /^## :[a-z_]+: /m;
 
-/** Returns true if the comment body contains an ADW workflow heading pattern. */
+/** Machine-readable footer appended to all ADW workflow comments. */
+export const ADW_SIGNATURE = '\n\n---\n_Posted by ADW (AI Developer Workflow) automation_ <!-- adw-bot -->';
+
+/** Pattern matching the HTML comment marker in the ADW signature footer. */
+export const ADW_SIGNATURE_PATTERN = /<!-- adw-bot -->/;
+
+/** Returns true if the comment body contains an ADW workflow heading pattern or the ADW signature marker. */
 export function isAdwComment(commentBody: string): boolean {
-  return ADW_COMMENT_PATTERN.test(commentBody);
+  return ADW_COMMENT_PATTERN.test(commentBody) || ADW_SIGNATURE_PATTERN.test(commentBody);
 }
 
 /** Truncates text to a maximum length with ellipsis. */

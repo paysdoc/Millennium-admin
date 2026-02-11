@@ -61,6 +61,9 @@ export {
 // Workflow Comments
 export {
   STAGE_ORDER,
+  ADW_SIGNATURE,
+  ADW_SIGNATURE_PATTERN,
+  truncateText,
   isAdwComment,
   isAdwRunningForIssue,
   parseWorkflowStageFromComment,

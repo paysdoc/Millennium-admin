@@ -14,7 +14,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
-import { isAdwComment, isAdwRunningForIssue } from '../github';
+import { isAdwComment, isAdwRunningForIssue, truncateText } from '../github';
 import { removeWorktree } from '../github/worktreeOperations';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
@@ -189,11 +189,15 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      log(`Checking comment on issue #${issueNumber}: "${truncateText(commentBody, 100)}"`);
+
       if (isAdwComment(commentBody)) {
-        log(`Ignored ADW system comment on issue #${issueNumber}`);
+        log(`Ignored ADW system comment on issue #${issueNumber}: comment matches ADW pattern`);
         jsonResponse(res, 200, { status: 'ignored' });
         return;
       }
+
+      log(`Processing human comment on issue #${issueNumber}: comment does not match ADW pattern`);
 
       // Check if workflow is already running — respond quickly, handle async
       isAdwRunningForIssue(issueNumber)

@@ -9,7 +9,7 @@ vi.mock('../core/utils', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { isAdwComment, isAdwRunningForIssue } from '../github/workflowCommentsBase';
+import { isAdwComment, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
 
 describe('isAdwComment', () => {
   it('returns true for ADW workflow started comment', () => {
@@ -59,6 +59,23 @@ describe('isAdwComment', () => {
 
   it('returns false for comment with colon-wrapped words not in heading', () => {
     expect(isAdwComment('please check :the_file: for errors')).toBe(false);
+  });
+
+  it('returns true for comment with only the new signature footer (no heading)', () => {
+    expect(isAdwComment(`Some plain text${ADW_SIGNATURE}`)).toBe(true);
+  });
+
+  it('returns true for comment with both heading and signature', () => {
+    const body = `## :rocket: ADW Workflow Started\n\n**ADW ID:** \`adw-123-abc\`${ADW_SIGNATURE}`;
+    expect(isAdwComment(body)).toBe(true);
+  });
+
+  it('returns true for comment with adw-bot marker embedded in text', () => {
+    expect(isAdwComment('Some text <!-- adw-bot --> more text')).toBe(true);
+  });
+
+  it('returns false for human comment without signature or heading', () => {
+    expect(isAdwComment('Just a regular comment with no ADW markers')).toBe(false);
   });
 });
 

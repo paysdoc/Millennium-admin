@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isAdwComment } from '../github/workflowCommentsBase';
+import { isAdwComment, ADW_SIGNATURE } from '../github/workflowCommentsBase';
 
 /**
  * Tests for the qualifying-issue logic used by the cron trigger.
@@ -18,10 +18,10 @@ function isQualifyingIssue(issue: RawIssue): boolean {
   if (issue.comments.length === 0) return true;
 
   const latestComment = issue.comments[issue.comments.length - 1];
+  if (isAdwComment(latestComment.body)) return false;
   if (/adw/i.test(latestComment.body)) return true;
-  if (!isAdwComment(latestComment.body)) return true;
 
-  return false;
+  return true;
 }
 
 describe('isQualifyingIssue (cron trigger logic)', () => {
@@ -43,8 +43,8 @@ describe('isQualifyingIssue (cron trigger logic)', () => {
     expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('qualifies issue where latest comment is ADW comment with adw text (recovery)', () => {
-    // All standard ADW comments include "ADW ID:" and thus match the /adw/i recovery check
+  it('does not qualify issue where latest comment is ADW comment with adw text', () => {
+    // ADW system comments should never qualify, even if they contain "adw" text
     const issue: RawIssue = {
       number: 2,
       comments: [
@@ -52,7 +52,7 @@ describe('isQualifyingIssue (cron trigger logic)', () => {
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    expect(isQualifyingIssue(issue)).toBe(true);
+    expect(isQualifyingIssue(issue)).toBe(false);
   });
 
   it('qualifies issue where latest comment is human comment', () => {
@@ -130,8 +130,40 @@ describe('cron deferral logic', () => {
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    // Latest comment is an ADW comment without "adw" match in raw text — wait, it does contain "ADW"
-    // The /adw/i test will match "ADW" in the body, so this qualifies via the recovery path
+    // ADW system comment detected by isAdwComment → does not qualify
+    expect(isQualifyingIssue(issue)).toBe(false);
+  });
+
+  it('ADW comment with new signature marker does not qualify', () => {
+    const issue: RawIssue = {
+      number: 12,
+      comments: [
+        { body: `Some update text${ADW_SIGNATURE}` },
+      ],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
+    expect(isQualifyingIssue(issue)).toBe(false);
+  });
+
+  it('human comment mentioning "adw" without signature qualifies (recovery)', () => {
+    const issue: RawIssue = {
+      number: 13,
+      comments: [
+        { body: 'Please re-run adw for this issue' },
+      ],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
+    expect(isQualifyingIssue(issue)).toBe(true);
+  });
+
+  it('human comment not mentioning "adw" qualifies', () => {
+    const issue: RawIssue = {
+      number: 14,
+      comments: [
+        { body: 'Can you also update the documentation?' },
+      ],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
     expect(isQualifyingIssue(issue)).toBe(true);
   });
 });
