@@ -42,5 +42,9 @@ next-env.d.ts
 .cursor/logs/
 .cursor/mcp.json
 
+# supabase
+supabase/.temp/
+supabase/.branches/
+
 // environment
 .env
