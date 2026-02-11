@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isAdwComment, ADW_SIGNATURE } from '../github/workflowCommentsBase';
+import { isActionableComment, ADW_SIGNATURE } from '../github/workflowCommentsBase';
 
 /**
  * Tests for the qualifying-issue logic used by the cron trigger.
  * The cron trigger's `isQualifyingIssue` function is module-private,
- * so we replicate its logic here using the shared `isAdwComment` utility.
+ * so we replicate its allow-list logic here using the shared `isActionableComment` utility.
  */
 
 interface RawIssue {
@@ -13,15 +13,12 @@ interface RawIssue {
   createdAt: string;
 }
 
-/** Replicates the cron trigger's isQualifyingIssue logic for testing. */
+/** Replicates the cron trigger's isQualifyingIssue allow-list logic for testing. */
 function isQualifyingIssue(issue: RawIssue): boolean {
   if (issue.comments.length === 0) return true;
 
   const latestComment = issue.comments[issue.comments.length - 1];
-  if (isAdwComment(latestComment.body)) return false;
-  if (/adw/i.test(latestComment.body)) return true;
-
-  return true;
+  return isActionableComment(latestComment.body);
 }
 
 describe('isQualifyingIssue (cron trigger logic)', () => {
@@ -30,21 +27,7 @@ describe('isQualifyingIssue (cron trigger logic)', () => {
     expect(isQualifyingIssue(issue)).toBe(true);
   });
 
-  it('does not qualify issue where latest comment is ADW comment without adw text', () => {
-    // ADW comments that contain "adw" text qualify via the recovery path.
-    // This tests a hypothetical ADW-format comment that lacks "adw" in its body.
-    const issue: RawIssue = {
-      number: 2,
-      comments: [
-        { body: '## :seedling: Branch Created\n\n**Branch:** `feature/issue-2-test`' },
-      ],
-      createdAt: '2025-01-01T00:00:00Z',
-    };
-    expect(isQualifyingIssue(issue)).toBe(false);
-  });
-
-  it('does not qualify issue where latest comment is ADW comment with adw text', () => {
-    // ADW system comments should never qualify, even if they contain "adw" text
+  it('does not qualify issue where latest comment is ADW comment', () => {
     const issue: RawIssue = {
       number: 2,
       comments: [
@@ -55,31 +38,60 @@ describe('isQualifyingIssue (cron trigger logic)', () => {
     expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('qualifies issue where latest comment is human comment', () => {
+  it('qualifies issue where latest comment contains ## Take action', () => {
     const issue: RawIssue = {
       number: 3,
       comments: [
         { body: '## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123-abc`' },
-        { body: 'Please also update the tests' },
+        { body: '## Take action\n\nPlease also update the tests' },
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
     expect(isQualifyingIssue(issue)).toBe(true);
   });
 
-  it('qualifies issue where latest comment contains "adw" text (recovery)', () => {
+  it('does not qualify issue where latest comment is a human comment without ## Take action', () => {
     const issue: RawIssue = {
-      number: 4,
-      comments: [{ body: 'Something about adw recovery' }],
+      number: 3,
+      comments: [
+        { body: 'Please also update the tests' },
+      ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    expect(isQualifyingIssue(issue)).toBe(true);
+    expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('qualifies issue where latest comment has emoji not in heading format', () => {
+  it('does not qualify issue where latest comment has emoji not in heading format', () => {
     const issue: RawIssue = {
       number: 5,
       comments: [{ body: ':thumbsup: this looks good to me' }],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
+    expect(isQualifyingIssue(issue)).toBe(false);
+  });
+
+  it('does not qualify when latest comment is a Vercel bot comment', () => {
+    const issue: RawIssue = {
+      number: 6,
+      comments: [{ body: '[vc]: #abc123\nDeployment preview ready' }],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
+    expect(isQualifyingIssue(issue)).toBe(false);
+  });
+
+  it('does not qualify when latest comment is a generic bot comment', () => {
+    const issue: RawIssue = {
+      number: 7,
+      comments: [{ body: 'Coverage report: 85% (+2.3%) on branch feature/issue-7' }],
+      createdAt: '2025-01-01T00:00:00Z',
+    };
+    expect(isQualifyingIssue(issue)).toBe(false);
+  });
+
+  it('qualifies when latest comment contains ## Take action even with other text', () => {
+    const issue: RawIssue = {
+      number: 8,
+      comments: [{ body: 'Some context here\n\n## Take action\n\nPlease re-run the workflow' }],
       createdAt: '2025-01-01T00:00:00Z',
     };
     expect(isQualifyingIssue(issue)).toBe(true);
@@ -87,38 +99,37 @@ describe('isQualifyingIssue (cron trigger logic)', () => {
 });
 
 describe('webhook issue_comment filtering', () => {
+  it('identifies comment with ## Take action as actionable', () => {
+    const body = '## Take action\n\nCan you also fix the styling issue?';
+    expect(isActionableComment(body)).toBe(true);
+  });
+
+  it('identifies comment without directive as non-actionable', () => {
+    const body = 'Can you also fix the styling issue?';
+    expect(isActionableComment(body)).toBe(false);
+  });
+
   it('identifies ADW system comment as non-actionable', () => {
     const body = '## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123-abc`';
-    expect(isAdwComment(body)).toBe(true);
+    expect(isActionableComment(body)).toBe(false);
   });
 
-  it('identifies human comment as actionable', () => {
-    const body = 'Can you also fix the styling issue?';
-    expect(isAdwComment(body)).toBe(false);
-  });
-
-  it('ignores edited action (only created matters)', () => {
-    // The webhook handler checks action === 'created' before processing.
-    // This test validates that ADW comment detection itself is action-agnostic.
-    const adwBody = '## :tada: ADW Workflow Completed\n\nDone';
-    expect(isAdwComment(adwBody)).toBe(true);
-
-    const humanBody = 'Updated my previous comment with more details';
-    expect(isAdwComment(humanBody)).toBe(false);
+  it('identifies Vercel bot comment as non-actionable', () => {
+    const body = '[vc]: #abc123\nDeployment preview ready at https://example.vercel.app';
+    expect(isActionableComment(body)).toBe(false);
   });
 });
 
 describe('cron deferral logic', () => {
-  it('qualifying issue with human comment is detected', () => {
+  it('qualifying issue with ## Take action comment is detected', () => {
     const issue: RawIssue = {
       number: 10,
       comments: [
         { body: '## :tada: ADW Workflow Completed\n\n**ADW ID:** `adw-123-abc`' },
-        { body: 'Actually, can you also handle edge case X?' },
+        { body: '## Take action\n\nActually, can you also handle edge case X?' },
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    // Issue qualifies because latest comment is human
     expect(isQualifyingIssue(issue)).toBe(true);
   });
 
@@ -130,11 +141,10 @@ describe('cron deferral logic', () => {
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    // ADW system comment detected by isAdwComment → does not qualify
     expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('ADW comment with new signature marker does not qualify', () => {
+  it('ADW comment with signature marker does not qualify', () => {
     const issue: RawIssue = {
       number: 12,
       comments: [
@@ -145,7 +155,7 @@ describe('cron deferral logic', () => {
     expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('human comment mentioning "adw" without signature qualifies (recovery)', () => {
+  it('human comment mentioning "adw" without ## Take action does not qualify', () => {
     const issue: RawIssue = {
       number: 13,
       comments: [
@@ -153,10 +163,10 @@ describe('cron deferral logic', () => {
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    expect(isQualifyingIssue(issue)).toBe(true);
+    expect(isQualifyingIssue(issue)).toBe(false);
   });
 
-  it('human comment not mentioning "adw" qualifies', () => {
+  it('human comment without ## Take action does not qualify', () => {
     const issue: RawIssue = {
       number: 14,
       comments: [
@@ -164,6 +174,6 @@ describe('cron deferral logic', () => {
       ],
       createdAt: '2025-01-01T00:00:00Z',
     };
-    expect(isQualifyingIssue(issue)).toBe(true);
+    expect(isQualifyingIssue(issue)).toBe(false);
   });
 });

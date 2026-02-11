@@ -57,6 +57,14 @@ export function isAdwComment(commentBody: string): boolean {
   return ADW_COMMENT_PATTERN.test(commentBody) || ADW_SIGNATURE_PATTERN.test(commentBody);
 }
 
+/** Pattern matching the `## Take action` heading that signals an explicit human directive. */
+export const ACTIONABLE_COMMENT_PATTERN = /^## Take action$/mi;
+
+/** Returns true if the comment body contains the explicit `## Take action` directive heading. */
+export function isActionableComment(commentBody: string): boolean {
+  return ACTIONABLE_COMMENT_PATTERN.test(commentBody);
+}
+
 /** Truncates text to a maximum length with ellipsis. */
 export function truncateText(text: string, maxLength: number): string {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;

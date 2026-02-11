@@ -7,7 +7,7 @@
 
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
-import { getRepoInfo, fetchPRList, hasUnaddressedComments, isAdwComment, isAdwRunningForIssue, truncateText } from '../github';
+import { getRepoInfo, fetchPRList, hasUnaddressedComments, isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
@@ -43,18 +43,13 @@ function isQualifyingIssue(issue: RawIssue): boolean {
 
   const latestComment = issue.comments[issue.comments.length - 1];
 
-  if (isAdwComment(latestComment.body)) {
-    log(`Issue #${issue.number}: latest comment is ADW system comment (${truncateText(latestComment.body, 100)}), does not qualify`);
-    return false;
-  }
-
-  if (/adw/i.test(latestComment.body)) {
-    log(`Issue #${issue.number}: latest comment is human comment mentioning "adw" (${truncateText(latestComment.body, 100)}), qualifies via recovery`);
+  if (isActionableComment(latestComment.body)) {
+    log(`Issue #${issue.number}: latest comment contains "## Take action" directive, qualifies`);
     return true;
   }
 
-  log(`Issue #${issue.number}: latest comment is human comment (${truncateText(latestComment.body, 100)}), qualifies`);
-  return true;
+  log(`Issue #${issue.number}: latest comment does not contain "## Take action" directive (${truncateText(latestComment.body, 100)}), does not qualify`);
+  return false;
 }
 
 async function checkAndTrigger(): Promise<void> {

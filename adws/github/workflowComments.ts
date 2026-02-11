@@ -10,6 +10,8 @@ export {
   ADW_SIGNATURE_PATTERN,
   truncateText,
   isAdwComment,
+  ACTIONABLE_COMMENT_PATTERN,
+  isActionableComment,
   isAdwRunningForIssue,
   parseWorkflowStageFromComment,
   extractAdwIdFromComment,

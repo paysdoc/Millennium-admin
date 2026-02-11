@@ -9,7 +9,7 @@ vi.mock('../core/utils', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { isAdwComment, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
+import { isAdwComment, isActionableComment, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
 
 describe('isAdwComment', () => {
   it('returns true for ADW workflow started comment', () => {
@@ -76,6 +76,48 @@ describe('isAdwComment', () => {
 
   it('returns false for human comment without signature or heading', () => {
     expect(isAdwComment('Just a regular comment with no ADW markers')).toBe(false);
+  });
+});
+
+describe('isActionableComment', () => {
+  it('returns true for a comment with ## Take action heading', () => {
+    expect(isActionableComment('## Take action')).toBe(true);
+  });
+
+  it('returns true for a comment with ## Take action heading followed by body text', () => {
+    expect(isActionableComment('## Take action\n\nPlease fix the bug described above.')).toBe(true);
+  });
+
+  it('returns true for a comment with text before and after ## Take action heading', () => {
+    expect(isActionableComment('Some context here\n\n## Take action\n\nDo the thing.')).toBe(true);
+  });
+
+  it('returns false for a plain human comment without the directive', () => {
+    expect(isActionableComment('Please also update the tests')).toBe(false);
+  });
+
+  it('returns false for an ADW system comment', () => {
+    expect(isActionableComment('## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123-abc`')).toBe(false);
+  });
+
+  it('returns false for a Vercel bot comment', () => {
+    expect(isActionableComment('[vc]: #abc123\nDeployment preview ready')).toBe(false);
+  });
+
+  it('returns false for an empty string', () => {
+    expect(isActionableComment('')).toBe(false);
+  });
+
+  it('returns false for a comment with "Take action" but not as an ## heading', () => {
+    expect(isActionableComment('You should Take action on this issue soon')).toBe(false);
+  });
+
+  it('returns true for case-insensitive match (## take action)', () => {
+    expect(isActionableComment('## take action')).toBe(true);
+  });
+
+  it('returns true for case-insensitive match (## TAKE ACTION)', () => {
+    expect(isActionableComment('## TAKE ACTION')).toBe(true);
   });
 });
 
