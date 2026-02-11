@@ -95,6 +95,22 @@ export interface GitHubComment {
 }
 
 /**
+ * GitHub issue comment from REST API (uses numeric IDs for deletion).
+ * Unlike GitHubComment which uses GraphQL string node IDs, this interface
+ * matches the REST API format required by DELETE /repos/{owner}/{repo}/issues/comments/{id}.
+ */
+export interface IssueCommentSummary {
+  /** REST API numeric comment ID (needed for deletion) */
+  id: number;
+  /** Comment body text */
+  body: string;
+  /** Author's GitHub login */
+  authorLogin: string;
+  /** ISO 8601 creation timestamp */
+  createdAt: string;
+}
+
+/**
  * GitHub issue model for list responses (simplified).
  */
 export interface GitHubIssueListItem {

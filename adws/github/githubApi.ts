@@ -3,7 +3,7 @@
  */
 
 import { execSync } from 'child_process';
-import { GitHubIssue, PRDetails, PRReviewComment, PRListItem, log } from '../core';
+import { GitHubIssue, PRDetails, PRReviewComment, PRListItem, IssueCommentSummary, log } from '../core';
 
 export interface RepoInfo {
   owner: string;
@@ -303,6 +303,55 @@ export function getIssueState(issueNumber: number): string {
   } catch (error) {
     log(`Failed to get issue state for #${issueNumber}: ${error}`, 'error');
     throw error;
+  }
+}
+
+/**
+ * Fetches all comments on a GitHub issue using the REST API.
+ * Returns comments with numeric IDs needed for deletion.
+ */
+export function fetchIssueCommentsRest(issueNumber: number): IssueCommentSummary[] {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    const json = execSync(
+      `gh api repos/${owner}/${repo}/issues/${issueNumber}/comments --paginate`,
+      { encoding: 'utf-8' }
+    );
+    const raw = JSON.parse(json) as any[];
+
+    const comments = raw.map((c: any) => ({
+      id: c.id,
+      body: c.body || '',
+      authorLogin: c.user?.login || 'unknown',
+      createdAt: c.created_at,
+    }));
+
+    log(`Fetched ${comments.length} comments for issue #${issueNumber}`);
+    return comments;
+  } catch (error) {
+    log(`Failed to fetch comments for issue #${issueNumber}: ${error}`, 'error');
+    return [];
+  }
+}
+
+/**
+ * Deletes a single issue comment by its numeric REST API ID.
+ * Returns true on success, false on error.
+ */
+export function deleteIssueComment(commentId: number): boolean {
+  const { owner, repo } = getRepoInfo();
+
+  try {
+    execSync(
+      `gh api -X DELETE repos/${owner}/${repo}/issues/comments/${commentId}`,
+      { encoding: 'utf-8', stdio: 'pipe' }
+    );
+    log(`Deleted comment ${commentId}`, 'success');
+    return true;
+  } catch (error) {
+    log(`Failed to delete comment ${commentId}: ${error}`, 'error');
+    return false;
   }
 }
 

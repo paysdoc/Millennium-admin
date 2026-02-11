@@ -12,6 +12,8 @@ export {
   commentOnPR,
   fetchPRList,
   commentOnIssue,
+  fetchIssueCommentsRest,
+  deleteIssueComment,
   type RepoInfo,
 } from './githubApi';
 
