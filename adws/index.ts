@@ -36,6 +36,7 @@ export {
   type PRListItem,
   type PRReviewWorkflowStage,
   type RecoveryState,
+  type IssueCommentSummary,
   // Orchestrator shared utilities
   shouldExecuteStage,
   hasUncommittedChanges,
@@ -68,6 +69,8 @@ export {
   commentOnPR,
   fetchPRList,
   commentOnIssue,
+  fetchIssueCommentsRest,
+  deleteIssueComment,
   type RepoInfo,
   getCurrentBranch,
   generateFeatureBranchName,

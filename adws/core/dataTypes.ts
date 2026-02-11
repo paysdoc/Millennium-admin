@@ -300,6 +300,20 @@ export interface PullRequestWebhookPayload {
 }
 
 /**
+ * Minimal issue comment from GitHub REST API (for listing/deleting).
+ */
+export interface IssueCommentSummary {
+  /** Numeric REST API comment ID (required for deletion). */
+  id: number;
+  /** Comment body text. */
+  body: string;
+  /** Comment author login. */
+  authorLogin: string;
+  /** ISO 8601 creation timestamp. */
+  createdAt: string;
+}
+
+/**
  * Agent identifier for consistent naming across the state system.
  */
 export type AgentIdentifier =
