@@ -34,6 +34,7 @@ vi.mock('../agents/claudeAgent', () => ({
   runClaudeAgentWithCommand: vi.fn(),
 }));
 
+import { log } from '../core';
 import { fetchGitHubIssue } from '../github/githubApi';
 import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
 
@@ -159,6 +160,9 @@ describe('classifyWithAdwCommand', () => {
     const result = await classifyWithAdwCommand('issue text', 42, '/tmp/output.jsonl');
 
     expect(result).toBeNull();
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('no valid command')
+    );
   });
 
   it('returns null when agent call fails', async () => {
@@ -170,6 +174,10 @@ describe('classifyWithAdwCommand', () => {
     const result = await classifyWithAdwCommand('issue text', 42, '/tmp/output.jsonl');
 
     expect(result).toBeNull();
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('ADW classifier agent failed'),
+      'error'
+    );
   });
 
   it('returns null when agent throws', async () => {
@@ -237,6 +245,9 @@ describe('classifyIssueForTrigger', () => {
     expect(result.success).toBe(true);
     // Should only call once (for /classify_adw), not twice
     expect(runClaudeAgentWithCommand).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Attempting ADW classification')
+    );
   });
 
   it('falls back to /classify_issue when /classify_adw returns empty', async () => {
@@ -250,6 +261,12 @@ describe('classifyIssueForTrigger', () => {
     expect(result.adwCommand).toBeUndefined();
     expect(result.success).toBe(true);
     expect(runClaudeAgentWithCommand).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('falling back to /classify_issue')
+    );
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Attempting heuristic classification')
+    );
   });
 
   it('defaults to /feature when both classifiers fail', async () => {
@@ -294,6 +311,9 @@ describe('classifyGitHubIssue', () => {
     expect(result.adwCommand).toBe('/adw_patch');
     expect(result.success).toBe(true);
     expect(runClaudeAgentWithCommand).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Attempting ADW classification')
+    );
   });
 
   it('falls back to /classify_issue when /classify_adw returns empty', async () => {
@@ -307,6 +327,12 @@ describe('classifyGitHubIssue', () => {
     expect(result.adwCommand).toBeUndefined();
     expect(result.success).toBe(true);
     expect(runClaudeAgentWithCommand).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('falling back to /classify_issue')
+    );
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Attempting heuristic classification')
+    );
   });
 
   it('defaults to /feature when both classifiers fail', async () => {

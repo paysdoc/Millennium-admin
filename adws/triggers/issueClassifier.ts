@@ -100,10 +100,16 @@ export async function classifyWithAdwCommand(
       'haiku'
     );
 
-    if (!result.success) return null;
+    if (!result.success) {
+      log(`ADW classifier agent failed for issue #${issueNumber}`, 'error');
+      return null;
+    }
 
     const parsed = parseAdwClassificationOutput(result.output);
-    if (!parsed?.adw_slash_command) return null;
+    if (!parsed?.adw_slash_command) {
+      log(`ADW classifier returned no valid command for issue #${issueNumber}`);
+      return null;
+    }
 
     const issueType = adwCommandToIssueTypeMap[parsed.adw_slash_command];
     log(`Issue #${issueNumber} matched ADW command ${parsed.adw_slash_command} → ${issueType}`, 'success');
@@ -114,7 +120,8 @@ export async function classifyWithAdwCommand(
       adwCommand: parsed.adw_slash_command,
       adwId: parsed.adw_id,
     };
-  } catch {
+  } catch (error) {
+    log(`ADW classification error for issue #${issueNumber}: ${error}`, 'error');
     return null;
   }
 }
@@ -177,6 +184,7 @@ export async function classifyIssueForTrigger(
     const issueContext = `**#${issue.number}: ${issue.title}**\n\n${issue.body}`;
 
     // Step 1: Try ADW-specific classification
+    log(`Attempting ADW classification (/classify_adw) for issue #${issueNumber}...`);
     const adwResult = await classifyWithAdwCommand(
       issueContext,
       issueNumber,
@@ -185,6 +193,8 @@ export async function classifyIssueForTrigger(
     if (adwResult) return adwResult;
 
     // Step 2: Fall back to /classify_issue
+    log(`No ADW command found for issue #${issueNumber}, falling back to /classify_issue`);
+    log(`Attempting heuristic classification (/classify_issue) for issue #${issueNumber}...`);
     return await classifyWithIssueCommand(
       issueContext,
       issueNumber,
@@ -217,6 +227,7 @@ export async function classifyGitHubIssue(
 ${issue.body || 'No description provided.'}`;
 
     // Step 1: Try ADW-specific classification
+    log(`Attempting ADW classification (/classify_adw) for issue #${issue.number}...`);
     const adwResult = await classifyWithAdwCommand(
       issueContext,
       issue.number,
@@ -225,6 +236,8 @@ ${issue.body || 'No description provided.'}`;
     if (adwResult) return adwResult;
 
     // Step 2: Fall back to /classify_issue
+    log(`No ADW command found for issue #${issue.number}, falling back to /classify_issue`);
+    log(`Attempting heuristic classification (/classify_issue) for issue #${issue.number}...`);
     return await classifyWithIssueCommand(
       issueContext,
       issue.number,
