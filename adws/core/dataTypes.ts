@@ -10,6 +10,51 @@
 export type IssueClassSlashCommand = '/chore' | '/bug' | '/feature' | '/pr_review';
 
 /**
+ * Valid ADW workflow slash commands for explicit workflow routing.
+ */
+export type AdwSlashCommand =
+  | '/adw_plan'
+  | '/adw_build'
+  | '/adw_test'
+  | '/adw_review'
+  | '/adw_document'
+  | '/adw_patch'
+  | '/adw_plan_build'
+  | '/adw_plan_build_test'
+  | '/adw_plan_build_review'
+  | '/adw_plan_build_document'
+  | '/adw_plan_build_test_review'
+  | '/adw_sdlc';
+
+/**
+ * Maps ADW workflow commands to issue classification types.
+ * Commands with test phases map to /feature, without test to /bug,
+ * planning/documentation-only to /chore, review-focused to /pr_review.
+ */
+export const adwCommandToIssueTypeMap: Record<AdwSlashCommand, IssueClassSlashCommand> = {
+  '/adw_plan': '/chore',
+  '/adw_build': '/feature',
+  '/adw_test': '/feature',
+  '/adw_review': '/pr_review',
+  '/adw_document': '/chore',
+  '/adw_patch': '/bug',
+  '/adw_plan_build': '/bug',
+  '/adw_plan_build_test': '/feature',
+  '/adw_plan_build_review': '/pr_review',
+  '/adw_plan_build_document': '/chore',
+  '/adw_plan_build_test_review': '/feature',
+  '/adw_sdlc': '/feature',
+};
+
+/**
+ * Result from the /classify_adw command extraction.
+ */
+export interface AdwClassificationResult {
+  adw_slash_command?: AdwSlashCommand;
+  adw_id?: string;
+}
+
+/**
  * Maps issue classification to commit message prefixes.
  * Following conventional commits specification.
  */
@@ -42,6 +87,7 @@ export type SlashCommand =
   | '/feature'
   | '/pr_review'
   // ADW workflow commands
+  | '/classify_adw'
   | '/classify_issue'
   | '/find_plan_file'
   | '/generate_branch_name'
