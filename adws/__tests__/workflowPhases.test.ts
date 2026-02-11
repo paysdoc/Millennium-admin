@@ -20,6 +20,7 @@ import {
 } from '../workflowPhases';
 import { RecoveryState, GitHubIssue, PRDetails, PRReviewComment } from '../core/dataTypes';
 import { WorkflowContext, PRReviewWorkflowContext } from '../github/workflowComments';
+import { extractBranchNameFromComment } from '../github/workflowCommentsBase';
 
 vi.mock('fs');
 
@@ -298,8 +299,58 @@ describe('initializeWorkflow', () => {
   it('generates ADW ID from issue title when adwId is null', async () => {
     const config = await initializeWorkflow(1, null, 'plan-orchestrator');
 
+    expect(detectRecoveryState).toHaveBeenCalled();
     expect(generateAdwId).toHaveBeenCalledWith('Test issue');
     expect(config.adwId).toBe('adw-test-issue-abc123');
+
+    // Verify detectRecoveryState was called before generateAdwId
+    const recoveryCallOrder = vi.mocked(detectRecoveryState).mock.invocationCallOrder[0];
+    const generateCallOrder = vi.mocked(generateAdwId).mock.invocationCallOrder[0];
+    expect(recoveryCallOrder).toBeLessThan(generateCallOrder);
+  });
+
+  it('reuses recovered ADW ID and branch name when recovery state has them', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState({
+      canResume: true,
+      lastCompletedStage: 'branch_created',
+      adwId: 'adw-recovered-id',
+      branchName: 'bug-issue-1-adw-recovered-id-fix-login',
+    }));
+    vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).not.toHaveBeenCalled();
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(config.adwId).toBe('adw-recovered-id');
+    expect(config.branchName).toBe('bug-issue-1-adw-recovered-id-fix-login');
+  });
+
+  it('generates new ADW ID and branch when no recovery state exists', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState());
+    vi.mocked(getWorktreeForBranch).mockReturnValue(null);
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(config.adwId).toBe('adw-test-issue-abc123');
+    expect(config.branchName).toBe('feature/issue-1-test');
+  });
+
+  it('uses recovered branch name but generates new ADW ID when only branch is recovered', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState({
+      canResume: true,
+      lastCompletedStage: 'branch_created',
+      branchName: 'bug-issue-1-adw-old-id-fix-login',
+    }));
+    vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(config.branchName).toBe('bug-issue-1-adw-old-id-fix-login');
   });
 });
 
@@ -958,5 +1009,42 @@ describe('handlePRReviewWorkflowError', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
 
     mockExit.mockRestore();
+  });
+});
+
+// ============================================================================
+// extractBranchNameFromComment Tests
+// ============================================================================
+
+describe('extractBranchNameFromComment', () => {
+  it('extracts feat-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `feat-issue-123-adw-abc123-add-user-auth`';
+    expect(extractBranchNameFromComment(comment)).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+
+  it('extracts bug-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `bug-issue-456-adw-xyz789-fix-login-error`';
+    expect(extractBranchNameFromComment(comment)).toBe('bug-issue-456-adw-xyz789-fix-login-error');
+  });
+
+  it('extracts chore-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `chore-issue-789-adw-def456-update-deps`';
+    expect(extractBranchNameFromComment(comment)).toBe('chore-issue-789-adw-def456-update-deps');
+  });
+
+  it('extracts test-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `test-issue-323-adw-ghi789-fix-failing-tests`';
+    expect(extractBranchNameFromComment(comment)).toBe('test-issue-323-adw-ghi789-fix-failing-tests');
+  });
+
+  it('extracts review-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `review-issue-100-adw-jkl012-address-comments`';
+    expect(extractBranchNameFromComment(comment)).toBe('review-issue-100-adw-jkl012-address-comments');
+  });
+
+  it('returns null for non-matching patterns', () => {
+    expect(extractBranchNameFromComment('No branch here')).toBeNull();
+    expect(extractBranchNameFromComment('`feature/issue-123-old-format`')).toBeNull();
+    expect(extractBranchNameFromComment('`bugfix/issue-456-old-format`')).toBeNull();
   });
 });

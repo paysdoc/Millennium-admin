@@ -97,8 +97,11 @@ export async function initializeWorkflow(
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
 
-  // Resolve ADW ID: use provided or generate from issue title
-  const resolvedAdwId = adwId ?? generateAdwId(issue.title);
+  // Detect recovery state early to reuse existing ADW ID and branch name
+  const recoveryState = detectRecoveryState(issue.comments);
+
+  // Resolve ADW ID: use provided, recovered from prior workflow, or generate new
+  const resolvedAdwId = adwId ?? recoveryState.adwId ?? generateAdwId(issue.title);
 
   log('===================================', 'info');
   log(`${orchestratorName}`, 'info');
@@ -130,12 +133,17 @@ export async function initializeWorkflow(
     worktreePath = options.cwd;
     log('Using provided worktree (merged latest code)', 'info');
   } else {
-    // Use agent to generate branch name only (no git operations)
-    const branchResult = await runGenerateBranchNameAgent(
-      issueType, resolvedAdwId, issue, logsDir
-    );
-    branchName = branchResult.branchName;
-    log(`Branch name generated: ${branchName}`, 'success');
+    // Reuse recovered branch name or generate a new one
+    if (recoveryState.branchName) {
+      branchName = recoveryState.branchName;
+      log(`Reusing branch from previous workflow: ${branchName}`, 'info');
+    } else {
+      const branchResult = await runGenerateBranchNameAgent(
+        issueType, resolvedAdwId, issue, logsDir
+      );
+      branchName = branchResult.branchName;
+      log(`Branch name generated: ${branchName}`, 'success');
+    }
 
     // Check if a worktree already exists for this branch
     const existingWorktree = getWorktreeForBranch(branchName);
@@ -164,9 +172,6 @@ export async function initializeWorkflow(
   };
   AgentStateManager.writeState(orchestratorStatePath, initialState);
   AgentStateManager.appendLog(orchestratorStatePath, `Starting ${orchestratorName} workflow for issue #${issueNumber}`);
-
-  // Detect recovery state
-  const recoveryState = detectRecoveryState(issue.comments);
 
   // Initialize workflow context
   const ctx: WorkflowContext = {
