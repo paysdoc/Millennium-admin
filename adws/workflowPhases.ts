@@ -357,7 +357,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
       }
     };
 
-    const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback, buildAgentStatePath);
+    const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback, buildAgentStatePath, worktreePath);
 
     if (!buildResult.success) {
       AgentStateManager.writeState(buildAgentStatePath, {
@@ -407,7 +407,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
   e2eTestsPassed: boolean;
   totalRetries: number;
 }> {
-  const { orchestratorStatePath, issueNumber, ctx, logsDir } = config;
+  const { orchestratorStatePath, issueNumber, ctx, logsDir, worktreePath } = config;
   let costUsd = 0;
 
   // Unit tests
@@ -418,6 +418,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
     logsDir,
     orchestratorStatePath,
     maxRetries: MAX_TEST_RETRY_ATTEMPTS,
+    cwd: worktreePath,
   });
   costUsd += unitTestsResult.costUsd;
 
@@ -447,6 +448,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
     logsDir,
     orchestratorStatePath,
     maxRetries: MAX_TEST_RETRY_ATTEMPTS,
+    cwd: worktreePath,
   });
   costUsd += e2eTestsResult.costUsd;
 

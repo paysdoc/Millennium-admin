@@ -5,6 +5,7 @@ import {
   initializeWorkflow,
   executePlanPhase,
   executeBuildPhase,
+  executeTestPhase,
   executePRPhase,
   completeWorkflow,
   handleWorkflowError,
@@ -377,6 +378,21 @@ describe('executeBuildPhase', () => {
     await expect(executeBuildPhase(config)).rejects.toThrow('Cannot read plan file');
   });
 
+  it('passes worktreePath as cwd to runBuildAgent', async () => {
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeBuildPhase(config);
+
+    expect(runBuildAgent).toHaveBeenCalledWith(
+      config.issue,
+      '/mock/logs',
+      '# Plan content',
+      expect.any(Function),
+      '/mock/state/path',
+      '/custom/worktree'
+    );
+  });
+
   it('throws when build agent fails', async () => {
     vi.mocked(runBuildAgent).mockResolvedValue({
       success: false,
@@ -386,6 +402,49 @@ describe('executeBuildPhase', () => {
     const config = createWorkflowConfig();
 
     await expect(executeBuildPhase(config)).rejects.toThrow('Build Agent failed');
+  });
+});
+
+describe('executeTestPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes worktreePath as cwd to runUnitTestsWithRetry', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeTestPhase(config);
+
+    expect(runUnitTestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/custom/worktree',
+    }));
+  });
+
+  it('passes worktreePath as cwd to runE2ETestsWithRetry', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeTestPhase(config);
+
+    expect(runE2ETestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/custom/worktree',
+    }));
+  });
+
+  it('returns test results and accumulated cost', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 1, costUsd: 0.5 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 2, costUsd: 0.3 });
+    const config = createWorkflowConfig();
+
+    const result = await executeTestPhase(config);
+
+    expect(result.unitTestsPassed).toBe(true);
+    expect(result.e2eTestsPassed).toBe(true);
+    expect(result.costUsd).toBeCloseTo(0.8);
+    expect(result.totalRetries).toBe(3);
   });
 });
 
