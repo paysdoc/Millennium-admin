@@ -30,6 +30,7 @@ export type {
   AgentExecutionStatus,
   AgentExecutionState,
   AgentState,
+  IssueCommentSummary,
 } from './dataTypes';
 
 // Prefix maps for consistent branch naming and commit messages
