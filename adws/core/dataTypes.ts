@@ -247,7 +247,12 @@ export type WorkflowStage =
   | 'test_running'
   | 'test_failed'
   | 'test_resolving'
-  | 'test_passed';
+  | 'test_passed'
+  // Review workflow stages
+  | 'review_running'
+  | 'review_passed'
+  | 'review_failed'
+  | 'review_patching';
 
 /**
  * PR review comment from GitHub API.
@@ -368,6 +373,7 @@ export type AgentIdentifier =
   | 'build-orchestrator'
   | 'plan-build-orchestrator'
   | 'plan-build-test-orchestrator'
+  | 'plan-build-test-review-orchestrator'
   | 'classifier'
   | 'plan-agent'
   | 'build-agent'
@@ -378,6 +384,9 @@ export type AgentIdentifier =
   | 'test-orchestrator'
   | 'test-agent'
   | 'test-resolver-agent'
+  // Review workflow agents
+  | 'review-agent'
+  | 'patch-agent'
   // Git workflow agents
   | 'branch-name-agent'
   | 'commit-agent';

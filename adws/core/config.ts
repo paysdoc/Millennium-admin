@@ -26,5 +26,8 @@ export const AGENTS_STATE_DIR = path.join(process.cwd(), 'agents');
 /** Maximum number of retry attempts for test resolution. */
 export const MAX_TEST_RETRY_ATTEMPTS = parseInt(process.env.MAX_TEST_RETRY_ATTEMPTS || '5', 10);
 
+/** Maximum number of retry attempts for review-patch resolution. */
+export const MAX_REVIEW_RETRY_ATTEMPTS = parseInt(process.env.MAX_REVIEW_RETRY_ATTEMPTS || '3', 10);
+
 /** Directory for storing git worktrees. */
 export const WORKTREES_DIR = path.join(process.cwd(), '.worktrees');

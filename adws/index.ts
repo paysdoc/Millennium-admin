@@ -57,6 +57,16 @@ export {
   runPlanAgent,
   runPrReviewBuildAgent,
   runBuildAgent,
+  runReviewAgent,
+  parseReviewResult,
+  runPatchAgent,
+  formatPatchArgs,
+  runReviewWithRetry,
+  type ReviewIssue,
+  type ReviewResult,
+  type ReviewAgentResult,
+  type ReviewRetryResult,
+  type ReviewRetryOptions,
 } from './agents';
 
 // GitHub module - GitHub API and git operations
@@ -108,6 +118,7 @@ export {
   executeBuildPhase,
   executeTestPhase,
   executePRPhase,
+  executeReviewPhase,
   executePRReviewPlanPhase,
   executePRReviewBuildPhase,
   executePRReviewTestPhase,

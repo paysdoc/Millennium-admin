@@ -7,6 +7,7 @@ import {
   executeBuildPhase,
   executeTestPhase,
   executePRPhase,
+  executeReviewPhase,
   completeWorkflow,
   handleWorkflowError,
   initializePRReviewWorkflow,
@@ -45,6 +46,7 @@ vi.mock('../core', () => ({
   hasUncommittedChanges: vi.fn().mockReturnValue(false),
   getNextStage: vi.fn().mockReturnValue('classified'),
   MAX_TEST_RETRY_ATTEMPTS: 5,
+  MAX_REVIEW_RETRY_ATTEMPTS: 3,
 }));
 
 vi.mock('../github', () => ({
@@ -131,6 +133,7 @@ vi.mock('../agents', () => ({
   }),
   runUnitTestsWithRetry: vi.fn(),
   runE2ETestsWithRetry: vi.fn(),
+  runReviewWithRetry: vi.fn(),
 }));
 
 vi.mock('../triggers/issueClassifier', () => ({
@@ -158,7 +161,7 @@ import {
   copyEnvToWorktree,
   inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
+import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry } from '../agents';
 import { classifyGitHubIssue } from '../triggers/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
@@ -1046,5 +1049,91 @@ describe('extractBranchNameFromComment', () => {
     expect(extractBranchNameFromComment('No branch here')).toBeNull();
     expect(extractBranchNameFromComment('`feature/issue-123-old-format`')).toBeNull();
     expect(extractBranchNameFromComment('`bugfix/issue-456-old-format`')).toBeNull();
+  });
+});
+
+// ============================================================================
+// executeReviewPhase Tests
+// ============================================================================
+
+describe('executeReviewPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls runReviewWithRetry with correct config', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 1.5,
+      totalRetries: 0,
+      blockerIssues: [],
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(runReviewWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      adwId: 'test-adw-id',
+      specFile: 'specs/issue-1-plan.md',
+      logsDir: '/mock/logs',
+      maxRetries: expect.any(Number),
+      branchName: 'feature/issue-1-test',
+      issueType: '/feature',
+      cwd: '/mock/worktree',
+    }));
+    expect(result.reviewPassed).toBe(true);
+    expect(result.costUsd).toBe(1.5);
+  });
+
+  it('posts review_running and review_passed comments on success', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 1.0,
+      totalRetries: 0,
+      blockerIssues: [],
+    });
+    const config = createWorkflowConfig();
+
+    await executeReviewPhase(config);
+
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_running', expect.anything());
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_passed', expect.anything());
+  });
+
+  it('posts review_failed comment when review fails', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: false,
+      costUsd: 3.0,
+      totalRetries: 3,
+      blockerIssues: [{
+        review_issue_number: 1,
+        screenshot_path: '/img/issue.png',
+        issue_description: 'Button broken',
+        issue_resolution: 'Fix button',
+        issue_severity: 'blocker',
+      }],
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(result.reviewPassed).toBe(false);
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_failed', expect.anything());
+  });
+
+  it('returns cost and pass/fail status', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 2.5,
+      totalRetries: 1,
+      blockerIssues: [],
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(result.costUsd).toBe(2.5);
+    expect(result.reviewPassed).toBe(true);
+    expect(result.totalRetries).toBe(1);
   });
 });
