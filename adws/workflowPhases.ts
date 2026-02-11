@@ -14,6 +14,7 @@ import * as path from 'path';
 import {
   log,
   ensureLogsDirectory,
+  generateAdwId,
   type IssueClassSlashCommand,
   type GitHubIssue,
   type PRDetails,
@@ -87,20 +88,23 @@ export interface WorkflowConfig {
  */
 export async function initializeWorkflow(
   issueNumber: number,
-  adwId: string,
+  adwId: string | null,
   orchestratorName: AgentIdentifier,
   options?: { cwd?: string; issueType?: IssueClassSlashCommand }
 ): Promise<WorkflowConfig> {
-  log('===================================', 'info');
-  log(`${orchestratorName}`, 'info');
-  log(`Issue: #${issueNumber}`, 'info');
-  log(`ADW ID: ${adwId}`, 'info');
-  log('===================================', 'info');
-
   // Fetch issue
   log('Fetching GitHub issue...', 'info');
   const issue = await fetchGitHubIssue(issueNumber);
   log(`Fetched issue: ${issue.title}`, 'success');
+
+  // Resolve ADW ID: use provided or generate from issue title
+  const resolvedAdwId = adwId ?? generateAdwId(issue.title);
+
+  log('===================================', 'info');
+  log(`${orchestratorName}`, 'info');
+  log(`Issue: #${issueNumber}`, 'info');
+  log(`ADW ID: ${resolvedAdwId}`, 'info');
+  log('===================================', 'info');
 
   // Classify issue type
   let issueType: IssueClassSlashCommand;
@@ -115,7 +119,7 @@ export async function initializeWorkflow(
   }
 
   // Initialize logs early so agents can use the directory
-  const logsDir = ensureLogsDirectory(adwId);
+  const logsDir = ensureLogsDirectory(resolvedAdwId);
 
   // Setup worktree with branch sync
   const defaultBranch = getDefaultBranch();
@@ -128,7 +132,7 @@ export async function initializeWorkflow(
   } else {
     // Use agent to generate branch name only (no git operations)
     const branchResult = await runGenerateBranchNameAgent(
-      issueType, adwId, issue, logsDir
+      issueType, resolvedAdwId, issue, logsDir
     );
     branchName = branchResult.branchName;
     log(`Branch name generated: ${branchName}`, 'success');
@@ -148,12 +152,12 @@ export async function initializeWorkflow(
     }
     log(`Worktree path: ${worktreePath}`, 'info');
   }
-  const orchestratorStatePath = AgentStateManager.initializeState(adwId, orchestratorName);
+  const orchestratorStatePath = AgentStateManager.initializeState(resolvedAdwId, orchestratorName);
   log(`State: ${orchestratorStatePath}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
 
   const initialState: Partial<AgentState> = {
-    adwId,
+    adwId: resolvedAdwId,
     issueNumber,
     agentName: orchestratorName,
     execution: AgentStateManager.createExecutionState('running'),
@@ -167,7 +171,7 @@ export async function initializeWorkflow(
   // Initialize workflow context
   const ctx: WorkflowContext = {
     issueNumber,
-    adwId,
+    adwId: resolvedAdwId,
     issueType,
   };
 
@@ -192,7 +196,7 @@ export async function initializeWorkflow(
 
   return {
     issueNumber,
-    adwId,
+    adwId: resolvedAdwId,
     issue,
     issueType,
     worktreePath,
@@ -576,15 +580,18 @@ export interface PRReviewWorkflowConfig {
  * Initializes a PR review workflow: fetches PR details, checks for unaddressed
  * comments, sets up worktree, and initializes state.
  */
-export function initializePRReviewWorkflow(prNumber: number, adwId: string): PRReviewWorkflowConfig {
+export function initializePRReviewWorkflow(prNumber: number, adwId: string | null): PRReviewWorkflowConfig {
+  const prDetails = fetchPRDetails(prNumber);
+  log(`Fetched PR: ${prDetails.title}`, 'success');
+
+  // Resolve ADW ID: use provided or generate from PR title
+  const resolvedAdwId = adwId ?? generateAdwId(prDetails.title);
+
   log('===================================', 'info');
   log('PR Review Orchestrator', 'info');
   log(`PR: #${prNumber}`, 'info');
-  log(`ADW ID: ${adwId}`, 'info');
+  log(`ADW ID: ${resolvedAdwId}`, 'info');
   log('===================================', 'info');
-
-  const prDetails = fetchPRDetails(prNumber);
-  log(`Fetched PR: ${prDetails.title}`, 'success');
 
   if (prDetails.state === 'CLOSED' || prDetails.state === 'MERGED') {
     log(`PR #${prNumber} is ${prDetails.state}, skipping`, 'info');
@@ -600,13 +607,13 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string): PRR
 
   log(`Found ${unaddressedComments.length} unaddressed review comment(s)`, 'info');
 
-  const logsDir = ensureLogsDirectory(adwId);
+  const logsDir = ensureLogsDirectory(resolvedAdwId);
   const issueNumber = prDetails.issueNumber || 0;
-  const orchestratorStatePath = AgentStateManager.initializeState(adwId, 'pr-review-orchestrator');
+  const orchestratorStatePath = AgentStateManager.initializeState(resolvedAdwId, 'pr-review-orchestrator');
   log(`State: ${orchestratorStatePath}`, 'info');
 
   const initialState: Partial<AgentState> = {
-    adwId,
+    adwId: resolvedAdwId,
     issueNumber,
     branchName: prDetails.headBranch,
     agentName: 'pr-review-orchestrator',
@@ -618,7 +625,7 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string): PRR
 
   const ctx: PRReviewWorkflowContext = {
     issueNumber,
-    adwId,
+    adwId: resolvedAdwId,
     prNumber,
     reviewComments: unaddressedComments.length,
     branchName: prDetails.headBranch,
@@ -632,7 +639,7 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string): PRR
   return {
     prNumber,
     issueNumber,
-    adwId,
+    adwId: resolvedAdwId,
     prDetails,
     unaddressedComments,
     worktreePath,

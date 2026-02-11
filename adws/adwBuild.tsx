@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   log(`Fetched issue: ${issue.title}`, 'success');
 
   // Step 2: Determine ADW ID
-  const adwId = providedAdwId || generateAdwId();
+  const adwId = providedAdwId || generateAdwId(issue.title);
   const logsDir = ensureLogsDirectory(adwId);
   log(`ADW ID: ${adwId}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
