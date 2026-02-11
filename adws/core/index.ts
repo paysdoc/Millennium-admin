@@ -8,6 +8,8 @@ export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MA
 // Data types
 export type {
   IssueClassSlashCommand,
+  AdwSlashCommand,
+  AdwClassificationResult,
   SlashCommand,
   GitHubUser,
   GitHubLabel,
@@ -34,7 +36,7 @@ export type {
 } from './dataTypes';
 
 // Prefix maps for consistent branch naming and commit messages
-export { commitPrefixMap, branchPrefixMap } from './dataTypes';
+export { commitPrefixMap, branchPrefixMap, adwCommandToIssueTypeMap } from './dataTypes';
 
 // Utilities
 export {
