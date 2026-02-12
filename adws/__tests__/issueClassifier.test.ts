@@ -6,7 +6,7 @@ import {
   classifyGitHubIssue,
   getWorkflowScript,
 } from '../triggers/issueClassifier';
-import { adwCommandToIssueTypeMap, AdwSlashCommand, GitHubIssue } from '../core/dataTypes';
+import { adwCommandToIssueTypeMap, adwCommandToOrchestratorMap, AdwSlashCommand, GitHubIssue } from '../core/dataTypes';
 
 vi.mock('../core', () => ({
   log: vi.fn(),
@@ -23,6 +23,15 @@ vi.mock('../core', () => ({
     '/adw_plan_build_document': '/chore',
     '/adw_plan_build_test_review': '/feature',
     '/adw_sdlc': '/feature',
+  },
+  adwCommandToOrchestratorMap: {
+    '/adw_plan': 'adws/adwPlan.tsx',
+    '/adw_build': 'adws/adwBuild.tsx',
+    '/adw_test': 'adws/adwTest.tsx',
+    '/adw_plan_build': 'adws/adwPlanBuild.tsx',
+    '/adw_plan_build_test': 'adws/adwPlanBuildTest.tsx',
+    '/adw_plan_build_test_review': 'adws/adwPlanBuildTestReview.tsx',
+    '/adw_sdlc': 'adws/adwPlanBuildTestReview.tsx',
   },
 }));
 
@@ -368,6 +377,7 @@ describe('classifyGitHubIssue', () => {
 // ============================================================================
 
 describe('getWorkflowScript', () => {
+  // Issue-type-based routing (no ADW command)
   it('returns adwPlanBuildTest for /feature', () => {
     expect(getWorkflowScript('/feature')).toBe('adws/adwPlanBuildTest.tsx');
   });
@@ -384,17 +394,61 @@ describe('getWorkflowScript', () => {
     expect(getWorkflowScript('/pr_review')).toBe('adws/adwPlanBuild.tsx');
   });
 
+  // Mapped ADW commands route to their dedicated orchestrators
   it('returns adwPlanBuildTestReview when adwCommand is /adw_plan_build_test_review', () => {
     expect(getWorkflowScript('/feature', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
   });
 
-  it('ignores adwCommand when not /adw_plan_build_test_review', () => {
+  it('returns adwPlan when adwCommand is /adw_plan', () => {
+    expect(getWorkflowScript('/chore', '/adw_plan')).toBe('adws/adwPlan.tsx');
+  });
+
+  it('returns adwBuild when adwCommand is /adw_build', () => {
+    expect(getWorkflowScript('/feature', '/adw_build')).toBe('adws/adwBuild.tsx');
+  });
+
+  it('returns adwTest when adwCommand is /adw_test', () => {
+    expect(getWorkflowScript('/feature', '/adw_test')).toBe('adws/adwTest.tsx');
+  });
+
+  it('returns adwPlanBuild when adwCommand is /adw_plan_build', () => {
+    expect(getWorkflowScript('/bug', '/adw_plan_build')).toBe('adws/adwPlanBuild.tsx');
+  });
+
+  it('returns adwPlanBuildTest when adwCommand is /adw_plan_build_test', () => {
     expect(getWorkflowScript('/feature', '/adw_plan_build_test')).toBe('adws/adwPlanBuildTest.tsx');
+  });
+
+  it('returns adwPlanBuildTestReview when adwCommand is /adw_sdlc', () => {
+    expect(getWorkflowScript('/feature', '/adw_sdlc')).toBe('adws/adwPlanBuildTestReview.tsx');
+  });
+
+  // Unmapped ADW commands fall back to issue-type routing
+  it('falls back to issue-type routing when adwCommand is /adw_patch', () => {
     expect(getWorkflowScript('/bug', '/adw_patch')).toBe('adws/adwPlanBuild.tsx');
   });
 
+  it('falls back to issue-type routing when adwCommand is /adw_document', () => {
+    expect(getWorkflowScript('/chore', '/adw_document')).toBe('adws/adwPlanBuildTest.tsx');
+  });
+
+  it('falls back to issue-type routing when adwCommand is /adw_review', () => {
+    expect(getWorkflowScript('/pr_review', '/adw_review')).toBe('adws/adwPlanBuild.tsx');
+  });
+
+  // ADW command takes priority over issueType
   it('uses adwCommand override regardless of issueType', () => {
     expect(getWorkflowScript('/bug', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
     expect(getWorkflowScript('/chore', '/adw_plan_build_test_review')).toBe('adws/adwPlanBuildTestReview.tsx');
+    expect(getWorkflowScript('/feature', '/adw_plan')).toBe('adws/adwPlan.tsx');
+    expect(getWorkflowScript('/pr_review', '/adw_plan_build_test')).toBe('adws/adwPlanBuildTest.tsx');
   });
+
+  // Parametric test over all mapped entries
+  it.each(Object.entries(adwCommandToOrchestratorMap))(
+    'routes %s to %s via adwCommandToOrchestratorMap',
+    (command, expectedScript) => {
+      expect(getWorkflowScript('/feature', command as AdwSlashCommand)).toBe(expectedScript);
+    }
+  );
 });
