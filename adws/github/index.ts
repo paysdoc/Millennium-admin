@@ -43,6 +43,7 @@ export {
   createWorktree,
   createWorktreeForNewBranch,
   removeWorktree,
+  removeWorktreesForIssue,
   getWorktreeForBranch,
   ensureWorktree,
   getMainRepoPath,
