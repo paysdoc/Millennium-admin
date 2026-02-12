@@ -82,22 +82,30 @@ npm run supabase:stop
     - `layout.tsx` - Root layout component
     - `page.tsx` - Home page (character overview)
     - `globals.css` - Global styles
-    - `pages/` - Pages management
+    - `api/` - API routes (`characters/[id]/route.ts`)
+    - `characters/` - Character detail pages
     - `users/` - Users management
     - `settings/` - Settings page
   - `components/` - Reusable React components
-    - `CategorySection.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
+    - `CategorySection.tsx`, `CharacterDetails.tsx`, `CharacterImage.tsx`, `ConnectionsTable.tsx`, `EditableCharacterDetails.tsx`, `EditableField.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
   - `lib/` - Utility libraries
     - `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
   - `types/` - TypeScript type definitions
     - `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
-  - `agents/` - Agent implementations (build, plan, test, claude)
-  - `core/` - Core utilities (state, config, data types)
+  - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
+  - `core/` - Core utilities (state, config, data types, orchestrator)
   - `github/` - Git/GitHub operations (git, worktree, PR, comments)
   - `triggers/` - Workflow triggers (webhook, cron, issue classifier)
   - `__tests__/` - ADWS unit tests
+  - Workflow orchestrators: `adwPlanBuildTestReview.tsx`, `adwPlanBuild.tsx`, `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPrReview.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
+  - `workflowPhases.ts` - Phase definitions
+- `scripts/` - Utility scripts (Supabase sync, config sync)
+- `supabase/` - Local Supabase configuration
+  - `config.toml` - Supabase CLI config
+  - `migrations/` - Database migrations
+  - `seed.sql` - Seed data
 - `e2e-tests/` - End-to-end test specifications
 - `e2e-screenshots/` - E2E test screenshots
 - `guidelines/` - Coding guidelines
