@@ -21,6 +21,7 @@
  * - MAX_REVIEW_RETRY_ATTEMPTS: Maximum retry attempts for review-patch loop (default: 3)
  */
 
+import { mergeModelUsageMaps } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -83,13 +84,14 @@ async function main(): Promise<void> {
     const testResult = await executeTestPhase(config);
     executePRPhase(config);
     const reviewResult = await executeReviewPhase(config);
-    completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd + reviewResult.costUsd, {
+    const totalModelUsage = mergeModelUsageMaps(planResult.modelUsage, buildResult.modelUsage, testResult.modelUsage, reviewResult.modelUsage);
+    await completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd + reviewResult.costUsd, {
       unitTestsPassed: testResult.unitTestsPassed,
       e2eTestsPassed: testResult.e2eTestsPassed,
       totalTestRetries: testResult.totalRetries,
       reviewPassed: reviewResult.reviewPassed,
       totalReviewRetries: reviewResult.totalRetries,
-    });
+    }, totalModelUsage);
   } catch (error) {
     handleWorkflowError(config, error);
   }

@@ -31,3 +31,9 @@ export const MAX_REVIEW_RETRY_ATTEMPTS = parseInt(process.env.MAX_REVIEW_RETRY_A
 
 /** Directory for storing git worktrees. */
 export const WORKTREES_DIR = path.join(process.cwd(), '.worktrees');
+
+/** Currencies to include in cost reports (comma-separated env var, default: EUR). */
+export const COST_REPORT_CURRENCIES: readonly string[] = (process.env.COST_REPORT_CURRENCIES || 'EUR')
+  .split(',')
+  .map(c => c.trim())
+  .filter(Boolean);

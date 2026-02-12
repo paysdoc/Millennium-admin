@@ -19,6 +19,7 @@
  * - MAX_TEST_RETRY_ATTEMPTS: Maximum retry attempts for tests (default: 5)
  */
 
+import { mergeModelUsageMaps } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -78,11 +79,12 @@ async function main(): Promise<void> {
     const buildResult = await executeBuildPhase(config);
     const testResult = await executeTestPhase(config);
     executePRPhase(config);
-    completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd, {
+    const totalModelUsage = mergeModelUsageMaps(planResult.modelUsage, buildResult.modelUsage, testResult.modelUsage);
+    await completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd, {
       unitTestsPassed: testResult.unitTestsPassed,
       e2eTestsPassed: testResult.e2eTestsPassed,
       totalTestRetries: testResult.totalRetries,
-    });
+    }, totalModelUsage);
   } catch (error) {
     handleWorkflowError(config, error);
   }

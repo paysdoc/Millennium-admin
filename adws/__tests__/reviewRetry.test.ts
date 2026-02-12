@@ -26,14 +26,18 @@ vi.mock('../github', () => ({
   pushBranch: vi.fn(),
 }));
 
-vi.mock('../core', () => ({
-  log: vi.fn(),
-  AgentStateManager: {
-    readState: vi.fn().mockReturnValue({ adwId: 'adw-123' }),
-    appendLog: vi.fn(),
-    initializeState: vi.fn().mockReturnValue('/mock/state'),
-  },
-}));
+vi.mock('../core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    AgentStateManager: {
+      readState: vi.fn().mockReturnValue({ adwId: 'adw-123' }),
+      appendLog: vi.fn(),
+      initializeState: vi.fn().mockReturnValue('/mock/state'),
+    },
+  };
+});
 
 import { runReviewAgent } from '../agents/reviewAgent';
 import { runPatchAgent } from '../agents/patchAgent';

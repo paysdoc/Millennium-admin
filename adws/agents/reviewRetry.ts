@@ -3,7 +3,7 @@
  * Modeled on testRetry.ts. Iterates: review → patch blockers → commit+push → re-review.
  */
 
-import { log, AgentStateManager, type IssueClassSlashCommand } from '../core';
+import { log, AgentStateManager, type IssueClassSlashCommand, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap } from '../core';
 import { runReviewAgent, type ReviewIssue } from './reviewAgent';
 import { runPatchAgent } from './patchAgent';
 import { runCommitAgent } from './gitAgent';
@@ -14,6 +14,7 @@ export interface ReviewRetryResult {
   costUsd: number;
   totalRetries: number;
   blockerIssues: ReviewIssue[];
+  modelUsage: ModelUsageMap;
 }
 
 export interface ReviewRetryOptions {
@@ -43,6 +44,7 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
   let retryCount = 0;
   let costUsd = 0;
   let lastBlockerIssues: ReviewIssue[] = [];
+  let modelUsage = emptyModelUsageMap();
 
   while (retryCount < maxRetries) {
     log(`Running review (attempt ${retryCount + 1}/${maxRetries})...`, 'info');
@@ -52,11 +54,12 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
       adwId, specFile, logsDir, initState(statePath, 'review-agent'), cwd,
     );
     costUsd += reviewResult.totalCostUsd || 0;
+    if (reviewResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, reviewResult.modelUsage);
 
     if (reviewResult.passed) {
       log('Review passed — no blocker issues found!', 'success');
       AgentStateManager.appendLog(statePath, 'Review passed');
-      return { passed: true, costUsd, totalRetries: retryCount, blockerIssues: [] };
+      return { passed: true, costUsd, totalRetries: retryCount, blockerIssues: [], modelUsage };
     }
 
     lastBlockerIssues = reviewResult.blockerIssues;
@@ -72,6 +75,7 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
         adwId, blockerIssue, logsDir, specFile, undefined, initState(statePath, 'patch-agent'), cwd,
       );
       costUsd += patchResult.totalCostUsd || 0;
+      if (patchResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, patchResult.modelUsage);
 
       const msg = patchResult.success ? 'Patch applied for' : 'Patch failed for';
       log(`${msg} blocker #${blockerIssue.review_issue_number}`, patchResult.success ? 'success' : 'error');
@@ -90,5 +94,5 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
 
   log(`Review still has blockers after ${maxRetries} attempts`, 'error');
   AgentStateManager.appendLog(statePath, `Review still has blockers after ${maxRetries} attempts`);
-  return { passed: false, costUsd, totalRetries: retryCount, blockerIssues: lastBlockerIssues };
+  return { passed: false, costUsd, totalRetries: retryCount, blockerIssues: lastBlockerIssues, modelUsage };
 }
