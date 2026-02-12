@@ -1,13 +1,11 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import Image from 'next/image'
 import { Character } from '@/types/character'
 import EditableField from './EditableField'
 
 interface EditableCharacterDetailsProps {
   character: Character
-  imageUrl?: string | null
   onSave?: (updated: Character) => void
 }
 
@@ -18,7 +16,6 @@ type EditableFields = Pick<
 
 export default function EditableCharacterDetails({
   character,
-  imageUrl,
   onSave,
 }: EditableCharacterDetailsProps) {
   const originalData = useRef<EditableFields>({
@@ -77,20 +74,6 @@ export default function EditableCharacterDetails({
   return (
     <div className="infobox">
       <h2 className="infobox-title">{character.name}</h2>
-
-      {imageUrl && (
-        <div className="infobox-image">
-          <Image
-            src={imageUrl}
-            alt={character.name}
-            className="character-image"
-            width={280}
-            height={280}
-            style={{ objectFit: 'contain' }}
-            unoptimized
-          />
-        </div>
-      )}
 
       <div className="infobox-content">
         <div className="infobox-row">
