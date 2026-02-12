@@ -103,7 +103,7 @@ async function main(): Promise<void> {
 
   try {
     const planResult = await executePlanPhase(config);
-    completeWorkflow(config, planResult.costUsd);
+    await completeWorkflow(config, planResult.costUsd, undefined, planResult.modelUsage);
   } catch (error) {
     handleWorkflowError(config, error);
   }

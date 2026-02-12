@@ -17,6 +17,7 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
+import { mergeModelUsageMaps } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -73,7 +74,8 @@ async function main(): Promise<void> {
     const planResult = await executePlanPhase(config);
     const buildResult = await executeBuildPhase(config);
     executePRPhase(config);
-    completeWorkflow(config, planResult.costUsd + buildResult.costUsd);
+    const totalModelUsage = mergeModelUsageMaps(planResult.modelUsage, buildResult.modelUsage);
+    await completeWorkflow(config, planResult.costUsd + buildResult.costUsd, undefined, totalModelUsage);
   } catch (error) {
     handleWorkflowError(config, error);
   }

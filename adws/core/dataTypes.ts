@@ -221,6 +221,14 @@ export interface ClaudeCodeResultMessage {
   result: string;
   sessionId: string;
   totalCostUsd: number;
+  /** Per-model token usage breakdown from the Claude CLI (available in recent versions). */
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    costUSD: number;
+  }>;
 }
 
 /**

@@ -25,29 +25,33 @@ import { extractBranchNameFromComment } from '../github/workflowCommentsBase';
 
 vi.mock('fs');
 
-vi.mock('../core', () => ({
-  log: vi.fn(),
-  ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
-  generateAdwId: vi.fn().mockReturnValue('adw-test-issue-abc123'),
-  commitPrefixMap: {
-    '/feature': 'feat:',
-    '/bug': 'fix:',
-    '/chore': 'chore:',
-    '/pr_review': 'review:',
-  },
-  AgentStateManager: {
-    writeState: vi.fn(),
-    appendLog: vi.fn(),
-    initializeState: vi.fn().mockReturnValue('/mock/state/path'),
-    createExecutionState: vi.fn().mockReturnValue({ status: 'running', startedAt: '2024-01-01' }),
-    completeExecution: vi.fn().mockReturnValue({ status: 'completed', startedAt: '2024-01-01' }),
-  },
-  shouldExecuteStage: vi.fn().mockReturnValue(true),
-  hasUncommittedChanges: vi.fn().mockReturnValue(false),
-  getNextStage: vi.fn().mockReturnValue('classified'),
-  MAX_TEST_RETRY_ATTEMPTS: 5,
-  MAX_REVIEW_RETRY_ATTEMPTS: 3,
-}));
+vi.mock('../core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
+    generateAdwId: vi.fn().mockReturnValue('adw-test-issue-abc123'),
+    commitPrefixMap: {
+      '/feature': 'feat:',
+      '/bug': 'fix:',
+      '/chore': 'chore:',
+      '/pr_review': 'review:',
+    },
+    AgentStateManager: {
+      writeState: vi.fn(),
+      appendLog: vi.fn(),
+      initializeState: vi.fn().mockReturnValue('/mock/state/path'),
+      createExecutionState: vi.fn().mockReturnValue({ status: 'running', startedAt: '2024-01-01' }),
+      completeExecution: vi.fn().mockReturnValue({ status: 'completed', startedAt: '2024-01-01' }),
+    },
+    shouldExecuteStage: vi.fn().mockReturnValue(true),
+    hasUncommittedChanges: vi.fn().mockReturnValue(false),
+    getNextStage: vi.fn().mockReturnValue('classified'),
+    MAX_TEST_RETRY_ATTEMPTS: 5,
+    MAX_REVIEW_RETRY_ATTEMPTS: 3,
+  };
+});
 
 vi.mock('../github', () => ({
   fetchGitHubIssue: vi.fn().mockResolvedValue({
@@ -473,8 +477,8 @@ describe('executeTestPhase', () => {
   });
 
   it('passes worktreePath as cwd to runUnitTestsWithRetry', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
 
     await executeTestPhase(config);
@@ -485,8 +489,8 @@ describe('executeTestPhase', () => {
   });
 
   it('passes worktreePath as cwd to runE2ETestsWithRetry', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
 
     await executeTestPhase(config);
@@ -497,8 +501,8 @@ describe('executeTestPhase', () => {
   });
 
   it('returns test results and accumulated cost', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 1, costUsd: 0.5 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 2, costUsd: 0.3 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 1, costUsd: 0.5, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 2, costUsd: 0.3, modelUsage: {} });
     const config = createWorkflowConfig();
 
     const result = await executeTestPhase(config);
@@ -543,10 +547,10 @@ describe('completeWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('writes completion state with metadata and posts completed comment', () => {
+  it('writes completion state with metadata and posts completed comment', async () => {
     const config = createWorkflowConfig();
 
-    completeWorkflow(config, 1.5);
+    await completeWorkflow(config, 1.5);
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),
@@ -559,10 +563,10 @@ describe('completeWorkflow', () => {
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'completed', config.ctx);
   });
 
-  it('includes additional metadata when provided', () => {
+  it('includes additional metadata when provided', async () => {
     const config = createWorkflowConfig();
 
-    completeWorkflow(config, 2.0, { unitTestsPassed: true });
+    await completeWorkflow(config, 2.0, { unitTestsPassed: true });
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),
@@ -872,8 +876,8 @@ describe('executePRReviewTestPhase', () => {
   });
 
   it('calls both unit and E2E test retry functions', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -889,8 +893,8 @@ describe('executePRReviewTestPhase', () => {
   });
 
   it('posts test_passed comment on success', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -902,9 +906,9 @@ describe('executePRReviewTestPhase', () => {
     let capturedCallback: ((attempt: number, maxAttempts: number) => void) | undefined;
     vi.mocked(runUnitTestsWithRetry).mockImplementation(async (opts) => {
       capturedCallback = opts.onTestFailed;
-      return { passed: true, failedTests: [], totalRetries: 0, costUsd: 0 };
+      return { passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} };
     });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -918,7 +922,7 @@ describe('executePRReviewTestPhase', () => {
 
   it('exits with code 1 on unit test max retry failure', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['test1.ts'], totalRetries: 5, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['test1.ts'], totalRetries: 5, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -931,8 +935,8 @@ describe('executePRReviewTestPhase', () => {
 
   it('exits with code 1 on E2E test max retry failure', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['e2e-test1.ts'], totalRetries: 5, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['e2e-test1.ts'], totalRetries: 5, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -1067,6 +1071,7 @@ describe('executeReviewPhase', () => {
       costUsd: 1.5,
       totalRetries: 0,
       blockerIssues: [],
+      modelUsage: {},
     });
     const config = createWorkflowConfig();
 
@@ -1091,6 +1096,7 @@ describe('executeReviewPhase', () => {
       costUsd: 1.0,
       totalRetries: 0,
       blockerIssues: [],
+      modelUsage: {},
     });
     const config = createWorkflowConfig();
 
@@ -1112,6 +1118,7 @@ describe('executeReviewPhase', () => {
         issue_resolution: 'Fix button',
         issue_severity: 'blocker',
       }],
+      modelUsage: {},
     });
     const config = createWorkflowConfig();
 
@@ -1127,6 +1134,7 @@ describe('executeReviewPhase', () => {
       costUsd: 2.5,
       totalRetries: 1,
       blockerIssues: [],
+      modelUsage: {},
     });
     const config = createWorkflowConfig();
 

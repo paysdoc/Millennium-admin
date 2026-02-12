@@ -5,13 +5,15 @@
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
-import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log, AgentStateManager } from '../core';
+import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log, AgentStateManager, type ModelUsageMap } from '../core';
 
 export interface AgentResult {
   success: boolean;
   output: string;
   sessionId?: string;
   totalCostUsd?: number;
+  /** Per-model token usage breakdown from the Claude CLI. */
+  modelUsage?: ModelUsageMap;
   /** The state path if state tracking was enabled */
   statePath?: string;
 }
@@ -71,7 +73,7 @@ function extractToolUseFromMessage(message: any): { name: string; input: string 
  */
 function parseJsonlOutput(
   text: string,
-  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number },
+  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number; modelUsage: ModelUsageMap | undefined },
   onProgress?: ProgressCallback,
   statePath?: string
 ): void {
@@ -88,6 +90,9 @@ function parseJsonlOutput(
 
       if (parsed.type === 'result') {
         state.lastResult = parsed as ClaudeCodeResultMessage;
+        if (parsed.modelUsage && typeof parsed.modelUsage === 'object') {
+          state.modelUsage = parsed.modelUsage as ModelUsageMap;
+        }
       }
 
       if (parsed.type === 'assistant') {
@@ -185,6 +190,7 @@ export async function runClaudeAgent(
       fullOutput: '',
       turnCount: 0,
       toolCount: 0,
+      modelUsage: undefined as ModelUsageMap | undefined,
     };
 
     const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
@@ -231,17 +237,23 @@ export async function runClaudeAgent(
         if (state.lastResult.totalCostUsd) {
           log(`  Cost: $${state.lastResult.totalCostUsd.toFixed(4)}`, 'info');
         }
+        if (state.modelUsage) {
+          const modelNames = Object.keys(state.modelUsage);
+          log(`  Models used: ${modelNames.join(', ')}`, 'info');
+        }
         resolve({
           success: !state.lastResult.isError,
           output: state.lastResult.result || state.fullOutput,
           sessionId: state.lastResult.sessionId,
           totalCostUsd: state.lastResult.totalCostUsd,
+          modelUsage: state.modelUsage,
           statePath
         });
       } else if (code === 0) {
         resolve({
           success: true,
           output: state.fullOutput,
+          modelUsage: state.modelUsage,
           statePath
         });
       } else {
@@ -249,6 +261,7 @@ export async function runClaudeAgent(
         resolve({
           success: false,
           output: state.fullOutput || 'Agent failed without output',
+          modelUsage: state.modelUsage,
           statePath
         });
       }
@@ -331,6 +344,7 @@ export async function runClaudeAgentWithCommand(
       fullOutput: '',
       turnCount: 0,
       toolCount: 0,
+      modelUsage: undefined as ModelUsageMap | undefined,
     };
 
     const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
@@ -377,17 +391,23 @@ export async function runClaudeAgentWithCommand(
         if (state.lastResult.totalCostUsd) {
           log(`  Cost: $${state.lastResult.totalCostUsd.toFixed(4)}`, 'info');
         }
+        if (state.modelUsage) {
+          const modelNames = Object.keys(state.modelUsage);
+          log(`  Models used: ${modelNames.join(', ')}`, 'info');
+        }
         resolve({
           success: !state.lastResult.isError,
           output: state.lastResult.result || state.fullOutput,
           sessionId: state.lastResult.sessionId,
           totalCostUsd: state.lastResult.totalCostUsd,
+          modelUsage: state.modelUsage,
           statePath
         });
       } else if (code === 0) {
         resolve({
           success: true,
           output: state.fullOutput,
+          modelUsage: state.modelUsage,
           statePath
         });
       } else {
@@ -395,6 +415,7 @@ export async function runClaudeAgentWithCommand(
         resolve({
           success: false,
           output: state.fullOutput || 'Agent failed without output',
+          modelUsage: state.modelUsage,
           statePath
         });
       }

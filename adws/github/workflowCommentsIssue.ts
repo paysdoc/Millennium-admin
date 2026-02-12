@@ -2,7 +2,7 @@
  * Issue workflow comment formatting and posting functions.
  */
 
-import { WorkflowStage, IssueClassSlashCommand, log } from '../core';
+import { WorkflowStage, IssueClassSlashCommand, log, type CostBreakdown, formatCostBreakdownMarkdown } from '../core';
 import { commentOnIssue } from './githubApi';
 import { ADW_SIGNATURE, truncateText } from './workflowCommentsBase';
 
@@ -24,6 +24,7 @@ export interface WorkflowContext {
     lastToolName?: string;
     lastText?: string;
   };
+  costBreakdown?: CostBreakdown;
 }
 
 const issueTypeLabels: Record<IssueClassSlashCommand, string> = {
@@ -94,12 +95,19 @@ function formatPrCreatedComment(ctx: WorkflowContext): string {
   return `## :link: Pull Request Created\n\nA pull request has been created for this issue.\n\n**PR:** ${ctx.prUrl}\n**ADW ID:** \`${ctx.adwId}\`${ADW_SIGNATURE}`;
 }
 
+function formatCostSection(ctx: WorkflowContext): string {
+  if (!ctx.costBreakdown) return '';
+  return `\n\n<details>\n<summary>Cost Breakdown</summary>\n\n${formatCostBreakdownMarkdown(ctx.costBreakdown)}\n\n</details>`;
+}
+
 function formatCompletedComment(ctx: WorkflowContext): string {
-  return `## :tada: ADW Workflow Completed\n\nAutomated development workflow completed successfully!\n\n**Branch:** \`${ctx.branchName}\`\n**PR:** ${ctx.prUrl}\n**ADW ID:** \`${ctx.adwId}\`${ADW_SIGNATURE}`;
+  const costSection = formatCostSection(ctx);
+  return `## :tada: ADW Workflow Completed\n\nAutomated development workflow completed successfully!\n\n**Branch:** \`${ctx.branchName}\`\n**PR:** ${ctx.prUrl}\n**ADW ID:** \`${ctx.adwId}\`${costSection}${ADW_SIGNATURE}`;
 }
 
 function formatErrorComment(ctx: WorkflowContext): string {
-  return `## :x: ADW Workflow Error\n\nAn error occurred during the automated development workflow.\n\n**Error:** ${ctx.errorMessage || 'Unknown error'}\n**ADW ID:** \`${ctx.adwId}\`\n\nPlease check the logs for more details.${ADW_SIGNATURE}`;
+  const costSection = formatCostSection(ctx);
+  return `## :x: ADW Workflow Error\n\nAn error occurred during the automated development workflow.\n\n**Error:** ${ctx.errorMessage || 'Unknown error'}\n**ADW ID:** \`${ctx.adwId}\`\n\nPlease check the logs for more details.${costSection}${ADW_SIGNATURE}`;
 }
 
 /** Formats the resuming workflow comment. */

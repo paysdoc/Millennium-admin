@@ -28,6 +28,12 @@ import {
   getNextStage,
   MAX_TEST_RETRY_ATTEMPTS,
   MAX_REVIEW_RETRY_ATTEMPTS,
+  COST_REPORT_CURRENCIES,
+  type ModelUsageMap,
+  mergeModelUsageMaps,
+  emptyModelUsageMap,
+  buildCostBreakdown,
+  formatCostBreakdownMarkdown,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -220,7 +226,7 @@ export async function initializeWorkflow(
 /**
  * Executes the Plan phase: classify issue, create branch, run plan agent, commit plan.
  */
-export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUsd: number }> {
+export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUsd: number; modelUsage: ModelUsageMap }> {
   const { recoveryState, orchestratorStatePath, orchestratorName, adwId, issueNumber, issue, issueType, ctx, worktreePath, logsDir } = config;
 
   // Classify step
@@ -251,6 +257,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   const planPath = getPlanFilePath(issueNumber);
   ctx.planPath = planPath;
   let costUsd = 0;
+  let modelUsage = emptyModelUsageMap();
 
   if (shouldExecuteStage('plan_created', recoveryState) && !planFileExists(issueNumber, worktreePath)) {
     postWorkflowComment(issueNumber, 'plan_building', ctx);
@@ -295,6 +302,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
     ctx.planOutput = planResult.output;
     postWorkflowComment(issueNumber, 'plan_created', ctx);
     costUsd = planResult.totalCostUsd || 0;
+    if (planResult.modelUsage) modelUsage = planResult.modelUsage;
   } else {
     log('Skipping Plan Agent (plan already exists or completed)', 'info');
   }
@@ -307,13 +315,13 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
     log('Skipping plan commit (already completed)', 'info');
   }
 
-  return { costUsd };
+  return { costUsd, modelUsage };
 }
 
 /**
  * Executes the Build phase: read plan, run build agent, commit implementation.
  */
-export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costUsd: number }> {
+export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costUsd: number; modelUsage: ModelUsageMap }> {
   const { recoveryState, orchestratorStatePath, orchestratorName, adwId, issueNumber, issue, issueType, ctx, worktreePath, logsDir } = config;
 
   // Read plan content
@@ -328,6 +336,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
 
   // Build agent step
   let costUsd = 0;
+  let modelUsage = emptyModelUsageMap();
   const currentBranch = ctx.branchName || '';
 
   if (shouldExecuteStage('implemented', recoveryState)) {
@@ -394,6 +403,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
     ctx.buildOutput = buildResult.output;
     postWorkflowComment(issueNumber, 'implemented', ctx);
     costUsd = buildResult.totalCostUsd || 0;
+    if (buildResult.modelUsage) modelUsage = buildResult.modelUsage;
   } else {
     log('Skipping Build Agent (already completed)', 'info');
   }
@@ -406,7 +416,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
     log('Skipping implementation commit (already completed)', 'info');
   }
 
-  return { costUsd };
+  return { costUsd, modelUsage };
 }
 
 /**
@@ -414,12 +424,14 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
  */
 export async function executeTestPhase(config: WorkflowConfig): Promise<{
   costUsd: number;
+  modelUsage: ModelUsageMap;
   unitTestsPassed: boolean;
   e2eTestsPassed: boolean;
   totalRetries: number;
 }> {
   const { orchestratorStatePath, issueNumber, ctx, logsDir, worktreePath } = config;
   let costUsd = 0;
+  let modelUsage = emptyModelUsageMap();
 
   // Unit tests
   log('Phase: Unit Tests', 'info');
@@ -432,6 +444,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
     cwd: worktreePath,
   });
   costUsd += unitTestsResult.costUsd;
+  modelUsage = mergeModelUsageMaps(modelUsage, unitTestsResult.modelUsage);
 
   if (!unitTestsResult.passed) {
     const errorMsg = 'Unit tests failed after maximum retry attempts. No PR was created.';
@@ -462,6 +475,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
     cwd: worktreePath,
   });
   costUsd += e2eTestsResult.costUsd;
+  modelUsage = mergeModelUsageMaps(modelUsage, e2eTestsResult.modelUsage);
 
   if (!e2eTestsResult.passed) {
     const errorMsg = 'E2E tests failed after maximum retry attempts. No PR was created.';
@@ -486,6 +500,7 @@ export async function executeTestPhase(config: WorkflowConfig): Promise<{
 
   return {
     costUsd,
+    modelUsage,
     unitTestsPassed: true,
     e2eTestsPassed: true,
     totalRetries: unitTestsResult.totalRetries + e2eTestsResult.totalRetries,
@@ -515,12 +530,19 @@ export function executePRPhase(config: WorkflowConfig): void {
 /**
  * Completes the workflow: writes final state, posts completion comment, prints banner.
  */
-export function completeWorkflow(
+export async function completeWorkflow(
   config: WorkflowConfig,
   totalCostUsd: number,
-  additionalMetadata?: Record<string, unknown>
-): void {
+  additionalMetadata?: Record<string, unknown>,
+  modelUsage?: ModelUsageMap,
+): Promise<void> {
   const { orchestratorStatePath, orchestratorName, issueNumber, ctx } = config;
+
+  // Build cost breakdown if model usage data is available
+  if (modelUsage && Object.keys(modelUsage).length > 0) {
+    const costBreakdown = await buildCostBreakdown(modelUsage, [...COST_REPORT_CURRENCIES]);
+    ctx.costBreakdown = costBreakdown;
+  }
 
   AgentStateManager.writeState(orchestratorStatePath, {
     execution: AgentStateManager.completeExecution(
@@ -546,6 +568,7 @@ export function completeWorkflow(
  */
 export async function executeReviewPhase(config: WorkflowConfig): Promise<{
   costUsd: number;
+  modelUsage: ModelUsageMap;
   reviewPassed: boolean;
   totalRetries: number;
 }> {
@@ -597,6 +620,7 @@ export async function executeReviewPhase(config: WorkflowConfig): Promise<{
 
   return {
     costUsd: reviewResult.costUsd,
+    modelUsage: reviewResult.modelUsage,
     reviewPassed: reviewResult.passed,
     totalRetries: reviewResult.totalRetries,
   };
@@ -896,8 +920,14 @@ export async function executePRReviewTestPhase(config: PRReviewWorkflowConfig): 
 /**
  * Completes the PR review workflow: commits, pushes, and posts completion comments.
  */
-export async function completePRReviewWorkflow(config: PRReviewWorkflowConfig): Promise<void> {
+export async function completePRReviewWorkflow(config: PRReviewWorkflowConfig, modelUsage?: ModelUsageMap): Promise<void> {
   const { prNumber, prDetails, unaddressedComments, worktreePath, logsDir, orchestratorStatePath, ctx } = config;
+
+  // Build cost breakdown if model usage data is available
+  if (modelUsage && Object.keys(modelUsage).length > 0) {
+    const costBreakdown = await buildCostBreakdown(modelUsage, [...COST_REPORT_CURRENCIES]);
+    ctx.costBreakdown = costBreakdown;
+  }
 
   postPRWorkflowComment(prNumber, 'pr_review_committing', ctx);
   const issueType = inferIssueTypeFromBranch(prDetails.headBranch);

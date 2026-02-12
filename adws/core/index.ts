@@ -3,7 +3,7 @@
  */
 
 // Configuration
-export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS, MAX_REVIEW_RETRY_ATTEMPTS, WORKTREES_DIR } from './config';
+export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS, MAX_REVIEW_RETRY_ATTEMPTS, WORKTREES_DIR, COST_REPORT_CURRENCIES } from './config';
 
 // Data types
 export type {
@@ -62,4 +62,22 @@ export {
 
 // Orchestrator shared utilities
 export { shouldExecuteStage, hasUncommittedChanges, getNextStage } from './orchestratorLib';
+
+// Cost types
+export type { ModelUsage, ModelUsageMap, CurrencyAmount, CostBreakdown } from './costTypes';
+export { emptyModelUsage, emptyModelUsageMap } from './costTypes';
+
+// Cost pricing
+export type { ModelPricing } from './costPricing';
+export { MODEL_PRICING, getModelPricing, computeModelCost } from './costPricing';
+
+// Cost report
+export {
+  CURRENCY_SYMBOLS,
+  mergeModelUsageMaps,
+  computeTotalCostUsd,
+  fetchExchangeRates,
+  buildCostBreakdown,
+  formatCostBreakdownMarkdown,
+} from './costReport';
 
