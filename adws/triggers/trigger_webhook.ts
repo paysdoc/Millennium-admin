@@ -15,7 +15,7 @@ import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
 import { isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
-import { removeWorktree } from '../github/worktreeOperations';
+import { removeWorktree, removeWorktreesForIssue } from '../github/worktreeOperations';
 import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
 
 const port = parseInt(process.env.PORT || '8001', 10);
@@ -254,39 +254,48 @@ const server = http.createServer((req, res) => {
     }
 
     const action = (body.action as string) || '';
-    if (action !== 'opened') {
-      log(`Ignored issues action: ${action}`);
-      jsonResponse(res, 200, { status: 'ignored' });
-      return;
-    }
-
     const issue = (body.issue as Record<string, unknown> | undefined);
     const issueNumber = issue?.number as number | undefined;
+
     if (issueNumber == null) {
       log('No issue number found in payload');
       jsonResponse(res, 200, { status: 'ignored' });
       return;
     }
 
-    log(`New issue #${issueNumber} detected, classifying and triggering ADW workflow`);
+    if (action === 'closed') {
+      log(`Issue #${issueNumber} closed, removing associated worktrees`);
+      const removed = removeWorktreesForIssue(issueNumber);
+      log(`Removed ${removed} worktree(s) for issue #${issueNumber}`, 'success');
+      jsonResponse(res, 200, { status: 'worktrees_cleaned', issue: issueNumber, removed });
+      return;
+    }
 
-    // Classify the issue and spawn the appropriate workflow asynchronously
-    // Respond quickly to avoid GitHub timeout
-    classifyIssueForTrigger(issueNumber)
-      .then((classification) => {
-        const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
-        log(
-          `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
-          'success'
-        );
-        spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
-      })
-      .catch((error) => {
-        log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');
-        spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
-      });
+    if (action === 'opened') {
+      log(`New issue #${issueNumber} detected, classifying and triggering ADW workflow`);
 
-    jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
+      // Classify the issue and spawn the appropriate workflow asynchronously
+      // Respond quickly to avoid GitHub timeout
+      classifyIssueForTrigger(issueNumber)
+        .then((classification) => {
+          const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
+          log(
+            `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
+            'success'
+          );
+          spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
+        })
+        .catch((error) => {
+          log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');
+          spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
+        });
+
+      jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
+      return;
+    }
+
+    log(`Ignored issues action: ${action}`);
+    jsonResponse(res, 200, { status: 'ignored' });
   });
 });
 

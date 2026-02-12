@@ -33,6 +33,7 @@ import {
   createWorktree,
   createWorktreeForNewBranch,
   removeWorktree,
+  removeWorktreesForIssue,
   getWorktreeForBranch,
   ensureWorktree,
   getMainRepoPath,
@@ -1131,5 +1132,156 @@ branch refs/heads/main
     copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
 
     expect(fs.copyFileSync).toHaveBeenCalled();
+  });
+});
+
+describe('removeWorktreesForIssue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('removes all worktrees matching the issue number', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+worktree /mock/project/.worktrees/bugfix-issue-42-fix-bug
+HEAD ghi789
+branch refs/heads/bugfix/issue-42-fix-bug
+
+worktree /mock/project/.worktrees/feature-issue-99-other
+HEAD jkl012
+branch refs/heads/feature/issue-99-other
+
+`;
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      return '';
+    });
+
+    const result = removeWorktreesForIssue(42);
+
+    expect(result).toBe(2);
+    const removeCalls = vi.mocked(execSync).mock.calls.filter((call) =>
+      String(call[0]).includes('git worktree remove')
+    );
+    expect(removeCalls).toHaveLength(2);
+    expect(String(removeCalls[0][0])).toContain('feature-issue-42-add-login');
+    expect(String(removeCalls[1][0])).toContain('bugfix-issue-42-fix-bug');
+  });
+
+  it('returns 0 when no worktrees match', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-99-other
+HEAD jkl012
+branch refs/heads/feature/issue-99-other
+
+`;
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      return '';
+    });
+
+    const result = removeWorktreesForIssue(42);
+
+    expect(result).toBe(0);
+    const removeCalls = vi.mocked(execSync).mock.calls.filter((call) =>
+      String(call[0]).includes('git worktree remove')
+    );
+    expect(removeCalls).toHaveLength(0);
+  });
+
+  it('returns 0 when no worktrees exist', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = removeWorktreesForIssue(42);
+
+    expect(result).toBe(0);
+  });
+
+  it('handles removal failures gracefully with fs.rmSync fallback', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+`;
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      if (cmdStr.includes('git worktree remove')) {
+        throw new Error('worktree remove failed');
+      }
+      return '';
+    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.rmSync).mockReturnValue(undefined);
+
+    const result = removeWorktreesForIssue(42);
+
+    expect(result).toBe(1);
+    expect(fs.rmSync).toHaveBeenCalledWith(
+      '/mock/project/.worktrees/feature-issue-42-add-login',
+      { recursive: true, force: true }
+    );
+  });
+
+  it('does not match partial issue numbers', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-1-small-fix
+HEAD def456
+branch refs/heads/feature/issue-1-small-fix
+
+worktree /mock/project/.worktrees/feature-issue-10-medium-fix
+HEAD ghi789
+branch refs/heads/feature/issue-10-medium-fix
+
+worktree /mock/project/.worktrees/feature-issue-100-large-fix
+HEAD jkl012
+branch refs/heads/feature/issue-100-large-fix
+
+`;
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      return '';
+    });
+
+    const result = removeWorktreesForIssue(1);
+
+    expect(result).toBe(1);
+    const removeCalls = vi.mocked(execSync).mock.calls.filter((call) =>
+      String(call[0]).includes('git worktree remove')
+    );
+    expect(removeCalls).toHaveLength(1);
+    expect(String(removeCalls[0][0])).toContain('feature-issue-1-small-fix');
   });
 });
