@@ -176,6 +176,7 @@ export async function initializeWorkflow(
     adwId: resolvedAdwId,
     issueNumber,
     agentName: orchestratorName,
+    pid: process.pid,
     execution: AgentStateManager.createExecutionState('running'),
   };
   AgentStateManager.writeState(orchestratorStatePath, initialState);
@@ -709,6 +710,7 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string | nul
     issueNumber,
     branchName: prDetails.headBranch,
     agentName: 'pr-review-orchestrator',
+    pid: process.pid,
     execution: AgentStateManager.createExecutionState('running'),
     metadata: { prNumber, reviewComments: unaddressedComments.length },
   };

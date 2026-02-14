@@ -10,6 +10,7 @@ vi.mock('../core/utils', () => ({
 
 import { execSync } from 'child_process';
 import { isAdwComment, isActionableComment, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
+import { AgentStateManager } from '../core/agentState';
 
 describe('isAdwComment', () => {
   it('returns true for ADW workflow started comment', () => {
@@ -195,7 +196,8 @@ describe('isAdwRunningForIssue', () => {
     expect(await isAdwRunningForIssue(42)).toBe(false);
   });
 
-  it('returns true when latest ADW stage is implementing', async () => {
+  it('returns true when latest ADW stage is implementing and process is alive', async () => {
+    vi.spyOn(AgentStateManager, 'isAgentProcessRunning').mockReturnValue(true);
     vi.mocked(execSync).mockReturnValue(
       makeIssueJson([
         {
@@ -211,7 +213,8 @@ describe('isAdwRunningForIssue', () => {
     expect(await isAdwRunningForIssue(42)).toBe(true);
   });
 
-  it('returns true when latest ADW stage is starting', async () => {
+  it('returns true when latest ADW stage is starting and process is alive', async () => {
+    vi.spyOn(AgentStateManager, 'isAgentProcessRunning').mockReturnValue(true);
     vi.mocked(execSync).mockReturnValue(
       makeIssueJson([
         {
@@ -224,6 +227,7 @@ describe('isAdwRunningForIssue', () => {
   });
 
   it('ignores non-ADW comments when determining workflow state', async () => {
+    vi.spyOn(AgentStateManager, 'isAgentProcessRunning').mockReturnValue(true);
     vi.mocked(execSync).mockReturnValue(
       makeIssueJson([
         {
@@ -233,6 +237,35 @@ describe('isAdwRunningForIssue', () => {
         {
           body: 'Human follow-up comment',
           createdAt: '2025-01-01T03:00:00Z',
+        },
+      ])
+    );
+    expect(await isAdwRunningForIssue(42)).toBe(true);
+  });
+
+  it('returns false when latest stage is non-terminal but agent process is dead', async () => {
+    vi.spyOn(AgentStateManager, 'isAgentProcessRunning').mockReturnValue(false);
+    vi.mocked(execSync).mockReturnValue(
+      makeIssueJson([
+        {
+          body: '## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123-abc`',
+          createdAt: '2025-01-01T01:00:00Z',
+        },
+        {
+          body: '## :hammer_and_wrench: Implementing Solution\n\n**ADW ID:** `adw-123-abc`',
+          createdAt: '2025-01-01T02:00:00Z',
+        },
+      ])
+    );
+    expect(await isAdwRunningForIssue(42)).toBe(false);
+  });
+
+  it('returns true when latest stage is non-terminal and no ADW ID can be extracted', async () => {
+    vi.mocked(execSync).mockReturnValue(
+      makeIssueJson([
+        {
+          body: '## :rocket: ADW Workflow Started\n\nADW ID: unknown-format',
+          createdAt: '2025-01-01T01:00:00Z',
         },
       ])
     );

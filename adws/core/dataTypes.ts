@@ -454,6 +454,8 @@ export interface AgentState {
   planFile?: string;
   /** Issue classification (slash command) */
   issueClass?: IssueClassSlashCommand;
+  /** OS process ID of the orchestrator process (for liveness checks) */
+  pid?: number;
   /** Agent identifier */
   agentName: AgentIdentifier;
   /** Parent agent identifier (for nested agents) */

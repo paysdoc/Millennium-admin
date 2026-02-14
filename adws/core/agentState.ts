@@ -263,6 +263,72 @@ export class AgentStateManager {
     const stateFile = path.join(statePath, STATE_FILE);
     return fs.existsSync(stateFile);
   }
+
+  /**
+   * Checks if a process with the given PID is alive.
+   * Uses `process.kill(pid, 0)` which checks existence without sending a signal.
+   *
+   * @param pid - The process ID to check
+   * @returns True if the process is alive
+   */
+  static isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Finds the orchestrator state path for a given ADW ID.
+   * Scans `agents/{adwId}/` for a subdirectory whose state.json
+   * contains an agent name ending in `-orchestrator`.
+   *
+   * @param adwId - The ADW session identifier
+   * @returns The orchestrator state directory path, or null if not found
+   */
+  static findOrchestratorStatePath(adwId: string): string | null {
+    const adwDir = path.join(AGENTS_STATE_DIR, adwId);
+
+    if (!fs.existsSync(adwDir)) return null;
+
+    try {
+      const entries = fs.readdirSync(adwDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        const statePath = path.join(adwDir, entry.name);
+        const state = this.readState(statePath);
+
+        if (state?.agentName?.endsWith('-orchestrator')) {
+          return statePath;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Checks if the agent process for a given ADW ID is still running.
+   * Locates the orchestrator state, reads the PID, and checks OS liveness.
+   *
+   * @param adwId - The ADW session identifier
+   * @returns True if the agent process is alive, false otherwise
+   */
+  static isAgentProcessRunning(adwId: string): boolean {
+    const statePath = this.findOrchestratorStatePath(adwId);
+    if (!statePath) return false;
+
+    const state = this.readState(statePath);
+    if (!state?.pid) return false;
+
+    return this.isProcessAlive(state.pid);
+  }
 }
 
 // Export utility functions for convenience
@@ -272,3 +338,6 @@ export const readAgentState = AgentStateManager.readState;
 export const appendAgentLog = AgentStateManager.appendLog;
 export const writeAgentRawOutput = AgentStateManager.writeRawOutput;
 export const readParentAgentState = AgentStateManager.readParentState;
+export const isProcessAlive = AgentStateManager.isProcessAlive;
+export const findOrchestratorStatePath = AgentStateManager.findOrchestratorStatePath.bind(AgentStateManager);
+export const isAgentProcessRunning = AgentStateManager.isAgentProcessRunning.bind(AgentStateManager);
