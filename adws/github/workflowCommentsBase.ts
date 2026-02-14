@@ -2,7 +2,7 @@
  * Base utilities and parsing functions for workflow comments.
  */
 
-import { WorkflowStage, RecoveryState, GitHubComment } from '../core';
+import { WorkflowStage, RecoveryState, GitHubComment, AgentStateManager } from '../core';
 import { fetchGitHubIssue } from './githubApi';
 
 /** Stage order for determining recovery resume point. */
@@ -109,8 +109,8 @@ export async function isAdwRunningForIssue(issueNumber: number): Promise<boolean
   const issue = await fetchGitHubIssue(issueNumber);
 
   const stageComments = issue.comments
-    .map((c) => ({ stage: parseWorkflowStageFromComment(c.body), createdAt: c.createdAt }))
-    .filter((entry): entry is { stage: WorkflowStage; createdAt: string } => entry.stage !== null);
+    .map((c) => ({ stage: parseWorkflowStageFromComment(c.body), createdAt: c.createdAt, body: c.body }))
+    .filter((entry): entry is { stage: WorkflowStage; createdAt: string; body: string } => entry.stage !== null);
 
   if (stageComments.length === 0) return false;
 
@@ -118,7 +118,13 @@ export async function isAdwRunningForIssue(issueNumber: number): Promise<boolean
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  return !TERMINAL_STAGES.includes(sorted[0].stage);
+  if (TERMINAL_STAGES.includes(sorted[0].stage)) return false;
+
+  // Latest stage is non-terminal — verify the agent process is actually alive
+  const adwId = extractAdwIdFromComment(sorted[0].body);
+  if (!adwId) return true; // Cannot verify without ADW ID; conservatively assume running
+
+  return AgentStateManager.isAgentProcessRunning(adwId);
 }
 
 /** Detects recovery state from GitHub comments. */
