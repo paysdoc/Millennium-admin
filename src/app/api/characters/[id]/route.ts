@@ -6,6 +6,11 @@ interface RouteParams {
   params: Promise<{ id: string }>
 }
 
+const ALLOWED_FIELDS: readonly (keyof Omit<Character, 'id'>)[] = [
+  'name', 'first_names', 'birth_date', 'death_date',
+  'biography', 'category', 'link', 'image_link',
+]
+
 export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
@@ -17,35 +22,16 @@ export async function PATCH(
     const body = await request.json()
 
     if (!body || typeof body !== 'object') {
-      return NextResponse.json(
-        { error: 'Invalid request body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
 
-    // Validate that only allowed fields are being updated
-    const allowedFields: (keyof Omit<Character, 'id'>)[] = [
-      'name',
-      'first_names',
-      'birth_date',
-      'death_date',
-      'biography',
-      'category',
-      'link',
-      'image_link',
-    ]
-
-    for (const field of allowedFields) {
-      if (field in body) {
-        updateData[field] = body[field]
-      }
-    }
+    // Build updateData immutably from allowed fields present in request body
+    updateData = ALLOWED_FIELDS.reduce<Partial<Omit<Character, 'id'>>>((acc, field) =>
+      field in body ? { ...acc, [field]: body[field] } : acc
+    , {})
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { error: 'No valid fields to update' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
     const updatedCharacter = await updateCharacter(id, updateData)
@@ -53,10 +39,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Error && error.message === 'Character not found') {
       console.error('Character not found for update:', { characterId: id })
-      return NextResponse.json(
-        { error: 'Character not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Character not found' }, { status: 404 })
     }
 
     console.error('Error updating character:', {
@@ -64,9 +47,6 @@ export async function PATCH(
       updateFields: Object.keys(updateData),
       error: error instanceof Error ? error.message : 'Unknown error',
     })
-    return NextResponse.json(
-      { error: 'Failed to update character' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update character' }, { status: 500 })
   }
 }

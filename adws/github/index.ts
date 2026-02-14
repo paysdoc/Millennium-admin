@@ -17,6 +17,23 @@ export {
   type RepoInfo,
 } from './githubApi';
 
+// Issue Lifecycle
+export {
+  formatIssueClosureComment,
+  getIssueState,
+  closeIssue,
+} from './issueLifecycle';
+
+// API Transformers
+export {
+  transformIssueResponse,
+  transformPRResponse,
+  transformReviewResponse,
+  transformLineCommentResponse,
+  transformPRListItem,
+  transformRestComment,
+} from './apiTransformers';
+
 // Git Operations
 export {
   getCurrentBranch,

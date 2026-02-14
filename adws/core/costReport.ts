@@ -22,18 +22,16 @@ export const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = {
 export function mergeModelUsageMaps(...maps: ModelUsageMap[]): ModelUsageMap {
   const result: ModelUsageMap = {};
 
-  for (const map of maps) {
-    for (const [model, usage] of Object.entries(map)) {
-      const existing = result[model] ?? emptyModelUsage();
-      result[model] = {
-        inputTokens: existing.inputTokens + usage.inputTokens,
-        outputTokens: existing.outputTokens + usage.outputTokens,
-        cacheReadInputTokens: existing.cacheReadInputTokens + usage.cacheReadInputTokens,
-        cacheCreationInputTokens: existing.cacheCreationInputTokens + usage.cacheCreationInputTokens,
-        costUSD: existing.costUSD + usage.costUSD,
-      };
-    }
-  }
+  maps.flatMap((map) => Object.entries(map)).forEach(([model, usage]) => {
+    const existing = result[model] ?? emptyModelUsage();
+    result[model] = {
+      inputTokens: existing.inputTokens + usage.inputTokens,
+      outputTokens: existing.outputTokens + usage.outputTokens,
+      cacheReadInputTokens: existing.cacheReadInputTokens + usage.cacheReadInputTokens,
+      cacheCreationInputTokens: existing.cacheCreationInputTokens + usage.cacheCreationInputTokens,
+      costUSD: existing.costUSD + usage.costUSD,
+    };
+  });
 
   return result;
 }
@@ -59,16 +57,13 @@ export async function fetchExchangeRates(targetCurrencies: string[]): Promise<Re
     }
 
     const data = await response.json() as { rates?: Record<string, number> };
-    if (!data.rates) return {};
+    const ratesMap = data.rates;
+    if (!ratesMap) return {};
 
-    const rates: Record<string, number> = {};
-    for (const currency of targetCurrencies) {
-      const rate = data.rates[currency];
-      if (typeof rate === 'number') {
-        rates[currency] = rate;
-      }
-    }
-    return rates;
+    return targetCurrencies.reduce<Record<string, number>>((acc, currency) => {
+      const rate = ratesMap[currency];
+      return typeof rate === 'number' ? { ...acc, [currency]: rate } : acc;
+    }, {});
   } catch (error) {
     log(`Failed to fetch exchange rates: ${error}`, 'error');
     return {};
@@ -116,32 +111,32 @@ export function formatCostBreakdownMarkdown(breakdown: CostBreakdown): string {
     '|-------|-------------|---------------|------------|-------------|------------|',
   ];
 
-  let totalInput = 0;
-  let totalOutput = 0;
-  let totalCacheRead = 0;
-  let totalCacheWrite = 0;
-
-  for (const [model, usage] of models) {
-    totalInput += usage.inputTokens;
-    totalOutput += usage.outputTokens;
-    totalCacheRead += usage.cacheReadInputTokens;
-    totalCacheWrite += usage.cacheCreationInputTokens;
-
-    lines.push(
-      `| ${model} | ${formatTokenCount(usage.inputTokens)} | ${formatTokenCount(usage.outputTokens)} | ${formatTokenCount(usage.cacheReadInputTokens)} | ${formatTokenCount(usage.cacheCreationInputTokens)} | $${usage.costUSD.toFixed(4)} |`
-    );
-  }
+  // Accumulate totals while building model rows
+  const totals = models.reduce(
+    (acc, [model, usage]) => {
+      lines.push(
+        `| ${model} | ${formatTokenCount(usage.inputTokens)} | ${formatTokenCount(usage.outputTokens)} | ${formatTokenCount(usage.cacheReadInputTokens)} | ${formatTokenCount(usage.cacheCreationInputTokens)} | $${usage.costUSD.toFixed(4)} |`
+      );
+      return {
+        input: acc.input + usage.inputTokens,
+        output: acc.output + usage.outputTokens,
+        cacheRead: acc.cacheRead + usage.cacheReadInputTokens,
+        cacheWrite: acc.cacheWrite + usage.cacheCreationInputTokens,
+      };
+    },
+    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  );
 
   lines.push(
-    `| **Total** | **${formatTokenCount(totalInput)}** | **${formatTokenCount(totalOutput)}** | **${formatTokenCount(totalCacheRead)}** | **${formatTokenCount(totalCacheWrite)}** | **$${breakdown.totalCostUsd.toFixed(4)}** |`
+    `| **Total** | **${formatTokenCount(totals.input)}** | **${formatTokenCount(totals.output)}** | **${formatTokenCount(totals.cacheRead)}** | **${formatTokenCount(totals.cacheWrite)}** | **$${breakdown.totalCostUsd.toFixed(4)}** |`
   );
 
   lines.push('');
   lines.push(`**Total Cost:** $${breakdown.totalCostUsd.toFixed(4)} USD`);
 
-  for (const currency of breakdown.currencies) {
+  breakdown.currencies.forEach((currency) => {
     lines.push(`**Total Cost:** ${currency.symbol}${currency.amount.toFixed(4)} ${currency.currency}`);
-  }
+  });
 
   return lines.join('\n');
 }

@@ -1,71 +1,40 @@
 import { getSupabaseClient } from './supabase'
-import { isTableNotFoundError } from './schema'
+import { handleSupabaseQueryError, wrapDatabaseCall } from './dbErrorHandler'
 import { Connection } from '@/types/connection'
+
+const CONNECTION_FIELDS = 'id, char1_id, char2_id, value, why, why_short, active'
 
 /**
  * Fetch all connections from the `connection` table.
  */
-export async function fetchAllConnections(): Promise<Connection[]> {
-  const supabase = getSupabaseClient()
-
-  try {
+export const fetchAllConnections = (): Promise<Connection[]> =>
+  wrapDatabaseCall(async () => {
+    const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from('connection')
-      .select('id, char1_id, char2_id, value, why, why_short, active')
+      .select(CONNECTION_FIELDS)
 
     if (error) {
-      if (isTableNotFoundError(error)) {
-        console.warn(
-          'Connection table does not exist in database. Returning empty list.'
-        )
-        return []
-      }
-      throw new Error(`Failed to fetch connections: ${error.message}`)
+      return handleSupabaseQueryError(error, 'fetch connections', [] as Connection[])
     }
 
     return (data as Connection[]) || []
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
-  }
-}
+  }, 'fetch connections')
 
 /**
  * Fetch connections for a specific character.
- * Returns connections where the character is either char1 or char2.
  */
-export async function fetchConnectionsByCharacter(
-  characterId: string
-): Promise<Connection[]> {
-  const supabase = getSupabaseClient()
-
-  try {
+export const fetchConnectionsByCharacter = (characterId: string): Promise<Connection[]> =>
+  wrapDatabaseCall(async () => {
+    const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from('connection')
-      .select('id, char1_id, char2_id, value, why, why_short, active')
+      .select(CONNECTION_FIELDS)
       .or(`char1_id.eq.${characterId},char2_id.eq.${characterId}`)
 
     if (error) {
-      if (isTableNotFoundError(error)) {
-        console.warn(
-          'Connection table does not exist in database. Returning empty list.'
-        )
-        return []
-      }
-      throw new Error(`Failed to fetch connections: ${error.message}`)
+      return handleSupabaseQueryError(error, 'fetch connections', [] as Connection[])
     }
 
     return (data as Connection[]) || []
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
-  }
-}
+  }, 'fetch connections')

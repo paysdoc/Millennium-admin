@@ -38,6 +38,23 @@ export type {
 // Prefix maps for consistent branch naming and commit messages
 export { commitPrefixMap, branchPrefixMap, adwCommandToIssueTypeMap, adwCommandToOrchestratorMap } from './dataTypes';
 
+// Raw GitHub API response types
+export type {
+  RawGitHubAuthor,
+  RawGitHubRestUser,
+  RawGitHubLabel,
+  RawGitHubAssignee,
+  RawGitHubMilestone,
+  RawGitHubComment,
+  RawGitHubIssue,
+  RawGitHubPR,
+  RawGitHubReview,
+  RawGitHubLineComment,
+  RawGitHubPRListItem,
+  RawGitHubRestComment,
+  RawGitHubIssueState,
+} from './githubApiTypes';
+
 // Utilities
 export {
   generateAdwId,
@@ -80,4 +97,18 @@ export {
   buildCostBreakdown,
   formatCostBreakdownMarkdown,
 } from './costReport';
+
+// Retry utilities
+export type { RetryCost, RetryOptions, RetryAttemptResult } from './retryUtils';
+export { emptyRetryCost, addCost, retryRecursive, reduceAsync } from './retryUtils';
+
+// CLI argument parsing utilities
+export {
+  printUsageAndExit,
+  parseCliArguments,
+  parseCliArgumentsWithIssueType,
+  parseTestArguments,
+  parsePrReviewArguments,
+  parseClearCommentsArguments,
+} from './cliUtils';
 

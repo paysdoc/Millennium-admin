@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Character } from '@/types/character'
-import EditableField from './EditableField'
+import InfoboxRow from './InfoboxRow'
 
 interface EditableCharacterDetailsProps {
   character: Character
@@ -76,81 +76,12 @@ export default function EditableCharacterDetails({
       <h2 className="infobox-title">{character.name}</h2>
 
       <div className="infobox-content">
-        <div className="infobox-row">
-          <span className="infobox-label">First Names</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.first_names}
-              onChange={handleFieldChange('first_names')}
-              label="First Names"
-              fieldName="first_names"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Birth Date</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.birth_date}
-              onChange={handleFieldChange('birth_date')}
-              label="Birth Date"
-              fieldName="birth_date"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Death Date</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.death_date}
-              onChange={handleFieldChange('death_date')}
-              label="Death Date"
-              fieldName="death_date"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Category</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.category}
-              onChange={handleFieldChange('category')}
-              label="Category"
-              fieldName="category"
-              type="select"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">External Link</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.link}
-              onChange={handleFieldChange('link')}
-              label="External Link"
-              fieldName="link"
-              placeholder="No link"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row infobox-row-full">
-          <span className="infobox-label">Biography</span>
-          <span className="infobox-value infobox-biography">
-            <EditableField
-              value={fields.biography}
-              onChange={handleFieldChange('biography')}
-              label="Biography"
-              fieldName="biography"
-              type="textarea"
-              placeholder="No biography"
-            />
-          </span>
-        </div>
+        <InfoboxRow label="First Names" fieldName="first_names" value={fields.first_names} onChange={handleFieldChange('first_names')} />
+        <InfoboxRow label="Birth Date" fieldName="birth_date" value={fields.birth_date} onChange={handleFieldChange('birth_date')} />
+        <InfoboxRow label="Death Date" fieldName="death_date" value={fields.death_date} onChange={handleFieldChange('death_date')} />
+        <InfoboxRow label="Category" fieldName="category" value={fields.category} onChange={handleFieldChange('category')} type="select" />
+        <InfoboxRow label="External Link" fieldName="link" value={fields.link} onChange={handleFieldChange('link')} placeholder="No link" />
+        <InfoboxRow label="Biography" fieldName="biography" value={fields.biography} onChange={handleFieldChange('biography')} type="textarea" placeholder="No biography" fullWidth />
       </div>
 
       {(hasChanges || error) && (

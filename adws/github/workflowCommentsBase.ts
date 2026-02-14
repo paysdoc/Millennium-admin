@@ -1,45 +1,25 @@
-/**
- * Base utilities and parsing functions for workflow comments.
- */
+/** Base utilities and parsing functions for workflow comments. */
 
 import { WorkflowStage, RecoveryState, GitHubComment } from '../core';
 import { fetchGitHubIssue } from './githubApi';
 
 /** Stage order for determining recovery resume point. */
 export const STAGE_ORDER: WorkflowStage[] = [
-  'starting',
-  'resuming',
-  'classified',
-  'branch_created',
-  'plan_building',
-  'plan_created',
-  'plan_file_created',
-  'plan_committing',
-  'implementing',
-  'build_progress',
-  'implemented',
-  'implementation_committing',
-  'pr_creating',
-  'pr_created',
-  'completed',
+  'starting', 'resuming', 'classified', 'branch_created',
+  'plan_building', 'plan_created', 'plan_file_created', 'plan_committing',
+  'implementing', 'build_progress', 'implemented', 'implementation_committing',
+  'pr_creating', 'pr_created', 'completed',
 ];
 
 /** Maps comment header patterns to workflow stages. */
 const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
-  ':rocket: ADW Workflow Started': 'starting',
-  ':arrows_counterclockwise: ADW Workflow Resuming': 'resuming',
-  ':mag: Issue Classified': 'classified',
-  ':seedling: Branch Created': 'branch_created',
-  ':pencil: Building Implementation Plan': 'plan_building',
-  ':white_check_mark: Implementation Plan Created': 'plan_created',
-  ':page_facing_up: Plan File Created': 'plan_file_created',
-  ':floppy_disk: Committing Plan': 'plan_committing',
-  ':hammer_and_wrench: Implementing Solution': 'implementing',
-  ':white_check_mark: Implementation Complete': 'implemented',
-  ':floppy_disk: Committing Implementation': 'implementation_committing',
-  ':memo: Creating Pull Request': 'pr_creating',
-  ':link: Pull Request Created': 'pr_created',
-  ':tada: ADW Workflow Completed': 'completed',
+  ':rocket: ADW Workflow Started': 'starting', ':arrows_counterclockwise: ADW Workflow Resuming': 'resuming',
+  ':mag: Issue Classified': 'classified', ':seedling: Branch Created': 'branch_created',
+  ':pencil: Building Implementation Plan': 'plan_building', ':white_check_mark: Implementation Plan Created': 'plan_created',
+  ':page_facing_up: Plan File Created': 'plan_file_created', ':floppy_disk: Committing Plan': 'plan_committing',
+  ':hammer_and_wrench: Implementing Solution': 'implementing', ':white_check_mark: Implementation Complete': 'implemented',
+  ':floppy_disk: Committing Implementation': 'implementation_committing', ':memo: Creating Pull Request': 'pr_creating',
+  ':link: Pull Request Created': 'pr_created', ':tada: ADW Workflow Completed': 'completed',
   ':x: ADW Workflow Error': 'error',
 };
 
@@ -123,14 +103,8 @@ export async function isAdwRunningForIssue(issueNumber: number): Promise<boolean
 
 /** Detects recovery state from GitHub comments. */
 export function detectRecoveryState(comments: GitHubComment[]): RecoveryState {
-  const defaultState: RecoveryState = {
-    lastCompletedStage: null,
-    adwId: null,
-    branchName: null,
-    planPath: null,
-    prUrl: null,
-    canResume: false,
-  };
+  const nullState = { lastCompletedStage: null, adwId: null, branchName: null, planPath: null, prUrl: null };
+  const defaultState: RecoveryState = { ...nullState, canResume: false };
 
   const adwComments = comments.filter(c => parseWorkflowStageFromComment(c.body) !== null);
   if (adwComments.length === 0) return defaultState;
@@ -138,37 +112,21 @@ export function detectRecoveryState(comments: GitHubComment[]): RecoveryState {
   const sortedComments = [...adwComments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+  if (parseWorkflowStageFromComment(sortedComments[0].body) === 'completed') return defaultState;
 
-  const mostRecentStage = parseWorkflowStageFromComment(sortedComments[0].body);
-  if (mostRecentStage === 'completed') return defaultState;
-
-  let lastCompletedStage: WorkflowStage | null = null;
-  let adwId: string | null = null;
-  let branchName: string | null = null;
-  let planPath: string | null = null;
-  let prUrl: string | null = null;
-
-  for (const comment of sortedComments.reverse()) {
+  const accumulated = sortedComments.reverse().reduce((acc, comment) => {
     const stage = parseWorkflowStageFromComment(comment.body);
-    if (!stage || stage === 'error') continue;
-
+    if (!stage || stage === 'error') return acc;
     const stageIndex = STAGE_ORDER.indexOf(stage);
-    const lastIndex = lastCompletedStage ? STAGE_ORDER.indexOf(lastCompletedStage) : -1;
-    if (stageIndex > lastIndex) lastCompletedStage = stage;
+    const lastIndex = acc.lastCompletedStage ? STAGE_ORDER.indexOf(acc.lastCompletedStage) : -1;
+    return {
+      lastCompletedStage: stageIndex > lastIndex ? stage : acc.lastCompletedStage,
+      adwId: extractAdwIdFromComment(comment.body) ?? acc.adwId,
+      branchName: extractBranchNameFromComment(comment.body) ?? acc.branchName,
+      planPath: extractPlanPathFromComment(comment.body) ?? acc.planPath,
+      prUrl: extractPrUrlFromComment(comment.body) ?? acc.prUrl,
+    };
+  }, nullState as { lastCompletedStage: WorkflowStage | null; adwId: string | null; branchName: string | null; planPath: string | null; prUrl: string | null });
 
-    const extractedAdwId = extractAdwIdFromComment(comment.body);
-    if (extractedAdwId) adwId = extractedAdwId;
-
-    const extractedBranch = extractBranchNameFromComment(comment.body);
-    if (extractedBranch) branchName = extractedBranch;
-
-    const extractedPlanPath = extractPlanPathFromComment(comment.body);
-    if (extractedPlanPath) planPath = extractedPlanPath;
-
-    const extractedPrUrl = extractPrUrlFromComment(comment.body);
-    if (extractedPrUrl) prUrl = extractedPrUrl;
-  }
-
-  const canResume = lastCompletedStage !== null && lastCompletedStage !== 'completed';
-  return { lastCompletedStage, adwId, branchName, planPath, prUrl, canResume };
+  return { ...accumulated, canResume: accumulated.lastCompletedStage !== null && accumulated.lastCompletedStage !== 'completed' };
 }

@@ -16,6 +16,7 @@
  * - CLAUDE_CODE_PATH: Path to Claude CLI (default: /usr/local/bin/claude)
  */
 
+import { parsePrReviewArguments } from './core';
 import {
   initializePRReviewWorkflow,
   executePRReviewPlanPhase,
@@ -27,17 +28,7 @@ import {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-
-  if (args.length < 1) {
-    console.error('Usage: npx tsx adws/adwPrReview.tsx <pr-number>');
-    process.exit(1);
-  }
-
-  const prNumber = parseInt(args[0], 10);
-  if (isNaN(prNumber)) {
-    console.error(`Invalid PR number: ${args[0]}`);
-    process.exit(1);
-  }
+  const { prNumber } = parsePrReviewArguments(args, 'adwPrReview.tsx');
 
   const config = initializePRReviewWorkflow(prNumber, null);
 

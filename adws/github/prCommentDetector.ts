@@ -38,19 +38,16 @@ export function getLastAdwCommitTimestamp(branchName: string): Date | null {
       /chore: add implementation plan for #/,
     ];
 
-    for (const line of output.split('\n')) {
-      if (!line.trim()) continue;
-      const spaceIdx = line.indexOf(' ');
-      if (spaceIdx === -1) continue;
-      const timestamp = line.substring(0, spaceIdx);
-      const message = line.substring(spaceIdx + 1);
+    const matchingLine = output.split('\n')
+      .filter((line) => line.trim() && line.indexOf(' ') !== -1)
+      .find((line) => {
+        const message = line.substring(line.indexOf(' ') + 1);
+        return adwPatterns.some((p) => p.test(message));
+      });
 
-      if (adwPatterns.some(p => p.test(message))) {
-        return new Date(timestamp);
-      }
-    }
-
-    return null;
+    return matchingLine
+      ? new Date(matchingLine.substring(0, matchingLine.indexOf(' ')))
+      : null;
   } catch (error) {
     log(`Failed to get last ADW commit timestamp: ${error}`, 'error');
     return null;

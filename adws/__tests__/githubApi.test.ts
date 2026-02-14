@@ -11,7 +11,7 @@ vi.mock('../core/utils', () => ({
 import { execSync } from 'child_process';
 import { fetchPRReviews } from '../github/githubApi';
 
-function makeReview(overrides: Record<string, any> = {}) {
+function makeReview(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
     user: { login: 'reviewer', type: 'User' },

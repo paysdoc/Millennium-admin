@@ -19,7 +19,7 @@
  * - MAX_TEST_RETRY_ATTEMPTS: Maximum retry attempts for tests (default: 5)
  */
 
-import { mergeModelUsageMaps } from './core';
+import { mergeModelUsageMaps, parseCliArguments } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -31,48 +31,13 @@ import {
 } from './workflowPhases';
 
 /**
- * Prints usage information and exits.
- */
-function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issue-number> [adw-id]');
-  console.error('');
-  console.error('This orchestrator runs the complete Plan+Build+Test+PR workflow.');
-  console.error('');
-  console.error('Environment Requirements:');
-  console.error('  ANTHROPIC_API_KEY        - Anthropic API key');
-  console.error('  CLAUDE_CODE_PATH         - Path to Claude CLI (default: /usr/local/bin/claude)');
-  console.error('  GITHUB_PAT               - (Optional) GitHub Personal Access Token');
-  console.error('  MAX_TEST_RETRY_ATTEMPTS  - Maximum retry attempts for tests (default: 5)');
-  process.exit(1);
-}
-
-/**
- * Parses and validates command line arguments.
- */
-function parseArguments(args: string[]): { issueNumber: number; adwId: string | null } {
-  if (args.length < 1) {
-    printUsageAndExit();
-  }
-
-  const issueNumber = parseInt(args[0], 10);
-  if (isNaN(issueNumber)) {
-    console.error(`Invalid issue number: ${args[0]}`);
-    process.exit(1);
-  }
-
-  const adwId = args[1] || null;
-
-  return { issueNumber, adwId };
-}
-
-/**
  * Main orchestrator workflow.
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { issueNumber, adwId } = parseArguments(args);
+  const { issueNumber, providedAdwId } = parseCliArguments(args, 'adwPlanBuildTest.tsx');
 
-  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-orchestrator');
+  const config = await initializeWorkflow(issueNumber, providedAdwId, 'plan-build-test-orchestrator');
 
   try {
     const planResult = await executePlanPhase(config);

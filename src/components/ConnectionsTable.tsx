@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { Connection } from '@/types/connection'
-import { Character, CATEGORY_ORDER } from '@/types/character'
+import { Character } from '@/types/character'
+import { compareByCategoryThenName } from '@/lib/categoryUtils'
 
 interface ConnectionsTableProps {
   connections: Connection[]
@@ -8,30 +10,24 @@ interface ConnectionsTableProps {
   allCharacters: Character[]
 }
 
-/**
- * Get the other character in a connection (the one that is not the current character).
- */
-function getConnectedCharacter(
-  connection: Connection,
-  characterId: string,
-  allCharacters: Character[]
-): Character | undefined {
-  // Convert to strings to handle type mismatches (URL params vs database values)
-  const charIdStr = String(characterId)
-  const char1Str = String(connection.char1_id)
-  const char2Str = String(connection.char2_id)
-
-  // Determine the other character's ID (not the current character)
-  const otherId = char1Str === charIdStr ? connection.char2_id : connection.char1_id
-
-  return allCharacters.find((c) => String(c.id) === String(otherId))
-}
-
 export default function ConnectionsTable({
   connections,
   characterId,
   allCharacters,
 }: ConnectionsTableProps) {
+  // Precompute a lookup map for O(1) character resolution
+  const characterLookup = useMemo(() =>
+    new Map(allCharacters.map((c) => [String(c.id), c]))
+  , [allCharacters])
+
+  const getConnectedCharacter = (connection: Connection): Character | undefined => {
+    const charIdStr = String(characterId)
+    const otherId = String(connection.char1_id) === charIdStr
+      ? connection.char2_id
+      : connection.char1_id
+    return characterLookup.get(String(otherId))
+  }
+
   if (connections.length === 0) {
     return (
       <div className="empty-state">
@@ -40,33 +36,15 @@ export default function ConnectionsTable({
     )
   }
 
-  // Sort connections by category (using CATEGORY_ORDER), then by name alphabetically
   const sortedConnections = [...connections].sort((a, b) => {
-    const charA = getConnectedCharacter(a, characterId, allCharacters)
-    const charB = getConnectedCharacter(b, characterId, allCharacters)
+    const charA = getConnectedCharacter(a)
+    const charB = getConnectedCharacter(b)
 
-    // Handle edge cases where connected character is not found (place at end)
     if (!charA && !charB) return 0
     if (!charA) return 1
     if (!charB) return -1
 
-    // Sort by category using CATEGORY_ORDER index
-    const categoryIndexA = CATEGORY_ORDER.indexOf(
-      charA.category as (typeof CATEGORY_ORDER)[number]
-    )
-    const categoryIndexB = CATEGORY_ORDER.indexOf(
-      charB.category as (typeof CATEGORY_ORDER)[number]
-    )
-    // Categories not in CATEGORY_ORDER go to the end
-    const effectiveIndexA = categoryIndexA === -1 ? CATEGORY_ORDER.length : categoryIndexA
-    const effectiveIndexB = categoryIndexB === -1 ? CATEGORY_ORDER.length : categoryIndexB
-
-    if (effectiveIndexA !== effectiveIndexB) {
-      return effectiveIndexA - effectiveIndexB
-    }
-
-    // Then sort by name alphabetically
-    return charA.name.localeCompare(charB.name)
+    return compareByCategoryThenName(charA, charB)
   })
 
   return (
@@ -83,11 +61,7 @@ export default function ConnectionsTable({
       </thead>
       <tbody>
         {sortedConnections.map((connection) => {
-          const connectedCharacter = getConnectedCharacter(
-            connection,
-            characterId,
-            allCharacters
-          )
+          const connectedCharacter = getConnectedCharacter(connection)
           return (
             <tr key={connection.id}>
               <td>{connectedCharacter?.category ?? '-'}</td>
@@ -104,11 +78,7 @@ export default function ConnectionsTable({
               <td>{connection.why ?? '-'}</td>
               <td>{connection.why_short ?? '-'}</td>
               <td>
-                <span
-                  className={
-                    connection.active ? 'status-active' : 'status-inactive'
-                  }
-                >
+                <span className={connection.active ? 'status-active' : 'status-inactive'}>
                   {connection.active ? 'Yes' : 'No'}
                 </span>
               </td>

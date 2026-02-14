@@ -61,29 +61,23 @@ async function checkAndTrigger(): Promise<void> {
   );
   log(`Found ${qualifying.length} qualifying issue(s) out of ${issues.length} open`);
 
-  for (const issue of qualifying) {
+  // Process issues sequentially (each requires async check before spawning)
+  await qualifying.reduce(async (prev, issue) => {
+    await prev;
     const running = await isAdwRunningForIssue(issue.number);
     if (running) {
       log(`ADW workflow already running for issue #${issue.number}, deferring`);
-      continue;
+      return;
     }
 
     processedIssues.add(issue.number);
-
     const classification = await classifyIssueForTrigger(issue.number);
     const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
+    log(`Triggering ADW workflow for issue #${issue.number} (${classification.issueType} -> ${workflowScript})`, 'success');
 
-    log(
-      `Triggering ADW workflow for issue #${issue.number} (${classification.issueType} -> ${workflowScript})`,
-      'success'
-    );
-
-    const child = spawn('npx', ['tsx', workflowScript, String(issue.number)], {
-      detached: true,
-      stdio: 'ignore',
-    });
+    const child = spawn('npx', ['tsx', workflowScript, String(issue.number)], { detached: true, stdio: 'ignore' });
     child.unref();
-  }
+  }, Promise.resolve());
 
   if (qualifying.length === 0) {
     log('No new qualifying issues found');
@@ -94,24 +88,20 @@ function checkPRsForReviewComments(): void {
   log('Polling for PRs with unaddressed review comments...');
   const prs = fetchPRList();
 
-  for (const pr of prs) {
-    if (processedPRs.has(pr.number)) continue;
-
-    try {
-      if (hasUnaddressedComments(pr.number)) {
-        processedPRs.add(pr.number);
-        log(`Triggering ADW PR Review for PR #${pr.number}`, 'success');
-
-        const child = spawn('npx', ['tsx', 'adws/adwPrReview.tsx', String(pr.number)], {
-          detached: true,
-          stdio: 'ignore',
-        });
-        child.unref();
+  prs
+    .filter((pr) => !processedPRs.has(pr.number))
+    .forEach((pr) => {
+      try {
+        if (hasUnaddressedComments(pr.number)) {
+          processedPRs.add(pr.number);
+          log(`Triggering ADW PR Review for PR #${pr.number}`, 'success');
+          const child = spawn('npx', ['tsx', 'adws/adwPrReview.tsx', String(pr.number)], { detached: true, stdio: 'ignore' });
+          child.unref();
+        }
+      } catch (error) {
+        log(`Error checking PR #${pr.number}: ${error}`, 'error');
       }
-    } catch (error) {
-      log(`Error checking PR #${pr.number}: ${error}`, 'error');
-    }
-  }
+    });
 }
 
 log('CRON trigger started');
