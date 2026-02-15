@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
+import { extractJson, extractJsonArray } from '../core/jsonParser';
 
 /**
  * Individual test result from the /test command.
@@ -55,55 +56,11 @@ export interface E2ETestAgentResult extends AgentResult {
 }
 
 /**
- * Parses JSON test results from agent output.
- * Handles cases where the output contains additional text around the JSON.
- */
-function parseTestResults(output: string): TestResult[] {
-  try {
-    // Try direct JSON parse first
-    return JSON.parse(output);
-  } catch {
-    // Try to extract JSON array from the output
-    const jsonMatch = output.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  }
-}
-
-/**
  * Validates that an E2ETestResult has a valid test_name property.
  * Returns false if test_name is undefined, null, or not a string.
  */
 export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { test_name: string } {
   return result !== null && typeof result.test_name === 'string' && result.test_name.length > 0;
-}
-
-/**
- * Parses E2E test result from agent output.
- * Handles cases where the output contains additional text around the JSON.
- */
-function parseE2ETestResult(output: string): E2ETestResult | null {
-  try {
-    // Try direct JSON parse first
-    return JSON.parse(output);
-  } catch {
-    // Try to extract JSON object from the output
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
 }
 
 /**
@@ -134,7 +91,7 @@ export async function runTestAgent(
   );
 
   // Parse the test results from the output
-  const testResults = parseTestResults(result.output);
+  const testResults = extractJsonArray<TestResult>(result.output);
   const failedTests = testResults.filter(t => !t.passed);
   const allPassed = testResults.length > 0 && failedTests.length === 0;
 
@@ -177,7 +134,7 @@ export async function runE2ETestAgent(
   );
 
   // Parse the E2E test result from the output
-  const e2eResult = parseE2ETestResult(result.output);
+  const e2eResult = extractJson<E2ETestResult>(result.output);
   const passed = e2eResult?.status === 'passed';
 
   // Add test_path to the result for resolution context

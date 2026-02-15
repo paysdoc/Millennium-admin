@@ -57,7 +57,6 @@ export {
 // Review Agent
 export {
   runReviewAgent,
-  parseReviewResult,
   type ReviewIssue,
   type ReviewResult,
   type ReviewAgentResult,

@@ -8,6 +8,11 @@ interface ConnectionsTableProps {
   allCharacters: Character[]
 }
 
+interface ConnectionWithCharacter {
+  connection: Connection
+  connectedCharacter: Character | undefined
+}
+
 /**
  * Get the other character in a connection (the one that is not the current character).
  */
@@ -16,15 +21,8 @@ function getConnectedCharacter(
   characterId: string,
   allCharacters: Character[]
 ): Character | undefined {
-  // Convert to strings to handle type mismatches (URL params vs database values)
-  const charIdStr = String(characterId)
-  const char1Str = String(connection.char1_id)
-  const char2Str = String(connection.char2_id)
-
-  // Determine the other character's ID (not the current character)
-  const otherId = char1Str === charIdStr ? connection.char2_id : connection.char1_id
-
-  return allCharacters.find((c) => String(c.id) === String(otherId))
+  const otherId = connection.char1_id === characterId ? connection.char2_id : connection.char1_id
+  return allCharacters.find((c) => c.id === otherId)
 }
 
 export default function ConnectionsTable({
@@ -40,10 +38,16 @@ export default function ConnectionsTable({
     )
   }
 
+  // Pre-compute connected characters to avoid redundant lookups during sort and render
+  const connectionsWithCharacters: ConnectionWithCharacter[] = connections.map((connection) => ({
+    connection,
+    connectedCharacter: getConnectedCharacter(connection, characterId, allCharacters),
+  }))
+
   // Sort connections by category (using CATEGORY_ORDER), then by name alphabetically
-  const sortedConnections = [...connections].sort((a, b) => {
-    const charA = getConnectedCharacter(a, characterId, allCharacters)
-    const charB = getConnectedCharacter(b, characterId, allCharacters)
+  const sorted = [...connectionsWithCharacters].sort((a, b) => {
+    const charA = a.connectedCharacter
+    const charB = b.connectedCharacter
 
     // Handle edge cases where connected character is not found (place at end)
     if (!charA && !charB) return 0
@@ -82,39 +86,32 @@ export default function ConnectionsTable({
         </tr>
       </thead>
       <tbody>
-        {sortedConnections.map((connection) => {
-          const connectedCharacter = getConnectedCharacter(
-            connection,
-            characterId,
-            allCharacters
-          )
-          return (
-            <tr key={connection.id}>
-              <td>{connectedCharacter?.category ?? '-'}</td>
-              <td>
-                {connectedCharacter ? (
-                  <Link href={`/characters/${connectedCharacter.id}`}>
-                    {connectedCharacter.name}
-                  </Link>
-                ) : (
-                  <span className="unknown-character">Unknown</span>
-                )}
-              </td>
-              <td>{connection.value ?? '-'}</td>
-              <td>{connection.why ?? '-'}</td>
-              <td>{connection.why_short ?? '-'}</td>
-              <td>
-                <span
-                  className={
-                    connection.active ? 'status-active' : 'status-inactive'
-                  }
-                >
-                  {connection.active ? 'Yes' : 'No'}
-                </span>
-              </td>
-            </tr>
-          )
-        })}
+        {sorted.map(({ connection, connectedCharacter }) => (
+          <tr key={connection.id}>
+            <td>{connectedCharacter?.category ?? '-'}</td>
+            <td>
+              {connectedCharacter ? (
+                <Link href={`/characters/${connectedCharacter.id}`}>
+                  {connectedCharacter.name}
+                </Link>
+              ) : (
+                <span className="unknown-character">Unknown</span>
+              )}
+            </td>
+            <td>{connection.value ?? '-'}</td>
+            <td>{connection.why ?? '-'}</td>
+            <td>{connection.why_short ?? '-'}</td>
+            <td>
+              <span
+                className={
+                  connection.active ? 'status-active' : 'status-inactive'
+                }
+              >
+                {connection.active ? 'Yes' : 'No'}
+              </span>
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   )

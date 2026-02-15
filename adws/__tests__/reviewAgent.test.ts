@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseReviewResult, runReviewAgent, ReviewIssue, ReviewResult } from '../agents/reviewAgent';
+import { runReviewAgent, ReviewIssue, ReviewResult } from '../agents/reviewAgent';
+import { extractJson } from '../core/jsonParser';
 
 vi.mock('../agents/claudeAgent', () => ({
   runClaudeAgentWithCommand: vi.fn().mockResolvedValue({
@@ -36,25 +37,25 @@ function createBlockerIssue(overrides: Partial<ReviewIssue> = {}): ReviewIssue {
   };
 }
 
-describe('parseReviewResult', () => {
+describe('extractJson (ReviewResult parsing)', () => {
   it('correctly parses valid JSON output', () => {
     const reviewResult = createReviewResult();
     const output = JSON.stringify(reviewResult);
-    const result = parseReviewResult(output);
+    const result = extractJson<ReviewResult>(output);
 
     expect(result).toEqual(reviewResult);
   });
 
   it('handles malformed JSON gracefully (returns null)', () => {
-    expect(parseReviewResult('not json at all')).toBeNull();
-    expect(parseReviewResult('')).toBeNull();
-    expect(parseReviewResult('{ invalid json }')).toBeNull();
+    expect(extractJson<ReviewResult>('not json at all')).toBeNull();
+    expect(extractJson<ReviewResult>('')).toBeNull();
+    expect(extractJson<ReviewResult>('{ invalid json }')).toBeNull();
   });
 
   it('extracts JSON embedded in surrounding text', () => {
     const reviewResult = createReviewResult();
     const output = `Here is the result: ${JSON.stringify(reviewResult)} That was the output.`;
-    const result = parseReviewResult(output);
+    const result = extractJson<ReviewResult>(output);
 
     expect(result).toEqual(reviewResult);
   });
@@ -62,7 +63,7 @@ describe('parseReviewResult', () => {
   it('extracts JSON embedded in markdown code blocks', () => {
     const reviewResult = createReviewResult();
     const output = `\`\`\`json\n${JSON.stringify(reviewResult)}\n\`\`\``;
-    const result = parseReviewResult(output);
+    const result = extractJson<ReviewResult>(output);
 
     expect(result).toEqual(reviewResult);
   });
@@ -75,7 +76,7 @@ describe('parseReviewResult', () => {
         { ...createBlockerIssue({ review_issue_number: 2, issue_severity: 'skippable' }) },
       ],
     });
-    const result = parseReviewResult(JSON.stringify(reviewResult));
+    const result = extractJson<ReviewResult>(JSON.stringify(reviewResult));
 
     expect(result?.review_issues).toHaveLength(2);
     expect(result?.review_issues[0].issue_severity).toBe('blocker');

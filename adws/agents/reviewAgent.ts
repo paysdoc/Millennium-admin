@@ -5,6 +5,7 @@
 
 import * as path from 'path';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
+import { extractJson } from '../core/jsonParser';
 
 /**
  * Individual review issue from the /review command.
@@ -42,27 +43,6 @@ export interface ReviewAgentResult extends AgentResult {
 }
 
 /**
- * Parses review result JSON from agent output.
- * Handles cases where the output contains additional text around the JSON.
- */
-export function parseReviewResult(output: string): ReviewResult | null {
-  try {
-    return JSON.parse(output);
-  } catch {
-    // Try to extract JSON object from the output
-    const jsonMatch = output.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
-
-/**
  * Runs the /review command and returns parsed review results.
  * Uses 'opus' model for complex reasoning.
  *
@@ -97,7 +77,7 @@ export async function runReviewAgent(
   );
 
   // Parse the review result from the output
-  const reviewResult = parseReviewResult(result.output);
+  const reviewResult = extractJson<ReviewResult>(result.output);
   const blockerIssues = reviewResult?.review_issues?.filter(
     issue => issue.issue_severity === 'blocker'
   ) ?? [];

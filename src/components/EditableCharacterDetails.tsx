@@ -14,6 +14,25 @@ type EditableFields = Pick<
   'first_names' | 'birth_date' | 'death_date' | 'category' | 'link' | 'biography'
 >
 
+type FieldType = 'text' | 'textarea' | 'select'
+
+interface FieldConfig {
+  label: string
+  fieldName: keyof EditableFields
+  type?: FieldType
+  placeholder?: string
+  fullWidth?: boolean
+}
+
+const EDITABLE_FIELDS: FieldConfig[] = [
+  { label: 'First Names', fieldName: 'first_names' },
+  { label: 'Birth Date', fieldName: 'birth_date' },
+  { label: 'Death Date', fieldName: 'death_date' },
+  { label: 'Category', fieldName: 'category', type: 'select' },
+  { label: 'External Link', fieldName: 'link', placeholder: 'No link' },
+  { label: 'Biography', fieldName: 'biography', type: 'textarea', placeholder: 'No biography', fullWidth: true },
+]
+
 export default function EditableCharacterDetails({
   character,
   onSave,
@@ -76,81 +95,21 @@ export default function EditableCharacterDetails({
       <h2 className="infobox-title">{character.name}</h2>
 
       <div className="infobox-content">
-        <div className="infobox-row">
-          <span className="infobox-label">First Names</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.first_names}
-              onChange={handleFieldChange('first_names')}
-              label="First Names"
-              fieldName="first_names"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Birth Date</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.birth_date}
-              onChange={handleFieldChange('birth_date')}
-              label="Birth Date"
-              fieldName="birth_date"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Death Date</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.death_date}
-              onChange={handleFieldChange('death_date')}
-              label="Death Date"
-              fieldName="death_date"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">Category</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.category}
-              onChange={handleFieldChange('category')}
-              label="Category"
-              fieldName="category"
-              type="select"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row">
-          <span className="infobox-label">External Link</span>
-          <span className="infobox-value">
-            <EditableField
-              value={fields.link}
-              onChange={handleFieldChange('link')}
-              label="External Link"
-              fieldName="link"
-              placeholder="No link"
-            />
-          </span>
-        </div>
-
-        <div className="infobox-row infobox-row-full">
-          <span className="infobox-label">Biography</span>
-          <span className="infobox-value infobox-biography">
-            <EditableField
-              value={fields.biography}
-              onChange={handleFieldChange('biography')}
-              label="Biography"
-              fieldName="biography"
-              type="textarea"
-              placeholder="No biography"
-            />
-          </span>
-        </div>
+        {EDITABLE_FIELDS.map(({ label, fieldName, type, placeholder, fullWidth }) => (
+          <div key={fieldName} className={`infobox-row${fullWidth ? ' infobox-row-full' : ''}`}>
+            <span className="infobox-label">{label}</span>
+            <span className={`infobox-value${fullWidth ? ' infobox-biography' : ''}`}>
+              <EditableField
+                value={fields[fieldName]}
+                onChange={handleFieldChange(fieldName)}
+                label={label}
+                fieldName={fieldName}
+                {...(type ? { type } : {})}
+                {...(placeholder ? { placeholder } : {})}
+              />
+            </span>
+          </div>
+        ))}
       </div>
 
       {(hasChanges || error) && (

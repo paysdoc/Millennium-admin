@@ -17,6 +17,7 @@ import {
   log,
   GitHubIssue,
 } from '../core';
+import { extractJson } from '../core/jsonParser';
 
 /**
  * Result of classifying an issue for trigger purposes.
@@ -30,52 +31,39 @@ export interface IssueClassificationResult {
 
 /**
  * Parses the raw string output from the /classify_adw agent into an AdwClassificationResult.
- * Extracts JSON from the output, handling potential surrounding text.
+ * Uses shared JSON extraction, then validates the parsed result.
  *
  * @param output - Raw string output from the /classify_adw agent
  * @returns Parsed AdwClassificationResult or null if empty/unparseable
  */
 export function parseAdwClassificationOutput(output: string): AdwClassificationResult | null {
-  try {
-    const trimmed = output.trim();
-    if (!trimmed) return null;
+  const trimmed = output.trim();
+  if (!trimmed) return null;
 
-    // Extract JSON from the output (may be surrounded by explanation text)
-    const jsonMatch = trimmed.match(/\{[^{}]*\}/);
-    if (!jsonMatch) return null;
+  const parsed = extractJson<Record<string, unknown>>(trimmed);
+  if (!parsed || Object.keys(parsed).length === 0) return null;
 
-    const parsed: unknown = JSON.parse(jsonMatch[0]);
-    if (typeof parsed !== 'object' || parsed === null) return null;
+  const result: AdwClassificationResult = {};
 
-    const record = parsed as Record<string, unknown>;
-
-    // Empty JSON means no ADW command found
-    if (Object.keys(record).length === 0) return null;
-
-    const result: AdwClassificationResult = {};
-
-    // Validate adw_slash_command if present
-    if (typeof record['adw_slash_command'] === 'string') {
-      const command = record['adw_slash_command'] as string;
-      if (command in adwCommandToIssueTypeMap) {
-        result.adw_slash_command = command as AdwSlashCommand;
-      } else {
-        return null;
-      }
+  // Validate adw_slash_command if present
+  if (typeof parsed['adw_slash_command'] === 'string') {
+    const command = parsed['adw_slash_command'];
+    if (command in adwCommandToIssueTypeMap) {
+      result.adw_slash_command = command as AdwSlashCommand;
+    } else {
+      return null;
     }
-
-    // Extract adw_id if present
-    if (typeof record['adw_id'] === 'string') {
-      result.adw_id = record['adw_id'];
-    }
-
-    // Must have at least adw_slash_command to be useful
-    if (!result.adw_slash_command) return null;
-
-    return result;
-  } catch {
-    return null;
   }
+
+  // Extract adw_id if present
+  if (typeof parsed['adw_id'] === 'string') {
+    result.adw_id = parsed['adw_id'];
+  }
+
+  // Must have at least adw_slash_command to be useful
+  if (!result.adw_slash_command) return null;
+
+  return result;
 }
 
 /**
