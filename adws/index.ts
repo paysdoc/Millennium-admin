@@ -58,7 +58,6 @@ export {
   runPrReviewBuildAgent,
   runBuildAgent,
   runReviewAgent,
-  parseReviewResult,
   runPatchAgent,
   formatPatchArgs,
   runReviewWithRetry,

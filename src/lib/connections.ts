@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabase'
 import { isTableNotFoundError } from './schema'
+import { handleDatabaseError } from './errors'
 import { Connection } from '@/types/connection'
 
 /**
@@ -25,12 +26,7 @@ export async function fetchAllConnections(): Promise<Connection[]> {
 
     return (data as Connection[]) || []
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'fetch connections')
   }
 }
 
@@ -61,11 +57,6 @@ export async function fetchConnectionsByCharacter(
 
     return (data as Connection[]) || []
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch connections: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'fetch connections')
   }
 }

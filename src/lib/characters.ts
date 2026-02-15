@@ -1,5 +1,6 @@
 import { getSupabaseClient, getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
+import { handleDatabaseError } from './errors'
 import {
   Character,
   CharacterRow,
@@ -38,12 +39,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
       (character) => ({ ...character, image_link: getSupabaseStorageUrl(character.image_link) })
     )
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch characters: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'fetch characters')
   }
 }
 
@@ -84,12 +80,7 @@ export async function fetchCharacterById(id: string): Promise<Character | null> 
     const character = mapCharacterRowToCharacter(data as CharacterRow)
     return { ...character, image_link: getSupabaseStorageUrl(character.image_link) }
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch character: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'fetch character')
   }
 }
 
@@ -151,24 +142,14 @@ export async function updateCharacter(
 
     return mapCharacterRowToCharacter(updatedData as CharacterRow)
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to update')) {
-      throw err
-    }
-    if (err instanceof Error && err.message === 'Character not found') {
-      throw err
-    }
-    throw new Error(
-      `Failed to update character: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'update character')
   }
 }
 
 export function groupCharactersByCategory(
   characters: Character[]
 ): CharactersByCategory {
-  const grouped = new Map<CategoryKey, Character[]>()
-
-  for (const category of CATEGORY_ORDER) {
+  return CATEGORY_ORDER.reduce((grouped, category) => {
     const categoryCharacters = characters
       .filter((char) => char.category === category)
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -176,7 +157,7 @@ export function groupCharactersByCategory(
     if (categoryCharacters.length > 0) {
       grouped.set(category, categoryCharacters)
     }
-  }
 
-  return grouped
+    return grouped
+  }, new Map<CategoryKey, Character[]>())
 }

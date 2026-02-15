@@ -9,23 +9,17 @@
  * agents/, github/, triggers/, and core/.
  */
 
+export { type WorkflowConfig, initializeWorkflow, completeWorkflow, executeReviewPhase, handleWorkflowError } from './workflowLifecycle';
+export { executePlanPhase, buildContinuationPrompt, MAX_CONTINUATION_OUTPUT_LENGTH } from './planPhase';
+export { executeBuildPhase } from './buildPhase';
+export { executeTestPhase } from './testPhase';
+export { executePRPhase } from './prPhase';
 export {
-  type WorkflowConfig,
   type PRReviewWorkflowConfig,
-  initializeWorkflow,
-  executePlanPhase,
-  buildContinuationPrompt,
-  MAX_CONTINUATION_OUTPUT_LENGTH,
-  executeBuildPhase,
-  executeTestPhase,
-  executePRPhase,
-  executeReviewPhase,
-  completeWorkflow,
-  handleWorkflowError,
   initializePRReviewWorkflow,
   executePRReviewPlanPhase,
   executePRReviewBuildPhase,
   executePRReviewTestPhase,
   completePRReviewWorkflow,
   handlePRReviewWorkflowError,
-} from './phases';
+} from './prReviewPhase';

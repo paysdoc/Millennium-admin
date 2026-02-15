@@ -1,10 +1,11 @@
 /**
  * Review-patch retry loop for automated review and patching.
- * Modeled on testRetry.ts. Iterates: review → patch blockers → commit+push → re-review.
+ * Iterates: review -> patch blockers -> commit+push -> re-review.
  */
 
-import { log, AgentStateManager, type IssueClassSlashCommand, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap, persistTokenCounts } from '../core';
-import { runReviewAgent, type ReviewIssue } from './reviewAgent';
+import { log, AgentStateManager, type IssueClassSlashCommand, type ModelUsageMap, emptyModelUsageMap } from '../core';
+import { initAgentState, trackCost, type AgentRunResult } from '../core/retryOrchestrator';
+import { runReviewAgent, type ReviewIssue, type ReviewAgentResult } from './reviewAgent';
 import { runPatchAgent } from './patchAgent';
 import { runCommitAgent } from './gitAgent';
 import { pushBranch } from '../github';
@@ -30,11 +31,6 @@ export interface ReviewRetryOptions {
   cwd?: string;
 }
 
-function initState(statePath: string, agentName: 'review-agent' | 'patch-agent'): string {
-  const adwId = AgentStateManager.readState(statePath)?.adwId || '';
-  return AgentStateManager.initializeState(adwId, agentName, statePath);
-}
-
 export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<ReviewRetryResult> {
   const {
     adwId, specFile, logsDir, orchestratorStatePath: statePath,
@@ -42,25 +38,22 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
   } = opts;
 
   let retryCount = 0;
-  let costUsd = 0;
   let lastBlockerIssues: ReviewIssue[] = [];
-  let modelUsage = emptyModelUsageMap();
+  const costState = { costUsd: 0, modelUsage: emptyModelUsageMap() };
 
   while (retryCount < maxRetries) {
     log(`Running review (attempt ${retryCount + 1}/${maxRetries})...`, 'info');
     AgentStateManager.appendLog(statePath, `Review attempt ${retryCount + 1}/${maxRetries}`);
 
-    const reviewResult = await runReviewAgent(
-      adwId, specFile, logsDir, initState(statePath, 'review-agent'), cwd,
+    const reviewResult: ReviewAgentResult = await runReviewAgent(
+      adwId, specFile, logsDir, initAgentState(statePath, 'review-agent'), cwd,
     );
-    costUsd += reviewResult.totalCostUsd || 0;
-    if (reviewResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, reviewResult.modelUsage);
-    persistTokenCounts(statePath, costUsd, modelUsage);
+    trackCost(reviewResult as AgentRunResult, costState, statePath);
 
     if (reviewResult.passed) {
       log('Review passed — no blocker issues found!', 'success');
       AgentStateManager.appendLog(statePath, 'Review passed');
-      return { passed: true, costUsd, totalRetries: retryCount, blockerIssues: [], modelUsage };
+      return { passed: true, costUsd: costState.costUsd, totalRetries: retryCount, blockerIssues: [], modelUsage: costState.modelUsage };
     }
 
     lastBlockerIssues = reviewResult.blockerIssues;
@@ -73,11 +66,9 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
       AgentStateManager.appendLog(statePath, `Patching blocker #${blockerIssue.review_issue_number}`);
 
       const patchResult = await runPatchAgent(
-        adwId, blockerIssue, logsDir, specFile, undefined, initState(statePath, 'patch-agent'), cwd,
+        adwId, blockerIssue, logsDir, specFile, undefined, initAgentState(statePath, 'patch-agent'), cwd,
       );
-      costUsd += patchResult.totalCostUsd || 0;
-      if (patchResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, patchResult.modelUsage);
-      persistTokenCounts(statePath, costUsd, modelUsage);
+      trackCost(patchResult as AgentRunResult, costState, statePath);
 
       const msg = patchResult.success ? 'Patch applied for' : 'Patch failed for';
       log(`${msg} blocker #${blockerIssue.review_issue_number}`, patchResult.success ? 'success' : 'error');
@@ -96,5 +87,5 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
 
   log(`Review still has blockers after ${maxRetries} attempts`, 'error');
   AgentStateManager.appendLog(statePath, `Review still has blockers after ${maxRetries} attempts`);
-  return { passed: false, costUsd, totalRetries: retryCount, blockerIssues: lastBlockerIssues, modelUsage };
+  return { passed: false, costUsd: costState.costUsd, totalRetries: retryCount, blockerIssues: lastBlockerIssues, modelUsage: costState.modelUsage };
 }
