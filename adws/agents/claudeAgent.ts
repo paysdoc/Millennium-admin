@@ -5,7 +5,7 @@
 
 import { spawn } from 'child_process';
 import * as fs from 'fs';
-import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log, AgentStateManager, type ModelUsageMap } from '../core';
+import { ClaudeCodeResultMessage, CLAUDE_CODE_PATH, log, AgentStateManager, type ModelUsageMap, type TokenUsageSnapshot, MAX_THINKING_TOKENS, TOKEN_LIMIT_THRESHOLD } from '../core';
 
 export interface AgentResult {
   success: boolean;
@@ -16,6 +16,12 @@ export interface AgentResult {
   modelUsage?: ModelUsageMap;
   /** The state path if state tracking was enabled */
   statePath?: string;
+  /** True when the agent was terminated due to approaching the token limit. */
+  tokenLimitExceeded?: boolean;
+  /** Token usage snapshot at the time of interruption. */
+  tokenUsage?: TokenUsageSnapshot;
+  /** Partial output captured before token limit termination. */
+  partialOutput?: string;
 }
 
 /**
@@ -69,11 +75,40 @@ function extractToolUseFromMessage(message: any): { name: string; input: string 
 }
 
 /**
+ * Computes total token counts across all models in a ModelUsageMap.
+ * Sums inputTokens + outputTokens + cacheCreationInputTokens (excludes cacheReadInputTokens
+ * since cached data doesn't count against the thinking budget).
+ */
+export function computeTotalTokens(modelUsage: ModelUsageMap): {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  total: number;
+} {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheCreationTokens = 0;
+
+  for (const usage of Object.values(modelUsage)) {
+    inputTokens += usage.inputTokens;
+    outputTokens += usage.outputTokens;
+    cacheCreationTokens += usage.cacheCreationInputTokens;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    cacheCreationTokens,
+    total: inputTokens + outputTokens + cacheCreationTokens,
+  };
+}
+
+/**
  * Parses JSONL output from Claude and extracts result information.
  */
 function parseJsonlOutput(
   text: string,
-  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number; modelUsage: ModelUsageMap | undefined },
+  state: { lastResult: ClaudeCodeResultMessage | null; fullOutput: string; turnCount: number; toolCount: number; modelUsage: ModelUsageMap | undefined; totalTokens: number },
   onProgress?: ProgressCallback,
   statePath?: string
 ): void {
@@ -92,6 +127,8 @@ function parseJsonlOutput(
         state.lastResult = parsed as ClaudeCodeResultMessage;
         if (parsed.modelUsage && typeof parsed.modelUsage === 'object') {
           state.modelUsage = parsed.modelUsage as ModelUsageMap;
+          const totals = computeTotalTokens(state.modelUsage);
+          state.totalTokens = totals.total;
         }
       }
 
@@ -191,7 +228,11 @@ export async function runClaudeAgent(
       turnCount: 0,
       toolCount: 0,
       modelUsage: undefined as ModelUsageMap | undefined,
+      totalTokens: 0,
     };
+
+    let tokenLimitReached = false;
+    const tokenThreshold = MAX_THINKING_TOKENS * TOKEN_LIMIT_THRESHOLD;
 
     const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
 
@@ -199,6 +240,15 @@ export async function runClaudeAgent(
       const text = data.toString();
       outputStream.write(text);
       parseJsonlOutput(text, state, onProgress, statePath);
+
+      if (!tokenLimitReached && state.totalTokens >= tokenThreshold) {
+        tokenLimitReached = true;
+        log(`${agentName}: Token limit threshold reached (${state.totalTokens}/${MAX_THINKING_TOKENS} tokens, ${(TOKEN_LIMIT_THRESHOLD * 100).toFixed(0)}%). Terminating agent.`, 'info');
+        if (statePath) {
+          AgentStateManager.appendLog(statePath, `Token limit threshold reached: ${state.totalTokens}/${MAX_THINKING_TOKENS}`);
+        }
+        claude.kill('SIGTERM');
+      }
     });
 
     claude.stderr.on('data', (data: Buffer) => {
@@ -230,6 +280,30 @@ export async function runClaudeAgent(
           statePath,
           `Completed: exit code ${code}, turns: ${state.turnCount}, tools: ${state.toolCount}`
         );
+      }
+
+      if (tokenLimitReached) {
+        log(`${agentName} terminated due to token limit`, 'info');
+        const tokenTotals = state.modelUsage ? computeTotalTokens(state.modelUsage) : undefined;
+        const snapshot: TokenUsageSnapshot | undefined = tokenTotals ? {
+          totalInputTokens: tokenTotals.inputTokens,
+          totalOutputTokens: tokenTotals.outputTokens,
+          totalCacheCreationTokens: tokenTotals.cacheCreationTokens,
+          totalTokens: tokenTotals.total,
+          maxTokens: MAX_THINKING_TOKENS,
+          thresholdPercent: TOKEN_LIMIT_THRESHOLD,
+        } : undefined;
+        resolve({
+          success: true,
+          tokenLimitExceeded: true,
+          output: state.lastResult?.result || state.fullOutput,
+          partialOutput: state.fullOutput,
+          tokenUsage: snapshot,
+          totalCostUsd: state.lastResult?.totalCostUsd,
+          modelUsage: state.modelUsage,
+          statePath,
+        });
+        return;
       }
 
       if (code === 0 && state.lastResult) {
@@ -345,7 +419,11 @@ export async function runClaudeAgentWithCommand(
       turnCount: 0,
       toolCount: 0,
       modelUsage: undefined as ModelUsageMap | undefined,
+      totalTokens: 0,
     };
+
+    let tokenLimitReached = false;
+    const tokenThreshold = MAX_THINKING_TOKENS * TOKEN_LIMIT_THRESHOLD;
 
     const outputStream = fs.createWriteStream(outputFile, { flags: 'a' });
 
@@ -353,6 +431,15 @@ export async function runClaudeAgentWithCommand(
       const text = data.toString();
       outputStream.write(text);
       parseJsonlOutput(text, state, onProgress, statePath);
+
+      if (!tokenLimitReached && state.totalTokens >= tokenThreshold) {
+        tokenLimitReached = true;
+        log(`${agentName}: Token limit threshold reached (${state.totalTokens}/${MAX_THINKING_TOKENS} tokens, ${(TOKEN_LIMIT_THRESHOLD * 100).toFixed(0)}%). Terminating agent.`, 'info');
+        if (statePath) {
+          AgentStateManager.appendLog(statePath, `Token limit threshold reached: ${state.totalTokens}/${MAX_THINKING_TOKENS}`);
+        }
+        claude.kill('SIGTERM');
+      }
     });
 
     claude.stderr.on('data', (data: Buffer) => {
@@ -384,6 +471,30 @@ export async function runClaudeAgentWithCommand(
           statePath,
           `Completed: exit code ${code}, turns: ${state.turnCount}, tools: ${state.toolCount}`
         );
+      }
+
+      if (tokenLimitReached) {
+        log(`${agentName} terminated due to token limit`, 'info');
+        const tokenTotals = state.modelUsage ? computeTotalTokens(state.modelUsage) : undefined;
+        const snapshot: TokenUsageSnapshot | undefined = tokenTotals ? {
+          totalInputTokens: tokenTotals.inputTokens,
+          totalOutputTokens: tokenTotals.outputTokens,
+          totalCacheCreationTokens: tokenTotals.cacheCreationTokens,
+          totalTokens: tokenTotals.total,
+          maxTokens: MAX_THINKING_TOKENS,
+          thresholdPercent: TOKEN_LIMIT_THRESHOLD,
+        } : undefined;
+        resolve({
+          success: true,
+          tokenLimitExceeded: true,
+          output: state.lastResult?.result || state.fullOutput,
+          partialOutput: state.fullOutput,
+          tokenUsage: snapshot,
+          totalCostUsd: state.lastResult?.totalCostUsd,
+          modelUsage: state.modelUsage,
+          statePath,
+        });
+        return;
       }
 
       if (code === 0 && state.lastResult) {

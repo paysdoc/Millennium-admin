@@ -7,6 +7,7 @@
 export {
   runClaudeAgent,
   runClaudeAgentWithCommand,
+  computeTotalTokens,
   type AgentResult,
   type ProgressInfo,
   type ProgressCallback,
