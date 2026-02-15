@@ -50,6 +50,7 @@ vi.mock('../core', async (importOriginal) => {
     getNextStage: vi.fn().mockReturnValue('classified'),
     MAX_TEST_RETRY_ATTEMPTS: 5,
     MAX_REVIEW_RETRY_ATTEMPTS: 3,
+    MAX_TOKEN_CONTINUATIONS: 3,
   };
 });
 
@@ -468,6 +469,39 @@ describe('executeBuildPhase', () => {
     const config = createWorkflowConfig();
 
     await expect(executeBuildPhase(config)).rejects.toThrow('Build Agent failed');
+  });
+
+  it('handles token limit recovery and continues with a new agent', async () => {
+    vi.mocked(runBuildAgent)
+      .mockResolvedValueOnce({
+        success: true,
+        output: 'Partial work done',
+        tokenLimitExceeded: true,
+        totalCostUsd: 0.5,
+        tokenUsage: {
+          totalInputTokens: 100000,
+          totalOutputTokens: 60000,
+          totalCacheCreationTokens: 20000,
+          totalTokens: 180000,
+          maxTokens: 200000,
+          thresholdPercent: 0.9,
+        },
+        modelUsage: {},
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        output: 'Build completed',
+        totalCostUsd: 0.3,
+        modelUsage: {},
+      });
+    const config = createWorkflowConfig();
+
+    const result = await executeBuildPhase(config);
+
+    expect(runBuildAgent).toHaveBeenCalledTimes(2);
+    expect(result.costUsd).toBeCloseTo(0.8);
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'token_limit_recovery', expect.anything());
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'implemented', expect.anything());
   });
 });
 

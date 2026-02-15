@@ -28,6 +28,7 @@ import {
   getNextStage,
   MAX_TEST_RETRY_ATTEMPTS,
   MAX_REVIEW_RETRY_ATTEMPTS,
+  MAX_TOKEN_CONTINUATIONS,
   COST_REPORT_CURRENCIES,
   type ModelUsageMap,
   mergeModelUsageMaps,
@@ -319,8 +320,35 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   return { costUsd, modelUsage };
 }
 
+/** Maximum characters of previous output to include in a continuation prompt. */
+const MAX_CONTINUATION_OUTPUT_LENGTH = 5000;
+
+/**
+ * Builds a continuation prompt that includes the original plan and previous agent's output.
+ */
+function buildContinuationPrompt(originalPlanContent: string, previousOutput: string): string {
+  const truncatedOutput = previousOutput.length > MAX_CONTINUATION_OUTPUT_LENGTH
+    ? previousOutput.slice(-MAX_CONTINUATION_OUTPUT_LENGTH)
+    : previousOutput;
+
+  return `${originalPlanContent}
+
+## Continuation Context
+
+The previous build agent was terminated because it approached the token usage limit.
+Below is a summary of what the previous agent accomplished. Continue implementing
+the plan from where the previous agent left off. Do NOT re-do work that was already completed.
+
+<previous-agent-output>
+${truncatedOutput}
+</previous-agent-output>`;
+}
+
 /**
  * Executes the Build phase: read plan, run build agent, commit implementation.
+ * Includes token limit recovery: when the agent approaches the token limit,
+ * it is gracefully terminated, progress is saved, and a new agent is spawned
+ * with context from the previous run. Repeats up to MAX_TOKEN_CONTINUATIONS times.
  */
 export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costUsd: number; modelUsage: ModelUsageMap }> {
   const { recoveryState, orchestratorStatePath, orchestratorName, adwId, issueNumber, issue, issueType, ctx, worktreePath, logsDir } = config;
@@ -344,67 +372,108 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
     postWorkflowComment(issueNumber, 'implementing', ctx);
     log('Running Build Agent...', 'info');
 
-    const buildAgentStatePath = AgentStateManager.initializeState(adwId, 'build-agent', orchestratorStatePath);
-    AgentStateManager.writeState(buildAgentStatePath, {
-      adwId,
-      issueNumber,
-      branchName: currentBranch,
-      planFile: planPath,
-      issueClass: issueType,
-      agentName: 'build-agent',
-      parentAgent: orchestratorName,
-      execution: AgentStateManager.createExecutionState('running'),
-    });
+    let currentPlanContent = planContent;
+    let continuationNumber = 0;
+    let buildCompleted = false;
 
-    let lastProgressUpdate = Date.now();
-    const PROGRESS_UPDATE_INTERVAL_MS = 60000;
+    while (continuationNumber <= MAX_TOKEN_CONTINUATIONS && !buildCompleted) {
+      const buildAgentStatePath = AgentStateManager.initializeState(adwId, 'build-agent', orchestratorStatePath);
+      AgentStateManager.writeState(buildAgentStatePath, {
+        adwId,
+        issueNumber,
+        branchName: currentBranch,
+        planFile: planPath,
+        issueClass: issueType,
+        agentName: 'build-agent',
+        parentAgent: orchestratorName,
+        execution: AgentStateManager.createExecutionState('running'),
+      });
 
-    const buildProgressCallback: ProgressCallback = (info: ProgressInfo) => {
-      ctx.buildProgress = {
-        turnCount: info.turnCount || 0,
-        toolCount: info.toolCount || 0,
-        lastToolName: info.toolName,
-        lastText: info.text,
+      let lastProgressUpdate = Date.now();
+      const PROGRESS_UPDATE_INTERVAL_MS = 60000;
+
+      const buildProgressCallback: ProgressCallback = (info: ProgressInfo) => {
+        ctx.buildProgress = {
+          turnCount: info.turnCount || 0,
+          toolCount: info.toolCount || 0,
+          lastToolName: info.toolName,
+          lastText: info.text,
+        };
+
+        if (info.type === 'tool_use') {
+          log(`  [Turn ${info.turnCount}] Tool: ${info.toolName}`, 'info');
+        }
+
+        const now = Date.now();
+        if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL_MS) {
+          postWorkflowComment(issueNumber, 'build_progress', ctx);
+          lastProgressUpdate = now;
+        }
       };
 
-      if (info.type === 'tool_use') {
-        log(`  [Turn ${info.turnCount}] Tool: ${info.toolName}`, 'info');
+      const buildResult = await runBuildAgent(issue, logsDir, currentPlanContent, buildProgressCallback, buildAgentStatePath, worktreePath);
+
+      // Accumulate cost and model usage across continuations
+      costUsd += buildResult.totalCostUsd || 0;
+      if (buildResult.modelUsage) {
+        modelUsage = mergeModelUsageMaps(modelUsage, buildResult.modelUsage);
       }
 
-      const now = Date.now();
-      if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL_MS) {
-        postWorkflowComment(issueNumber, 'build_progress', ctx);
-        lastProgressUpdate = now;
+      if (buildResult.tokenLimitExceeded) {
+        continuationNumber++;
+        log(`Build agent hit token limit (continuation ${continuationNumber}/${MAX_TOKEN_CONTINUATIONS})`, 'info');
+
+        // Save partial state
+        AgentStateManager.writeState(buildAgentStatePath, {
+          output: buildResult.output.substring(0, 1000),
+          tokenUsage: buildResult.tokenUsage,
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            true
+          ),
+        });
+        AgentStateManager.appendLog(orchestratorStatePath, `Build agent hit token limit (continuation ${continuationNumber})`);
+
+        if (continuationNumber > MAX_TOKEN_CONTINUATIONS) {
+          throw new Error(`Build agent exceeded maximum token continuations (${MAX_TOKEN_CONTINUATIONS}). Last partial output: ${buildResult.output.substring(0, 500)}`);
+        }
+
+        // Post recovery comment
+        ctx.tokenContinuationNumber = continuationNumber;
+        ctx.tokenUsage = buildResult.tokenUsage;
+        postWorkflowComment(issueNumber, 'token_limit_recovery', ctx);
+
+        // Build continuation prompt with previous output
+        currentPlanContent = buildContinuationPrompt(planContent, buildResult.output);
+        continue;
       }
-    };
 
-    const buildResult = await runBuildAgent(issue, logsDir, planContent, buildProgressCallback, buildAgentStatePath, worktreePath);
+      if (!buildResult.success) {
+        AgentStateManager.writeState(buildAgentStatePath, {
+          execution: AgentStateManager.completeExecution(
+            AgentStateManager.createExecutionState('running'),
+            false,
+            buildResult.output
+          ),
+        });
+        throw new Error(`Build Agent failed: ${buildResult.output}`);
+      }
 
-    if (!buildResult.success) {
+      // Agent completed successfully
       AgentStateManager.writeState(buildAgentStatePath, {
+        output: buildResult.output.substring(0, 1000),
         execution: AgentStateManager.completeExecution(
           AgentStateManager.createExecutionState('running'),
-          false,
-          buildResult.output
+          true
         ),
       });
-      throw new Error(`Build Agent failed: ${buildResult.output}`);
+
+      ctx.buildOutput = buildResult.output;
+      buildCompleted = true;
     }
 
-    AgentStateManager.writeState(buildAgentStatePath, {
-      output: buildResult.output.substring(0, 1000),
-      execution: AgentStateManager.completeExecution(
-        AgentStateManager.createExecutionState('running'),
-        true
-      ),
-    });
-
     AgentStateManager.appendLog(orchestratorStatePath, 'Build completed');
-
-    ctx.buildOutput = buildResult.output;
     postWorkflowComment(issueNumber, 'implemented', ctx);
-    costUsd = buildResult.totalCostUsd || 0;
-    if (buildResult.modelUsage) modelUsage = buildResult.modelUsage;
   } else {
     log('Skipping Build Agent (already completed)', 'info');
   }

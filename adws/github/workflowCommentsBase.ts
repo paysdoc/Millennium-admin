@@ -41,6 +41,7 @@ const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
   ':link: Pull Request Created': 'pr_created',
   ':tada: ADW Workflow Completed': 'completed',
   ':x: ADW Workflow Error': 'error',
+  ':warning: Token Limit Recovery': 'token_limit_recovery',
 };
 
 /** ADW comment heading pattern: `## :emoji_name: Title` */

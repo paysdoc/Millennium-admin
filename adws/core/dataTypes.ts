@@ -249,6 +249,18 @@ export interface ClaudeCodeResultMessage {
 }
 
 /**
+ * Snapshot of cumulative token usage at a point in time.
+ */
+export interface TokenUsageSnapshot {
+  readonly totalInputTokens: number;
+  readonly totalOutputTokens: number;
+  readonly totalCacheCreationTokens: number;
+  readonly totalTokens: number;
+  readonly maxTokens: number;
+  readonly thresholdPercent: number;
+}
+
+/**
  * Workflow stages for ADW progress tracking.
  */
 export type WorkflowStage =
@@ -277,7 +289,9 @@ export type WorkflowStage =
   | 'review_running'
   | 'review_passed'
   | 'review_failed'
-  | 'review_patching';
+  | 'review_patching'
+  // Token limit recovery
+  | 'token_limit_recovery';
 
 /**
  * PR review comment from GitHub API.
@@ -464,6 +478,8 @@ export interface AgentState {
   execution: AgentExecutionState;
   /** Agent-specific output or summary */
   output?: string;
+  /** Token usage snapshot at time of interruption (for token limit recovery). */
+  tokenUsage?: TokenUsageSnapshot;
   /** Additional metadata for agent-specific data */
   metadata?: Record<string, unknown>;
 }

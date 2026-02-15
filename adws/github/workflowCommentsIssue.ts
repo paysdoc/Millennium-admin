@@ -2,7 +2,7 @@
  * Issue workflow comment formatting and posting functions.
  */
 
-import { WorkflowStage, IssueClassSlashCommand, log, type CostBreakdown, formatCostBreakdownMarkdown } from '../core';
+import { WorkflowStage, IssueClassSlashCommand, log, type CostBreakdown, formatCostBreakdownMarkdown, type TokenUsageSnapshot } from '../core';
 import { commentOnIssue } from './githubApi';
 import { ADW_SIGNATURE, truncateText } from './workflowCommentsBase';
 
@@ -25,6 +25,10 @@ export interface WorkflowContext {
     lastText?: string;
   };
   costBreakdown?: CostBreakdown;
+  /** Which continuation attempt this is (1, 2, 3...) for token limit recovery. */
+  tokenContinuationNumber?: number;
+  /** Token usage snapshot at the time of interruption. */
+  tokenUsage?: TokenUsageSnapshot;
 }
 
 const issueTypeLabels: Record<IssueClassSlashCommand, string> = {
@@ -110,6 +114,15 @@ function formatErrorComment(ctx: WorkflowContext): string {
   return `## :x: ADW Workflow Error\n\nAn error occurred during the automated development workflow.\n\n**Error:** ${ctx.errorMessage || 'Unknown error'}\n**ADW ID:** \`${ctx.adwId}\`\n\nPlease check the logs for more details.${costSection}${ADW_SIGNATURE}`;
 }
 
+function formatTokenLimitRecoveryComment(ctx: WorkflowContext): string {
+  const continuationNumber = ctx.tokenContinuationNumber ?? 1;
+  const usage = ctx.tokenUsage;
+  const usageDetails = usage
+    ? `\n**Tokens used:** ${usage.totalTokens.toLocaleString()} / ${usage.maxTokens.toLocaleString()} (${(usage.thresholdPercent * 100).toFixed(0)}% threshold)`
+    : '';
+  return `## :warning: Token Limit Recovery\n\nThe build agent approached the token limit and was gracefully terminated. Spawning a continuation agent to resume implementation.\n\n**Continuation:** #${continuationNumber}${usageDetails}\n**ADW ID:** \`${ctx.adwId}\`${ADW_SIGNATURE}`;
+}
+
 /** Formats the resuming workflow comment. */
 export function formatResumingComment(ctx: WorkflowContext, resumeFrom: WorkflowStage): string {
   return `## :arrows_counterclockwise: ADW Workflow Resuming\n\nResuming automated development workflow from previous run.\n\n**Resuming from:** ${resumeFrom}\n**ADW ID:** \`${ctx.adwId}\`${ADW_SIGNATURE}`;
@@ -134,6 +147,7 @@ export function formatWorkflowComment(stage: WorkflowStage, ctx: WorkflowContext
     case 'pr_created': return formatPrCreatedComment(ctx);
     case 'completed': return formatCompletedComment(ctx);
     case 'error': return formatErrorComment(ctx);
+    case 'token_limit_recovery': return formatTokenLimitRecoveryComment(ctx);
     default: return `## ADW Workflow Update\n\n**Stage:** ${stage}\n**ADW ID:** \`${ctx.adwId}\`${ADW_SIGNATURE}`;
   }
 }

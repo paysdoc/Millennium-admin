@@ -3,7 +3,7 @@
  */
 
 // Configuration
-export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS, MAX_REVIEW_RETRY_ATTEMPTS, WORKTREES_DIR, COST_REPORT_CURRENCIES } from './config';
+export { CLAUDE_CODE_PATH, GITHUB_PAT, LOGS_DIR, SPECS_DIR, AGENTS_STATE_DIR, MAX_TEST_RETRY_ATTEMPTS, MAX_REVIEW_RETRY_ATTEMPTS, WORKTREES_DIR, COST_REPORT_CURRENCIES, MAX_THINKING_TOKENS, TOKEN_LIMIT_THRESHOLD, MAX_TOKEN_CONTINUATIONS } from './config';
 
 // Data types
 export type {
@@ -33,6 +33,7 @@ export type {
   AgentExecutionState,
   AgentState,
   IssueCommentSummary,
+  TokenUsageSnapshot,
 } from './dataTypes';
 
 // Prefix maps for consistent branch naming and commit messages
