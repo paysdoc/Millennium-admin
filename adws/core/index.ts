@@ -83,5 +83,6 @@ export {
   fetchExchangeRates,
   buildCostBreakdown,
   formatCostBreakdownMarkdown,
+  persistTokenCounts,
 } from './costReport';
 

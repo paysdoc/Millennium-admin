@@ -3,7 +3,7 @@
  * Modeled on testRetry.ts. Iterates: review → patch blockers → commit+push → re-review.
  */
 
-import { log, AgentStateManager, type IssueClassSlashCommand, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap } from '../core';
+import { log, AgentStateManager, type IssueClassSlashCommand, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap, persistTokenCounts } from '../core';
 import { runReviewAgent, type ReviewIssue } from './reviewAgent';
 import { runPatchAgent } from './patchAgent';
 import { runCommitAgent } from './gitAgent';
@@ -55,6 +55,7 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
     );
     costUsd += reviewResult.totalCostUsd || 0;
     if (reviewResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, reviewResult.modelUsage);
+    persistTokenCounts(statePath, costUsd, modelUsage);
 
     if (reviewResult.passed) {
       log('Review passed — no blocker issues found!', 'success');
@@ -76,6 +77,7 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
       );
       costUsd += patchResult.totalCostUsd || 0;
       if (patchResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, patchResult.modelUsage);
+      persistTokenCounts(statePath, costUsd, modelUsage);
 
       const msg = patchResult.success ? 'Patch applied for' : 'Patch failed for';
       log(`${msg} blocker #${blockerIssue.review_issue_number}`, patchResult.success ? 'success' : 'error');

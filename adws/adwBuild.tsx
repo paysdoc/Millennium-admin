@@ -33,6 +33,7 @@ import {
   shouldExecuteStage,
   hasUncommittedChanges,
   getNextStage,
+  persistTokenCounts,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -287,6 +288,7 @@ async function main(): Promise<void> {
 
       ctx.buildOutput = buildResult.output;
       buildCostUsd = buildResult.totalCostUsd || 0;
+      persistTokenCounts(orchestratorStatePath, buildCostUsd, buildResult.modelUsage ?? {});
       postWorkflowComment(issueNumber, 'implemented', ctx);
     } else {
       log('Skipping Build Agent (already completed)', 'info');

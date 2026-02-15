@@ -31,8 +31,10 @@ vi.mock('../core', async (importOriginal) => {
   return {
     ...actual,
     log: vi.fn(),
+    persistTokenCounts: vi.fn(),
     AgentStateManager: {
       readState: vi.fn().mockReturnValue({ adwId: 'adw-123' }),
+      writeState: vi.fn(),
       appendLog: vi.fn(),
       initializeState: vi.fn().mockReturnValue('/mock/state'),
     },

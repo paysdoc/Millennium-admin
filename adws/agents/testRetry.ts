@@ -3,7 +3,7 @@
  * Used by both adwTest.tsx and adwPrReview.tsx workflows.
  */
 
-import { log, AgentStateManager, AgentIdentifier, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap } from '../core';
+import { log, AgentStateManager, AgentIdentifier, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap, persistTokenCounts } from '../core';
 import {
   runTestAgent,
   runE2ETestAgent,
@@ -52,6 +52,7 @@ export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<Tes
     const testResult = await runTestAgent(logsDir, initState(statePath, 'test-agent'), cwd);
     costUsd += testResult.totalCostUsd || 0;
     if (testResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, testResult.modelUsage);
+    persistTokenCounts(statePath, costUsd, modelUsage);
 
     if (!testResult.success) {
       log('Test agent execution failed', 'error');
@@ -77,6 +78,7 @@ export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<Tes
       const result = await runResolveTestAgent(failedTest, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
       costUsd += result.totalCostUsd || 0;
       if (result.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, result.modelUsage);
+      persistTokenCounts(statePath, costUsd, modelUsage);
       const msg = result.success ? 'Resolution attempted for' : 'Failed to resolve';
       log(`${msg}: ${failedTest.test_name}`, result.success ? 'success' : 'error');
       AgentStateManager.appendLog(statePath, `${msg}: ${failedTest.test_name}`);
@@ -112,6 +114,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
     const e2eResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
     costUsd += e2eResult.totalCostUsd || 0;
     if (e2eResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, e2eResult.modelUsage);
+    persistTokenCounts(statePath, costUsd, modelUsage);
 
     if (!e2eResult.passed && e2eResult.e2eResult) {
       failedE2ETests.set(testFile, { result: e2eResult.e2eResult, retryCount: 0 });
@@ -150,12 +153,14 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       const resolveResult = await runResolveE2ETestAgent(result, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
       costUsd += resolveResult.totalCostUsd || 0;
       if (resolveResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, resolveResult.modelUsage);
+      persistTokenCounts(statePath, costUsd, modelUsage);
       totalRetries++;
 
       log(`Re-running E2E test: ${testFile}`, 'info');
       const retryResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
       costUsd += retryResult.totalCostUsd || 0;
       if (retryResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, retryResult.modelUsage);
+      persistTokenCounts(statePath, costUsd, modelUsage);
 
       if (retryResult.passed) {
         failedE2ETests.delete(testFile);

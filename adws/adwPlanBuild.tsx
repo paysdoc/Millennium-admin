@@ -17,7 +17,7 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { mergeModelUsageMaps } from './core';
+import { mergeModelUsageMaps, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -70,14 +70,24 @@ async function main(): Promise<void> {
 
   const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-orchestrator');
 
+  let totalCostUsd = 0;
+  let totalModelUsage = {};
+
   try {
     const planResult = await executePlanPhase(config);
+    totalCostUsd += planResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, planResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     const buildResult = await executeBuildPhase(config);
+    totalCostUsd += buildResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, buildResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     executePRPhase(config);
-    const totalModelUsage = mergeModelUsageMaps(planResult.modelUsage, buildResult.modelUsage);
-    await completeWorkflow(config, planResult.costUsd + buildResult.costUsd, undefined, totalModelUsage);
+    await completeWorkflow(config, totalCostUsd, undefined, totalModelUsage);
   } catch (error) {
-    handleWorkflowError(config, error);
+    handleWorkflowError(config, error, totalCostUsd, totalModelUsage);
   }
 }
 
