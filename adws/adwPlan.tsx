@@ -15,7 +15,7 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { type IssueClassSlashCommand } from './core';
+import { type IssueClassSlashCommand, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -103,6 +103,7 @@ async function main(): Promise<void> {
 
   try {
     const planResult = await executePlanPhase(config);
+    persistTokenCounts(config.orchestratorStatePath, planResult.costUsd, planResult.modelUsage);
     await completeWorkflow(config, planResult.costUsd, undefined, planResult.modelUsage);
   } catch (error) {
     handleWorkflowError(config, error);

@@ -19,7 +19,7 @@
  * - MAX_TEST_RETRY_ATTEMPTS: Maximum retry attempts for tests (default: 5)
  */
 
-import { mergeModelUsageMaps } from './core';
+import { mergeModelUsageMaps, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -74,19 +74,33 @@ async function main(): Promise<void> {
 
   const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-orchestrator');
 
+  let totalCostUsd = 0;
+  let totalModelUsage = {};
+
   try {
     const planResult = await executePlanPhase(config);
+    totalCostUsd += planResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, planResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     const buildResult = await executeBuildPhase(config);
+    totalCostUsd += buildResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, buildResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     const testResult = await executeTestPhase(config);
+    totalCostUsd += testResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, testResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     executePRPhase(config);
-    const totalModelUsage = mergeModelUsageMaps(planResult.modelUsage, buildResult.modelUsage, testResult.modelUsage);
-    await completeWorkflow(config, planResult.costUsd + buildResult.costUsd + testResult.costUsd, {
+    await completeWorkflow(config, totalCostUsd, {
       unitTestsPassed: testResult.unitTestsPassed,
       e2eTestsPassed: testResult.e2eTestsPassed,
       totalTestRetries: testResult.totalRetries,
     }, totalModelUsage);
   } catch (error) {
-    handleWorkflowError(config, error);
+    handleWorkflowError(config, error, totalCostUsd, totalModelUsage);
   }
 }
 

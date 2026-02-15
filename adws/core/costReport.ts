@@ -6,6 +6,7 @@
 import type { ModelUsageMap, CostBreakdown, CurrencyAmount } from './costTypes';
 import { emptyModelUsage } from './costTypes';
 import { log } from './utils';
+import { AgentStateManager } from './agentState';
 
 /** Maps common currency codes to their symbols. */
 export const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = {
@@ -144,4 +145,18 @@ export function formatCostBreakdownMarkdown(breakdown: CostBreakdown): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Persists accumulated token counts to the orchestrator's state.json metadata.
+ * Reads existing state first to preserve other metadata fields, then merges
+ * totalCostUsd and modelUsage into the metadata object.
+ */
+export function persistTokenCounts(statePath: string, costUsd: number, modelUsage: ModelUsageMap): void {
+  const existingState = AgentStateManager.readState(statePath);
+  const existingMetadata = (existingState?.metadata ?? {}) as Record<string, unknown>;
+
+  AgentStateManager.writeState(statePath, {
+    metadata: { ...existingMetadata, totalCostUsd: costUsd, modelUsage },
+  });
 }

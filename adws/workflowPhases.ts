@@ -34,6 +34,7 @@ import {
   emptyModelUsageMap,
   buildCostBreakdown,
   formatCostBreakdownMarkdown,
+  persistTokenCounts,
 } from './core';
 import {
   fetchGitHubIssue,
@@ -629,9 +630,19 @@ export async function executeReviewPhase(config: WorkflowConfig): Promise<{
 
 /**
  * Handles workflow errors: posts error comment, writes failed state, and exits.
+ * Optionally persists accumulated token counts so cost data survives the crash.
  */
-export function handleWorkflowError(config: WorkflowConfig, error: unknown): never {
+export function handleWorkflowError(
+  config: WorkflowConfig,
+  error: unknown,
+  costUsd?: number,
+  modelUsage?: ModelUsageMap,
+): never {
   const { orchestratorStatePath, orchestratorName, issueNumber, ctx } = config;
+
+  if (costUsd !== undefined && modelUsage) {
+    persistTokenCounts(orchestratorStatePath, costUsd, modelUsage);
+  }
 
   ctx.errorMessage = String(error);
   postWorkflowComment(issueNumber, 'error', ctx);
