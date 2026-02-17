@@ -23,6 +23,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   log,
   generateAdwId,
@@ -92,12 +93,13 @@ async function main(): Promise<void> {
   }
 
   // Read plan content
+  const fullPlanPath = cwd ? path.join(cwd, planPath) : planPath;
   let planContent: string;
   try {
-    planContent = fs.readFileSync(planPath, 'utf-8');
-    log(`Plan loaded from: ${planPath}`, 'success');
+    planContent = fs.readFileSync(fullPlanPath, 'utf-8');
+    log(`Plan loaded from: ${fullPlanPath}`, 'success');
   } catch (error) {
-    log(`Cannot read plan file at ${planPath}: ${error}`, 'error');
+    log(`Cannot read plan file at ${fullPlanPath}: ${error}`, 'error');
     process.exit(1);
   }
 
