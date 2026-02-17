@@ -31,7 +31,7 @@ vi.mock('../core', async (importOriginal) => {
     ...actual,
     log: vi.fn(),
     ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
-    generateAdwId: vi.fn().mockReturnValue('adw-test-issue-abc123'),
+    generateAdwId: vi.fn().mockReturnValue('test-issue-abc123'),
     commitPrefixMap: {
       '/feature': 'feat:',
       '/bug': 'fix:',
@@ -309,7 +309,7 @@ describe('initializeWorkflow', () => {
 
     expect(detectRecoveryState).toHaveBeenCalled();
     expect(generateAdwId).toHaveBeenCalledWith('Test issue');
-    expect(config.adwId).toBe('adw-test-issue-abc123');
+    expect(config.adwId).toBe('test-issue-abc123');
 
     // Verify detectRecoveryState was called before generateAdwId
     const recoveryCallOrder = vi.mocked(detectRecoveryState).mock.invocationCallOrder[0];
@@ -342,7 +342,7 @@ describe('initializeWorkflow', () => {
 
     expect(generateAdwId).toHaveBeenCalledWith('Test issue');
     expect(runGenerateBranchNameAgent).toHaveBeenCalled();
-    expect(config.adwId).toBe('adw-test-issue-abc123');
+    expect(config.adwId).toBe('test-issue-abc123');
     expect(config.branchName).toBe('feature/issue-1-test');
   });
 
@@ -765,7 +765,7 @@ describe('initializePRReviewWorkflow', () => {
     const config = initializePRReviewWorkflow(42, null);
 
     expect(generateAdwId).toHaveBeenCalledWith('Test PR');
-    expect(config.adwId).toBe('adw-test-issue-abc123');
+    expect(config.adwId).toBe('test-issue-abc123');
   });
 });
 

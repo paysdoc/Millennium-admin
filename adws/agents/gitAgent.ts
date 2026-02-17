@@ -21,13 +21,38 @@ issue: ${JSON.stringify(issue)}`;
 }
 
 /**
+ * Validates and sanitizes a git branch name.
+ * Strips invalid characters, enforces max length, and ensures the result is non-empty.
+ */
+export function validateBranchName(name: string): string {
+  let sanitized = name.trim();
+
+  // Remove characters invalid in git branch names
+  sanitized = sanitized.replace(/[~^:*?[\]@{}\\]/g, '');
+  sanitized = sanitized.replace(/\.\./g, '');
+  sanitized = sanitized.replace(/\s+/g, '-');
+
+  // Enforce max length of 100 characters, ensuring no trailing dash
+  if (sanitized.length > 100) {
+    sanitized = sanitized.substring(0, 100).replace(/-$/, '');
+  }
+
+  if (!sanitized) {
+    throw new Error('Branch name is empty after validation');
+  }
+
+  return sanitized;
+}
+
+/**
  * Extracts the branch name from the agent's output.
  * The skill returns ONLY the branch name.
  */
 export function extractBranchNameFromOutput(output: string): string {
   const trimmed = output.trim();
   const lines = trimmed.split('\n').filter(line => line.trim());
-  return lines[lines.length - 1].trim();
+  const rawName = lines[lines.length - 1].trim();
+  return validateBranchName(rawName);
 }
 
 /**

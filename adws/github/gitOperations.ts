@@ -65,9 +65,9 @@ export function createFeatureBranch(
 
     if (existingBranches.includes(branchName)) {
       log(`Branch ${branchName} already exists, checking out...`, 'info');
-      execSync(`git checkout ${branchName}`, { stdio: 'pipe', cwd });
+      execSync(`git checkout "${branchName}"`, { stdio: 'pipe', cwd });
     } else {
-      execSync(`git checkout -b ${branchName}`, { stdio: 'pipe', cwd });
+      execSync(`git checkout -b "${branchName}"`, { stdio: 'pipe', cwd });
       log(`Created branch: ${branchName}`, 'success');
     }
 
@@ -82,8 +82,8 @@ export function createFeatureBranch(
  */
 export function checkoutBranch(branchName: string): void {
   try {
-    execSync(`git checkout ${branchName}`, { stdio: 'pipe' });
-    execSync(`git pull origin ${branchName}`, { stdio: 'pipe' });
+    execSync(`git checkout "${branchName}"`, { stdio: 'pipe' });
+    execSync(`git pull origin "${branchName}"`, { stdio: 'pipe' });
     log(`Checked out and pulled latest for branch: ${branchName}`, 'success');
   } catch (error) {
     throw new Error(`Failed to checkout branch ${branchName}: ${error}`);
@@ -121,7 +121,7 @@ export function commitChanges(message: string, cwd?: string): boolean {
  * @param cwd - Optional working directory to run the command in
  */
 export function pushBranch(branchName: string, cwd?: string): void {
-  execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd });
+  execSync(`git push -u origin "${branchName}"`, { stdio: 'pipe', cwd });
   log(`Pushed branch to origin`, 'success');
 }
 

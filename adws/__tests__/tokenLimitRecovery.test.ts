@@ -16,7 +16,7 @@ vi.mock('../core', async (importOriginal) => {
     ...actual,
     log: vi.fn(),
     ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
-    generateAdwId: vi.fn().mockReturnValue('adw-test-issue-abc123'),
+    generateAdwId: vi.fn().mockReturnValue('test-issue-abc123'),
     AgentStateManager: {
       writeState: vi.fn(),
       appendLog: vi.fn(),
