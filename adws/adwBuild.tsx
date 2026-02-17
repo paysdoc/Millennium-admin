@@ -23,6 +23,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   log,
   generateAdwId,
@@ -84,20 +85,21 @@ async function main(): Promise<void> {
   const branchName = getCurrentBranch(cwd || undefined);
   log(`Current branch: ${branchName}`, 'info');
 
-  const planPath = getPlanFilePath(issueNumber);
-  if (!planFileExists(issueNumber)) {
+  const planPath = getPlanFilePath(issueNumber, cwd || undefined);
+  if (!planFileExists(issueNumber, cwd || undefined)) {
     log(`Plan file not found: ${planPath}`, 'error');
     log('Run adwPlan.tsx first to generate the plan.', 'error');
     process.exit(1);
   }
 
   // Read plan content
+  const fullPlanPath = cwd ? path.join(cwd, planPath) : planPath;
   let planContent: string;
   try {
-    planContent = fs.readFileSync(planPath, 'utf-8');
-    log(`Plan loaded from: ${planPath}`, 'success');
+    planContent = fs.readFileSync(fullPlanPath, 'utf-8');
+    log(`Plan loaded from: ${fullPlanPath}`, 'success');
   } catch (error) {
-    log(`Cannot read plan file at ${planPath}: ${error}`, 'error');
+    log(`Cannot read plan file at ${fullPlanPath}: ${error}`, 'error');
     process.exit(1);
   }
 

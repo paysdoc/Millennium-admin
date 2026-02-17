@@ -34,9 +34,48 @@ ${commentsSection}`;
 }
 
 /**
- * Gets the path to the plan file for an issue.
+ * Finds the actual plan file path for an issue.
+ * Plan files follow the naming convention: issue-{number}-adw-{adwId}-sdlc_planner-{descriptiveName}.md
+ * Falls back to legacy naming: issue-{number}-plan.md
  */
-export function getPlanFilePath(issueNumber: number): string {
+function findPlanFile(issueNumber: number, worktreePath?: string): string | null {
+  const specsDir = worktreePath ? path.join(worktreePath, 'specs') : 'specs';
+
+  try {
+    const files = fs.readdirSync(specsDir);
+
+    // Look for new naming convention: issue-{number}-adw-{adwId}-sdlc_planner-*.md
+    for (const file of files) {
+      const pattern = new RegExp(`^issue-${issueNumber}-adw-.*-sdlc_planner-.*\\.md$`);
+      if (pattern.test(file)) {
+        return path.join('specs', file);
+      }
+    }
+
+    // Fall back to legacy naming: issue-{number}-plan.md
+    const legacyPath = `specs/issue-${issueNumber}-plan.md`;
+    const fullLegacyPath = worktreePath ? path.join(worktreePath, legacyPath) : legacyPath;
+    try {
+      fs.statSync(fullLegacyPath);
+      return legacyPath;
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Gets the path to the plan file for an issue.
+ * Returns the actual plan file path if it exists, otherwise returns the legacy path.
+ */
+export function getPlanFilePath(issueNumber: number, worktreePath?: string): string {
+  const foundPath = findPlanFile(issueNumber, worktreePath);
+  if (foundPath) {
+    return foundPath;
+  }
+  // Fall back to legacy naming if no file is found
   return `specs/issue-${issueNumber}-plan.md`;
 }
 
@@ -45,7 +84,7 @@ export function getPlanFilePath(issueNumber: number): string {
  * Returns true if the file exists and has content.
  */
 export function planFileExists(issueNumber: number, worktreePath?: string): boolean {
-  const planPath = getPlanFilePath(issueNumber);
+  const planPath = getPlanFilePath(issueNumber, worktreePath);
   const fullPath = worktreePath ? path.join(worktreePath, planPath) : planPath;
   try {
     const stats = fs.statSync(fullPath);
