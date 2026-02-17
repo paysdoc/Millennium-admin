@@ -1,5 +1,5 @@
 /**
- * Issue classifier helper for ADW triggers.
+ * Issue classifier for ADW workflows.
  *
  * Provides two-step classification: first tries /classify_adw to detect
  * explicit ADW workflow commands, then falls back to /classify_issue
@@ -16,8 +16,8 @@ import {
   adwCommandToOrchestratorMap,
   log,
   GitHubIssue,
-} from '../core';
-import { extractJson } from '../core/jsonParser';
+} from '.';
+import { extractJson } from './jsonParser';
 
 /**
  * Result of classifying an issue for trigger purposes.

@@ -13,7 +13,7 @@ import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
 import { isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
 import { removeWorktreesForIssue } from '../github/worktreeOperations';
-import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
+import { classifyIssueForTrigger, getWorkflowScript } from '../core/issueClassifier';
 import { handlePullRequestEvent } from './webhookHandlers';
 
 // Re-export for any external consumers

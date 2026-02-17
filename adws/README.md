@@ -515,6 +515,7 @@ app_docs/                         # Generated documentation
 - `dataTypes.ts` - General data type definitions
 - `config.ts` - Configuration management
 - `utils.ts` - Utility functions
+- `issueClassifier.ts` - Issue classification logic
 
 **GitHub** (`github/`):
 - `githubApi.ts` - Core GitHub API wrapper
@@ -539,7 +540,6 @@ app_docs/                         # Generated documentation
 - `adwPrReview.tsx` - Standalone PR review orchestration
 
 **Triggers** (`triggers/`):
-- `issueClassifier.ts` - Issue classification logic
 - `trigger_cron.ts` - Cron-based polling monitor
 - `trigger_webhook.ts` - Webhook-based event handler
 

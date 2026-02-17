@@ -1,7 +1,7 @@
 /**
  * Shared JSON extraction and parsing utilities.
  * Consolidates the repeated JSON-from-output parsing pattern
- * from testAgent.ts, reviewAgent.ts, and issueClassifier.ts.
+ * from testAgent.ts, reviewAgent.ts, and issueClassifier.ts (sibling in core/).
  */
 
 /**
