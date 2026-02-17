@@ -90,12 +90,12 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
     // Check if the branch exists remotely or locally
     let branchExists = false;
     try {
-      execSync(`git rev-parse --verify ${branchName}`, { stdio: 'pipe' });
+      execSync(`git rev-parse --verify "${branchName}"`, { stdio: 'pipe' });
       branchExists = true;
     } catch {
       // Branch doesn't exist locally, check remote
       try {
-        execSync(`git rev-parse --verify origin/${branchName}`, { stdio: 'pipe' });
+        execSync(`git rev-parse --verify "origin/${branchName}"`, { stdio: 'pipe' });
         branchExists = true;
       } catch {
         branchExists = false;
@@ -122,11 +122,11 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
       }
 
       // Branch exists, create worktree for existing branch
-      execSync(`git worktree add "${worktreePath}" ${branchName}`, { stdio: 'pipe' });
+      execSync(`git worktree add "${worktreePath}" "${branchName}"`, { stdio: 'pipe' });
       log(`Created worktree for existing branch '${branchName}' at ${worktreePath}`, 'success');
     } else if (baseBranch) {
       // Branch doesn't exist, create worktree with new branch from base
-      execSync(`git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`, { stdio: 'pipe' });
+      execSync(`git worktree add -b "${branchName}" "${worktreePath}" ${baseBranch}`, { stdio: 'pipe' });
       log(`Created worktree with new branch '${branchName}' from '${baseBranch}' at ${worktreePath}`, 'success');
     } else {
       // No base branch provided and branch doesn't exist
@@ -159,7 +159,7 @@ export function createWorktreeForNewBranch(branchName: string, baseBranch?: stri
 
   try {
     const base = baseBranch || 'HEAD';
-    execSync(`git worktree add -b ${branchName} "${worktreePath}" ${base}`, { stdio: 'pipe' });
+    execSync(`git worktree add -b "${branchName}" "${worktreePath}" ${base}`, { stdio: 'pipe' });
     log(`Created worktree with new branch '${branchName}' at ${worktreePath}`, 'success');
     return worktreePath;
   } catch (error) {

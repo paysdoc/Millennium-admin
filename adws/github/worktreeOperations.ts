@@ -167,7 +167,7 @@ export function freeBranchFromMainRepo(branchName: string): void {
 
       // Push the branch
       try {
-        execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd: mainRepoPath });
+        execSync(`git push -u origin "${branchName}"`, { stdio: 'pipe', cwd: mainRepoPath });
         log(`Pushed branch '${branchName}' to origin`, 'success');
       } catch (pushError) {
         log(`Warning: Could not push branch to origin: ${pushError}`, 'info');

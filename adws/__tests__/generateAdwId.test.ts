@@ -4,54 +4,51 @@ import { extractAdwIdFromComment } from '../github/workflowCommentsBase';
 
 describe('generateAdwId', () => {
   describe('with summary', () => {
-    it('produces adw-{slug}-{random} format', () => {
+    it('produces {slug}-{random} format without adw- prefix', () => {
       const id = generateAdwId('Fix login bug');
-      expect(id).toMatch(/^adw-fix-login-bug-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^fix-login-bug-[a-z0-9]{6}$/);
     });
 
     it('truncates summary portion to max 20 characters', () => {
       const id = generateAdwId('This is a very long issue title that exceeds twenty characters');
       const parts = id.split('-');
-      // Remove 'adw' prefix and last random suffix
-      const summaryPart = parts.slice(1, -1).join('-');
+      // Remove last random suffix
+      const summaryPart = parts.slice(0, -1).join('-');
       expect(summaryPart.length).toBeLessThanOrEqual(20);
     });
 
     it('removes trailing hyphen caused by truncation', () => {
-      // "replace timestamp from" slugifies to "replace-timestamp-from" (22 chars)
-      // Truncated to 20: "replace-timestamp-fr" — no trailing hyphen
-      // But "add-new-feature-for-" would have trailing hyphen at 20 chars
       const id = generateAdwId('Add new feature for users and admins');
       const parts = id.split('-');
-      const summaryPart = parts.slice(1, -1).join('-');
+      const summaryPart = parts.slice(0, -1).join('-');
       expect(summaryPart).not.toMatch(/-$/);
     });
 
     it('slugifies special characters', () => {
       const id = generateAdwId("Fix bug: can't login!");
-      expect(id).toMatch(/^adw-fix-bug-can-t-login-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^fix-bug-can-t-login-[a-z0-9]{6}$/);
     });
 
     it('converts to lowercase', () => {
       const id = generateAdwId('ADD NEW Feature');
-      expect(id).toMatch(/^adw-add-new-feature-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^add-new-feature-[a-z0-9]{6}$/);
     });
 
     it('falls back to timestamp when summary produces empty slug', () => {
       const id = generateAdwId('!!!@@@###');
-      expect(id).toMatch(/^adw-\d+-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^\d+-[a-z0-9]{6}$/);
     });
   });
 
   describe('without summary', () => {
     it('falls back to timestamp format when no summary provided', () => {
       const id = generateAdwId();
-      expect(id).toMatch(/^adw-\d+-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^\d+-[a-z0-9]{6}$/);
     });
 
     it('falls back to timestamp format for empty string', () => {
       const id = generateAdwId('');
-      expect(id).toMatch(/^adw-\d+-[a-z0-9]{6}$/);
+      expect(id).toMatch(/^\d+-[a-z0-9]{6}$/);
     });
   });
 

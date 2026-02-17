@@ -9,18 +9,21 @@ import { AgentIdentifier } from './dataTypes';
 
 /**
  * Generates a unique ADW session identifier.
- * When a summary is provided, format: adw-{slugified-summary}-{random}
- * When no summary is provided, falls back to: adw-{timestamp}-{random}
+ * When a summary is provided, format: {slugified-summary}-{random}
+ * When no summary is provided, falls back to: {timestamp}-{random}
+ *
+ * Note: The `adw-` prefix is NOT included here because the branch name format
+ * template already adds `adw-` before the adwId (e.g., `<issueClass>-issue-<N>-adw-<adwId>-<name>`).
  */
 export function generateAdwId(summary?: string): string {
   const random = Math.random().toString(36).substring(2, 8);
   if (summary) {
     const slug = slugify(summary).substring(0, 20).replace(/-$/, '');
     if (slug) {
-      return `adw-${slug}-${random}`;
+      return `${slug}-${random}`;
     }
   }
-  return `adw-${Date.now()}-${random}`;
+  return `${Date.now()}-${random}`;
 }
 
 /**
