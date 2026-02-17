@@ -53,7 +53,7 @@ vi.mock('../github', () => ({
 
 vi.mock('../agents', () => ({
   runPlanAgent: vi.fn(),
-  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-plan.md'),
+  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-adw-test123-sdlc_planner-test.md'),
   planFileExists: vi.fn().mockReturnValue(false),
   runBuildAgent: vi.fn(),
   runPrReviewPlanAgent: vi.fn(),

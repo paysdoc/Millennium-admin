@@ -52,7 +52,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   }
 
   // Plan agent step
-  const planPath = getPlanFilePath(issueNumber);
+  const planPath = getPlanFilePath(issueNumber, worktreePath);
   ctx.planPath = planPath;
   let costUsd = 0;
   let modelUsage = emptyModelUsageMap();
@@ -85,8 +85,12 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
       throw new Error(`Plan Agent failed: ${planResult.output}`);
     }
 
+    // Re-resolve the plan file path now that the plan agent has created the file
+    const resolvedPlanPath = getPlanFilePath(issueNumber, worktreePath);
+    ctx.planPath = resolvedPlanPath;
+
     AgentStateManager.writeState(planAgentStatePath, {
-      planFile: planPath,
+      planFile: resolvedPlanPath,
       output: planResult.output.substring(0, 1000),
       execution: AgentStateManager.completeExecution(
         AgentStateManager.createExecutionState('running'),
@@ -94,8 +98,8 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
       ),
     });
 
-    AgentStateManager.writeState(orchestratorStatePath, { planFile: planPath });
-    AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${planPath}`);
+    AgentStateManager.writeState(orchestratorStatePath, { planFile: resolvedPlanPath });
+    AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${resolvedPlanPath}`);
 
     ctx.planOutput = planResult.output;
     postWorkflowComment(issueNumber, 'plan_created', ctx);
