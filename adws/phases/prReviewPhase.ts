@@ -97,7 +97,7 @@ export async function executePRReviewPlanPhase(config: PRReviewWorkflowConfig): 
   const { prNumber, issueNumber, adwId, prDetails, unaddressedComments, worktreePath, logsDir, orchestratorStatePath, ctx } = config;
   let existingPlanContent = '';
   if (issueNumber) {
-    const planPath = path.join(worktreePath, getPlanFilePath(issueNumber));
+    const planPath = path.join(worktreePath, getPlanFilePath(issueNumber, worktreePath));
     try {
       existingPlanContent = fs.readFileSync(planPath, 'utf-8');
       log(`Read existing plan from ${planPath}`, 'success');

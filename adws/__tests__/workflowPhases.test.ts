@@ -109,7 +109,7 @@ vi.mock('../agents', () => ({
     output: 'Plan created',
     totalCostUsd: 0.5,
   }),
-  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-plan.md'),
+  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-adw-test123-sdlc_planner-test.md'),
   planFileExists: vi.fn().mockReturnValue(false),
   runBuildAgent: vi.fn().mockResolvedValue({
     success: true,
@@ -429,7 +429,7 @@ describe('executeBuildPhase', () => {
     const result = await executeBuildPhase(config);
 
     expect(fs.readFileSync).toHaveBeenCalledWith(
-      path.join('/mock/worktree', 'specs/issue-1-plan.md'),
+      path.join('/mock/worktree', 'specs/issue-1-adw-test123-sdlc_planner-test.md'),
       'utf-8'
     );
     expect(runBuildAgent).toHaveBeenCalled();
@@ -786,7 +786,7 @@ describe('executePRReviewPlanPhase', () => {
     const result = await executePRReviewPlanPhase(config);
 
     expect(fs.readFileSync).toHaveBeenCalledWith(
-      path.join('/mock/worktree', 'specs/issue-1-plan.md'),
+      path.join('/mock/worktree', 'specs/issue-1-adw-test123-sdlc_planner-test.md'),
       'utf-8'
     );
     expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
@@ -1113,7 +1113,7 @@ describe('executeReviewPhase', () => {
 
     expect(runReviewWithRetry).toHaveBeenCalledWith(expect.objectContaining({
       adwId: 'test-adw-id',
-      specFile: 'specs/issue-1-plan.md',
+      specFile: 'specs/issue-1-adw-test123-sdlc_planner-test.md',
       logsDir: '/mock/logs',
       maxRetries: expect.any(Number),
       branchName: 'feature/issue-1-test',
