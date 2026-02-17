@@ -291,7 +291,7 @@ branch refs/heads/main
 
     expect(result).toBe(path.join('/mock/project/.worktrees', 'feature-issue-51'));
     expect(execSync).toHaveBeenCalledWith(
-      expect.stringContaining('-b feature/issue-51'),
+      expect.stringContaining('-b "feature/issue-51"'),
       { stdio: 'pipe' }
     );
   });

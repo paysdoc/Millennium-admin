@@ -95,9 +95,9 @@ npm run supabase:stop
   - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
   - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
-  - `core/` - Core utilities (state, config, data types, orchestrator)
+  - `core/` - Core utilities (state, config, data types, orchestrator, issue classifier)
   - `github/` - Git/GitHub operations (git, worktree, PR, comments)
-  - `triggers/` - Workflow triggers (webhook, cron, issue classifier)
+  - `triggers/` - Workflow triggers (webhook, cron)
   - `__tests__/` - ADWS unit tests
   - Workflow orchestrators: `adwPlanBuildTestReview.tsx`, `adwPlanBuild.tsx`, `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPrReview.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
   - `workflowPhases.ts` - Phase definitions

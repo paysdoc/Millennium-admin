@@ -8,7 +8,7 @@
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
 import { getRepoInfo, fetchPRList, hasUnaddressedComments, isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
-import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
+import { classifyIssueForTrigger, getWorkflowScript } from '../core/issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
 const PR_POLL_INTERVAL_MS = 60_000;

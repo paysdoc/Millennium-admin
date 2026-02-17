@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   formatBranchNameArgs,
   extractBranchNameFromOutput,
+  validateBranchName,
   formatCommitArgs,
   extractCommitMessageFromOutput,
   runGenerateBranchNameAgent,
@@ -81,6 +82,55 @@ describe('extractBranchNameFromOutput', () => {
     const output = '\n\nfeat-issue-123-adw-abc123-add-user-auth\n\n';
     const result = extractBranchNameFromOutput(output);
     expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+});
+
+describe('validateBranchName', () => {
+  it('passes valid branch names through unchanged', () => {
+    expect(validateBranchName('feat-issue-123-adw-abc123-add-user-auth')).toBe(
+      'feat-issue-123-adw-abc123-add-user-auth'
+    );
+  });
+
+  it('strips leading/trailing whitespace', () => {
+    expect(validateBranchName('  feat-issue-123  ')).toBe('feat-issue-123');
+  });
+
+  it('truncates branch names exceeding 100 characters', () => {
+    const longName = 'a'.repeat(110);
+    const result = validateBranchName(longName);
+    expect(result.length).toBeLessThanOrEqual(100);
+  });
+
+  it('removes trailing dash after truncation', () => {
+    const name = 'a'.repeat(99) + '-b';
+    const result = validateBranchName(name);
+    expect(result).not.toMatch(/-$/);
+    expect(result.length).toBeLessThanOrEqual(100);
+  });
+
+  it('removes invalid git branch name characters', () => {
+    expect(validateBranchName('feat~branch^name:test')).toBe('featbranchnametest');
+    expect(validateBranchName('feat*branch?name')).toBe('featbranchname');
+    expect(validateBranchName('feat[branch]name')).toBe('featbranchname');
+    expect(validateBranchName('feat@{branch}name')).toBe('featbranchname');
+    expect(validateBranchName('feat\\branch')).toBe('featbranch');
+  });
+
+  it('replaces double dots with empty string', () => {
+    expect(validateBranchName('feat..branch')).toBe('featbranch');
+  });
+
+  it('replaces spaces with dashes', () => {
+    expect(validateBranchName('feat branch name')).toBe('feat-branch-name');
+  });
+
+  it('throws an error for empty output', () => {
+    expect(() => validateBranchName('')).toThrow('Branch name is empty after validation');
+  });
+
+  it('throws an error when all characters are invalid', () => {
+    expect(() => validateBranchName('~^:*?[]\\')).toThrow('Branch name is empty after validation');
   });
 });
 
