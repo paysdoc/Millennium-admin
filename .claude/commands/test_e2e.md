@@ -1,19 +1,13 @@
----
-name: test_e2e
-description: Execute end-to-end (E2E) tests using Playwright browser automation (MCP Server). If any errors occur and assertions fail mark the test as failed and explain exactly what went wrong.
----
-
 # E2E Test Runner
 
 Execute end-to-end (E2E) tests using Playwright browser automation (MCP Server). If any errors occur and assertions fail mark the test as failed and explain exactly what went wrong.
 
 ## Variables
 
-adw_id: $1 if provided, otherwise generate a random 8 character hex string
-agent_name: $2 if provided, otherwise use 'test_e2e'
+adwId: $1 if provided, otherwise generate a random 8 character hex string
+agentName: $2 if provided, otherwise use 'testE2e'
 e2e_test_file: $3
-application_url: $4 if provided, otherwise use http://localhost:3000
-port: $5 if provided, otherwise find an open port on localhost starting from 3000
+applicationUrl: $4 if provided, otherwise use http://localhost:3000
 
 ## Instructions
 
@@ -25,29 +19,27 @@ port: $5 if provided, otherwise find an open port on localhost starting from 300
 - Capture screenshots as specified
 - IMPORTANT: Return results in the format requested by the `Output Format`
 - Initialize Playwright browser in headed mode for visibility
-- Use the `application_url`
+- Use the `applicationUrl`
 - Allow time for async operations and element visibility
 - IMPORTANT: After taking each screenshot, save it to `Screenshot Directory` with descriptive names. Use absolute paths to move the files to the `Screenshot Directory` with the correct name.
 - Log the progress of each step to the console
 - Capture and report any errors encountered
 - Ultra think about the `Test Steps` and execute them in order
-- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "query-input" on page `application_url`'
+- If you encounter an error, mark the test as failed immediately and explain exactly what went wrong and on what step it occurred. For example: '(Step 1 ❌) Failed to find element with selector "queryInput" on page `application_url`'
 - Use `pwd` or equivalent to get the absolute path to the codebase for writing and displaying the correct paths to the screenshots
 
 ## Setup
 
-- Ensure the Next.js development server is running on port 3000 (`npm run dev`)
-- Start the server in the background using `port` for the Playwright server 
-- ensure that the server is runningbefore executing the test steps 
-- Verify the application is accessible at `application_url` before proceeding with tests
+Read and Execute `.claude/commands/prepare_app.md` now to prepare the application for the test.
 
 ## Screenshot Directory
 
-<absolute path to codebase>/e2e-screenshots/<test name>/
+<absolute path to codebase>/agents/<adwId>/<agentName>/img/<directory name based on test file name>/*.png
 
 Each screenshot should be saved with a descriptive name that reflects what is being captured. The directory structure ensures that:
-- Screenshots are organized by test name
-- Each test has its own subdirectory based on the test file name (e.g., test_login → login/)
+- Screenshots are organized by ADW ID (workflow run)
+- They are stored under the specified agent name (e.g., e2eTest_runner_0, e2eTest_resolverIter1_0)
+- Each test has its own subdirectory based on the test file name (e.g., test_basic_query → basic_query/)
 
 ## Report
 
@@ -59,12 +51,12 @@ Each screenshot should be saved with a descriptive name that reflects what is be
 
 ```json
 {
-  "test_name": "Test Name Here",
+  "testName": "Test Name Here",
   "status": "passed|failed",
   "screenshots": [
-    "<absolute path to codebase>/e2e-screenshots/<test name>/01_<descriptive name>.png",
-    "<absolute path to codebase>/e2e-screenshots/<test name>/02_<descriptive name>.png",
-    "<absolute path to codebase>/e2e-screenshots/<test name>/03_<descriptive name>.png"
+    "<absolute path to codebase>/agents/<adwId>/<agentName>/img/<test name>/01_<descriptive name>.png",
+    "<absolute path to codebase>/agents/<adwId>/<agentName>/img/<test name>/02_<descriptive name>.png",
+    "<absolute path to codebase>/agents/<adwId>/<agentName>/img/<test name>/03_<descriptive name>.png"
   ],
   "error": null
 }

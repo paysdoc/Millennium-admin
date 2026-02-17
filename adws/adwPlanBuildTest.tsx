@@ -2,7 +2,7 @@
 /**
  * ADW Plan, Build & Test - Plan+Build+Test+PR Orchestrator
  *
- * Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issue-number> [adw-id]
+ * Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issueNumber> [adw-id]
  *
  * Workflow:
  * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
@@ -34,7 +34,7 @@ import {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issue-number> [adw-id]');
+  console.error('Usage: npx tsx adws/adwPlanBuildTest.tsx <github-issueNumber> [adw-id]');
   console.error('');
   console.error('This orchestrator runs the complete Plan+Build+Test+PR workflow.');
   console.error('');

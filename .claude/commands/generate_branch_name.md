@@ -4,15 +4,13 @@ Based on the `Instructions` below, take the `Variables` follow the `Run` section
 
 ## Variables
 
-The following variables are provided as structured text in `$ARGUMENTS`:
-
-- **issue_class**: The issue classification (e.g., feat, bug, chore, test)
-- **adw_id**: The ADW session identifier
-- **issue**: The full GitHub issue as JSON
+issueClass: $1
+adwId: $2
+issue: $3
 
 ## Instructions
 
-- Generate a branch name in the format: `<issue_class>-issue-<issue_number>-adw-<adw_id>-<concise_name>`
+- Generate a branch name in the format: `<issueClass>-issue-<issueNumber>-adw-<adwId>-<concise_name>`
 - The `<concise_name>` should be:
   - 3-6 words maximum
   - All lowercase
@@ -34,5 +32,3 @@ Do NOT run any git commands. Only generate the branch name string.
 ## Report
 
 Return ONLY the branch name (no other text)
-
-$ARGUMENTS

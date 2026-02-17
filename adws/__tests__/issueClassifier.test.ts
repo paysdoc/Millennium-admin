@@ -69,18 +69,18 @@ function createMockIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
 // ============================================================================
 
 describe('parseAdwClassificationOutput', () => {
-  it('returns parsed result for valid JSON with adw_slash_command', () => {
-    const result = parseAdwClassificationOutput('{"adw_slash_command": "/adw_plan"}');
+  it('returns parsed result for valid JSON with adwSlashCommand', () => {
+    const result = parseAdwClassificationOutput('{"adwSlashCommand": "/adw_plan"}');
 
-    expect(result).toEqual({ adw_slash_command: '/adw_plan' });
+    expect(result).toEqual({ adwSlashCommand: '/adw_plan' });
   });
 
-  it('returns parsed result for JSON with both adw_slash_command and adw_id', () => {
+  it('returns parsed result for JSON with both adwSlashCommand and adwId', () => {
     const result = parseAdwClassificationOutput(
-      '{"adw_slash_command": "/adw_build", "adw_id": "abc12345"}'
+      '{"adwSlashCommand": "/adw_build", "adwId": "abc12345"}'
     );
 
-    expect(result).toEqual({ adw_slash_command: '/adw_build', adw_id: 'abc12345' });
+    expect(result).toEqual({ adwSlashCommand: '/adw_build', adwId: 'abc12345' });
   });
 
   it('returns null for empty JSON {}', () => {
@@ -94,28 +94,28 @@ describe('parseAdwClassificationOutput', () => {
   });
 
   it('returns null for JSON with unknown ADW command', () => {
-    const result = parseAdwClassificationOutput('{"adw_slash_command": "/adw_unknown"}');
+    const result = parseAdwClassificationOutput('{"adwSlashCommand": "/adw_unknown"}');
 
     expect(result).toBeNull();
   });
 
   it('handles JSON embedded in surrounding text', () => {
-    const output = 'Here is the result: {"adw_slash_command": "/adw_sdlc", "adw_id": "xyz98765"} That is the extracted info.';
+    const output = 'Here is the result: {"adwSlashCommand": "/adw_sdlc", "adwId": "xyz98765"} That is the extracted info.';
     const result = parseAdwClassificationOutput(output);
 
-    expect(result).toEqual({ adw_slash_command: '/adw_sdlc', adw_id: 'xyz98765' });
+    expect(result).toEqual({ adwSlashCommand: '/adw_sdlc', adwId: 'xyz98765' });
   });
 
-  it('returns null when adw_slash_command is missing but adw_id is present', () => {
-    const result = parseAdwClassificationOutput('{"adw_id": "abc12345"}');
+  it('returns null when adwSlashCommand is missing but adwId is present', () => {
+    const result = parseAdwClassificationOutput('{"adwId": "abc12345"}');
 
     expect(result).toBeNull();
   });
 
-  it('returns result with only adw_slash_command when adw_id is absent', () => {
-    const result = parseAdwClassificationOutput('{"adw_slash_command": "/adw_patch"}');
+  it('returns result with only adwSlashCommand when adwId is absent', () => {
+    const result = parseAdwClassificationOutput('{"adwSlashCommand": "/adw_patch"}');
 
-    expect(result).toEqual({ adw_slash_command: '/adw_patch' });
+    expect(result).toEqual({ adwSlashCommand: '/adw_patch' });
   });
 });
 
@@ -130,7 +130,7 @@ describe('classifyWithAdwCommand', () => {
 
   it('returns classification result when ADW command is found', async () => {
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
-      output: '{"adw_slash_command": "/adw_plan_build_test"}',
+      output: '{"adwSlashCommand": "/adw_plan_build_test"}',
       success: true,
     });
 
@@ -146,7 +146,7 @@ describe('classifyWithAdwCommand', () => {
 
   it('returns classification with adwId when both command and ID are found', async () => {
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
-      output: '{"adw_slash_command": "/adw_build", "adw_id": "abc12345"}',
+      output: '{"adwSlashCommand": "/adw_build", "adwId": "abc12345"}',
       success: true,
     });
 
@@ -202,7 +202,7 @@ describe('classifyWithAdwCommand', () => {
 
     for (const [adwCommand, expectedIssueType] of entries) {
       vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
-        output: JSON.stringify({ adw_slash_command: adwCommand }),
+        output: JSON.stringify({ adwSlashCommand: adwCommand }),
         success: true,
       });
 
@@ -243,7 +243,7 @@ describe('classifyIssueForTrigger', () => {
 
   it('uses ADW classification when /classify_adw finds a command', async () => {
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValueOnce({
-      output: '{"adw_slash_command": "/adw_plan_build_test"}',
+      output: '{"adwSlashCommand": "/adw_plan_build_test"}',
       success: true,
     });
 
@@ -310,7 +310,7 @@ describe('classifyGitHubIssue', () => {
 
   it('uses ADW classification when /classify_adw finds a command', async () => {
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValueOnce({
-      output: '{"adw_slash_command": "/adw_patch"}',
+      output: '{"adwSlashCommand": "/adw_patch"}',
       success: true,
     });
 

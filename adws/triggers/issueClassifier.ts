@@ -45,23 +45,23 @@ export function parseAdwClassificationOutput(output: string): AdwClassificationR
 
   const result: AdwClassificationResult = {};
 
-  // Validate adw_slash_command if present
-  if (typeof parsed['adw_slash_command'] === 'string') {
-    const command = parsed['adw_slash_command'];
+  // Validate adwSlashCommand if present
+  if (typeof parsed['adwSlashCommand'] === 'string') {
+    const command = parsed['adwSlashCommand'];
     if (command in adwCommandToIssueTypeMap) {
-      result.adw_slash_command = command as AdwSlashCommand;
+      result.adwSlashCommand = command as AdwSlashCommand;
     } else {
       return null;
     }
   }
 
-  // Extract adw_id if present
-  if (typeof parsed['adw_id'] === 'string') {
-    result.adw_id = parsed['adw_id'];
+  // Extract adwId if present
+  if (typeof parsed['adwId'] === 'string') {
+    result.adwId = parsed['adwId'];
   }
 
-  // Must have at least adw_slash_command to be useful
-  if (!result.adw_slash_command) return null;
+  // Must have at least adwSlashCommand to be useful
+  if (!result.adwSlashCommand) return null;
 
   return result;
 }
@@ -95,19 +95,19 @@ export async function classifyWithAdwCommand(
     }
 
     const parsed = parseAdwClassificationOutput(result.output);
-    if (!parsed?.adw_slash_command) {
+    if (!parsed?.adwSlashCommand) {
       log(`ADW classifier returned no valid command for issue #${issueNumber}`);
       return null;
     }
 
-    const issueType = adwCommandToIssueTypeMap[parsed.adw_slash_command];
-    log(`Issue #${issueNumber} matched ADW command ${parsed.adw_slash_command} → ${issueType}`, 'success');
+    const issueType = adwCommandToIssueTypeMap[parsed.adwSlashCommand];
+    log(`Issue #${issueNumber} matched ADW command ${parsed.adwSlashCommand} → ${issueType}`, 'success');
 
     return {
       issueType,
       success: true,
-      adwCommand: parsed.adw_slash_command,
-      adwId: parsed.adw_id,
+      adwCommand: parsed.adwSlashCommand,
+      adwId: parsed.adwId,
     };
   } catch (error) {
     log(`ADW classification error for issue #${issueNumber}: ${error}`, 'error');

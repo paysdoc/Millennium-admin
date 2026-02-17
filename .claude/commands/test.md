@@ -1,8 +1,3 @@
----
-name: test
-description: Execute comprehensive validation tests, returning results in a standardized JSON format for automated processing.
----
-
 # Application Validation Test Suite
 
 Execute comprehensive validation tests for both the Next.js application and ADW (AI Developer Workflow) scripts, returning results in a standardized JSON format for automated processing.
@@ -64,19 +59,19 @@ TEST_COMMAND_TIMEOUT: 5 minutes
    - test_name: "adw_tests"
    - test_purpose: "Validates all ADW (AI Developer Workflow) script functionality including workflow execution and utilities"
 
-### Application Tests
-
-5. **Application Tests**
-   - Command: `npm test -- --run src/`
-   - test_name: "application_tests"
-   - test_purpose: "Validates all Next.js application functionality including components, hooks, and utilities"
-
 ### Build
 
-6. **Build**
+5. **Build**
    - Command: `npm run build`
-   - test_name: "build"
+   - test_name: "app_build"
    - test_purpose: "Validates the complete Next.js build process including bundling, asset optimization, and production compilation"
+
+### Application Tests
+
+6. **Application Tests**
+   - Command: `npm test -- --run src`
+   - test_name: "app_tests"
+   - test_purpose: "Validates all ADW (AI Developer Workflow) script functionality including workflow execution and utilities"
 
 ## Report
 
@@ -106,11 +101,11 @@ TEST_COMMAND_TIMEOUT: 5 minutes
 ```json
 [
   {
-    "test_name": "build",
+    "test_name": "app_build",
     "passed": false,
     "execution_command": "npm run build",
     "test_purpose": "Validates the complete Next.js build process including bundling, asset optimization, and production compilation",
-    "error": "Type error: Property 'foo' does not exist on type 'Bar'"
+    "error": "TS2345: Argument of type 'string' is not assignable to parameter of type 'number'"
   },
   {
     "test_name": "adw_tests",

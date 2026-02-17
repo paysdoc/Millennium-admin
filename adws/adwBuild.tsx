@@ -2,7 +2,7 @@
 /**
  * ADW Build - AI Developer Workflow Implementation Phase
  *
- * Usage: npx tsx adws/adwBuild.tsx <github-issue-number> [adw-id]
+ * Usage: npx tsx adws/adwBuild.tsx <github-issueNumber> [adw-id]
  *
  * Workflow:
  * 1. Fetch GitHub issue details

@@ -1,11 +1,11 @@
----
-name: chore
-description: Create a plan to resolve a specified chore
----
-
 # Chore Planning
 
-Create a new plan in specs/*.md to resolve the `Chore` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
+Create a new plan to resolve the `Chore` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
+
+## Variables
+issueNumber: $1
+adwId: $2
+issueJson: $3
 
 ## Instructions
 
@@ -13,11 +13,12 @@ Create a new plan in specs/*.md to resolve the `Chore` using the exact specified
 - IMPORTANT: The `Chore` describes the chore that will be resolved but remember we're not resolving the chore, we're creating the plan that will be used to resolve the chore based on the `Plan Format` below.
 - IMPORTANT: Planning and implementation must strictly adhere to the coding guidelines in `/guidelines`.
 - You're writing a plan to resolve a chore, it should be simple but we need to be thorough and precise so we don't miss anything or waste time with any second round of changes.
-- Create the plan file at `specs/issue-{issueNumber}-plan.md` where `{issueNumber}` is the issue number from the GitHub Issue (e.g., `specs/issue-36-plan.md` for issue #36).
-- Use the plan format below to create the plan.
+- Create the plan in the `specs/` directory with filename: `issue-{issueNumber}-adw-{adwId}-sdlc_planner-{descriptive-name}.md`
+  - Replace `{descriptive-name}` with a short, descriptive name based on the chore (e.g., "update-readme", "fix-tests", "refactor-auth")
+- Use the plan format below to create the plan. 
 - Research the codebase and put together a plan to accomplish the chore.
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to accomplish the chore.
-- Use your reasoning model: THINK HARD about the plan and the steps to accomplish the chore.
+- Consider the plan and the steps to accomplish the chore.
 - Respect requested files in the `Relevant Files` section.
 - Start your research by reading the `README.md` file and the coding guidelines in `/guidelines`.
 - `adws/*.tsx` contain node tsx single file typescript scripts. So if you want to run them use `npx tsx <script_name>`.
@@ -36,12 +37,20 @@ Focus on the following files:
 - `public/**` - Contains static assets.
 - `adws/**` - Contains the AI Developer Workflow (ADW) scripts.
 
+- Read `.claude/commands/conditional_docs.md` to check if your task requires additional documentation
+- If your task matches any of the conditions listed, include those documentation files in the `Plan Format: Relevant Files` section of your plan
+
 Ignore all other files in the codebase.
 
 ## Plan Format
 
 ```md
 # Chore: <chore name>
+
+## Metadata
+issueNumber: `{issueNumber}`
+adwId: `{adwId}`
+issueJson: `{issueJson}`
 
 ## Chore Description
 <describe the chore in detail>
@@ -70,8 +79,8 @@ Execute every command to validate the chore is complete with zero regressions.
 ```
 
 ## Chore
-$ARGUMENTS
+Extract the chore details from the `issueJson` variable (parse the JSON and use the title and body fields).
 
 ## Report
-- Summarize the work you've just done in a concise bullet point list.
-- Include the full path to the plan file you created (e.g., `specs/issue-456-adw-xyz789-sdlc_planner-add-auth-system.md`)
+
+- IMPORTANT: Return exclusively the path to the plan file created and nothing else.

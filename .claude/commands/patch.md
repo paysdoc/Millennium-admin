@@ -1,27 +1,27 @@
 # Patch Plan
 
-Create a **focused patch plan** to resolve a specific issue based on the `review_change_request`. Follow the `Instructions` to create a concise plan that addresses the issue with minimal, targeted changes.
+Create a **focused patch plan** to resolve a specific issue based on the `reviewChangeRequest`. Follow the `Instructions` to create a concise plan that addresses the issue with minimal, targeted changes.
 
 ## Variables
 
-adw_id: $1
-review_change_request: $2
-spec_path: $3 if provided, otherwise leave it blank
-agent_name: $4 if provided, otherwise use 'patch_agent'
-issue_screenshots: $5 (optional) - comma-separated list of screenshot paths if provided
+adwId: $1
+reviewChangeRequest: $2
+specPath: $3 if provided, otherwise leave it blank
+agentName: $4 if provided, otherwise use 'patchAgent'
+issueScreenshots: $5 (optional) - commaSeparated list of screenshot paths if provided
 
 ## Instructions
 
 - IMPORTANT: You're creating a patch plan to fix a specific review issue. Keep changes small, focused, and targeted
-- Read the original specification (spec) file at `spec_path` if provided to understand the context and requirements
-- IMPORTANT Use the `review_change_request` to understand exactly what needs and use it as the basis for your patch plan
-- If `issue_screenshots` are provided, examine them to better understand the visual context of the issue
-- Create the patch plan in `specs/patch/` directory with filename: `patch-adw-{adw_id}-{descriptive-name}.md`
+- Read the original specification (spec) file at `specPath` if provided to understand the context and requirements
+- IMPORTANT Use the `reviewChangeRequest` to understand exactly what needs and use it as the basis for your patch plan
+- If `issueScreenshots` are provided, examine them to better understand the visual context of the issue
+- Create the patch plan in `specs/patch/` directory with filename: `patch-adw-{adwId}-{descriptive-name}.md`
   - Replace `{descriptive-name}` with a short name based on the issue (e.g., "fix-button-color", "update-validation", "correct-layout")
-- IMPORTANT: This is a PATCH - keep the scope minimal. Only fix what's described in the `review_change_request` and nothing more. Address only the `review_change_request`.
+- IMPORTANT: This is a PATCH - keep the scope minimal. Only fix what's described in the `reviewChangeRequest` and nothing more. Address only the `reviewChangeRequest`.
 - Run `git diff --stat`. If changes are available, use them to understand what's been done in the codebase and so you can understand the exact changes you should detail in the patch plan.
 - Ultra think about the most efficient way to implement the solution with minimal code changes
-- Base your `Plan Format: Validation` on the validation steps from `spec_path` if provided
+- Base your `Plan Format: Validation` on the validation steps from `specPath` if provided
   - If any tests fail in the validation steps, you must fix them.
   - If not provided, READ `.claude/commands/test.md: ## Test Execution Sequence` and execute the tests to understand the tests that need to be run to validate the patch.
 - Replace every <placeholder> in the `Plan Format` with specific implementation details
@@ -48,13 +48,13 @@ Ignore all other files in the codebase.
 # Patch: <concise patch title>
 
 ## Metadata
-adw_id: `{adw_id}`
-review_change_request: `{review_change_request}`
+adwId: `{adwId}`
+reviewChangeRequest: `{reviewChangeRequest}`
 
 ## Issue Summary
-**Original Spec:** <spec_path>
-**Issue:** <brief description of the review issue based on the `review_change_request`>
-**Solution:** <brief description of the solution approach based on the `review_change_request`>
+**Original Spec:** <specPath>
+**Issue:** <brief description of the review issue based on the `reviewChangeRequest`>
+**Solution:** <brief description of the solution approach based on the `reviewChangeRequest`>
 
 ## Files to Modify
 Use these files to implement the patch:

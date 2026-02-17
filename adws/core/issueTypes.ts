@@ -62,8 +62,8 @@ export const adwCommandToOrchestratorMap: Partial<Record<AdwSlashCommand, string
  * Result from the /classify_adw command extraction.
  */
 export interface AdwClassificationResult {
-  adw_slash_command?: AdwSlashCommand;
-  adw_id?: string;
+  adwSlashCommand?: AdwSlashCommand;
+  adwId?: string;
 }
 
 /**

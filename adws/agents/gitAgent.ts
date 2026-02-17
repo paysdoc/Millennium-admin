@@ -15,8 +15,8 @@ export function formatBranchNameArgs(
   adwId: string,
   issue: GitHubIssue
 ): string {
-  return `issue_class: ${issueClass}
-adw_id: ${adwId}
+  return `issueClass: ${issueClass}
+adwId: ${adwId}
 issue: ${JSON.stringify(issue)}`;
 }
 
@@ -49,7 +49,7 @@ export async function runGenerateBranchNameAgent(
   statePath?: string,
 ): Promise<AgentResult & { branchName: string }> {
   const args = formatBranchNameArgs(issueType, adwId, issue);
-  const outputFile = path.join(logsDir, 'branch-name-agent.jsonl');
+  const outputFile = path.join(logsDir, 'branchName-agent.jsonl');
 
   log('Branch Name Agent starting:', 'info');
   log(`  Issue: #${issue.number} - ${issue.title}`, 'info');
@@ -80,8 +80,8 @@ export function formatCommitArgs(
   issueClass: string,
   issueContext: string
 ): string {
-  return `agent_name: ${agentName}
-issue_class: ${issueClass}
+  return `agentName: ${agentName}
+issueClass: ${issueClass}
 issue: ${issueContext}`;
 }
 

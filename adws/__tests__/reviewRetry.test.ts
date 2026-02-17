@@ -53,11 +53,11 @@ import { pushBranch } from '../github';
 
 function createBlockerIssue(num: number): ReviewIssue {
   return {
-    review_issue_number: num,
-    screenshot_path: `/path/to/issue-${num}.png`,
-    issue_description: `Blocker issue ${num}`,
-    issue_resolution: `Fix issue ${num}`,
-    issue_severity: 'blocker',
+    reviewIssueNumber: num,
+    screenshotPath: `/path/to/issue-${num}.png`,
+    issueDescription: `Blocker issue ${num}`,
+    issueResolution: `Fix issue ${num}`,
+    issueSeverity: 'blocker',
   };
 }
 
@@ -85,7 +85,7 @@ describe('runReviewWithRetry', () => {
       success: true,
       output: '{}',
       totalCostUsd: 0.5,
-      reviewResult: { success: true, review_summary: 'All good', review_issues: [], screenshots: [] },
+      reviewResult: { success: true, reviewSummary: 'All good', reviewIssues: [], screenshots: [] },
       passed: true,
       blockerIssues: [],
     });
@@ -110,7 +110,7 @@ describe('runReviewWithRetry', () => {
       })
       .mockResolvedValueOnce({
         success: true, output: '{}', totalCostUsd: 0.3,
-        reviewResult: { success: true, review_summary: 'Fixed', review_issues: [], screenshots: [] },
+        reviewResult: { success: true, reviewSummary: 'Fixed', reviewIssues: [], screenshots: [] },
         passed: true, blockerIssues: [],
       });
 
@@ -155,7 +155,7 @@ describe('runReviewWithRetry', () => {
       })
       .mockResolvedValueOnce({
         success: true, output: '{}', totalCostUsd: 0.3,
-        reviewResult: { success: true, review_summary: 'Fixed', review_issues: [], screenshots: [] },
+        reviewResult: { success: true, reviewSummary: 'Fixed', reviewIssues: [], screenshots: [] },
         passed: true, blockerIssues: [],
       });
 
@@ -177,7 +177,7 @@ describe('runReviewWithRetry', () => {
       })
       .mockResolvedValueOnce({
         success: true, output: '{}', totalCostUsd: 0.3,
-        reviewResult: { success: true, review_summary: 'Fixed', review_issues: [], screenshots: [] },
+        reviewResult: { success: true, reviewSummary: 'Fixed', reviewIssues: [], screenshots: [] },
         passed: true, blockerIssues: [],
       });
 
@@ -195,7 +195,7 @@ describe('runReviewWithRetry', () => {
       })
       .mockResolvedValueOnce({
         success: true, output: '{}', totalCostUsd: 0.3,
-        reviewResult: { success: true, review_summary: 'Fixed', review_issues: [], screenshots: [] },
+        reviewResult: { success: true, reviewSummary: 'Fixed', reviewIssues: [], screenshots: [] },
         passed: true, blockerIssues: [],
       });
 
@@ -220,7 +220,7 @@ describe('runReviewWithRetry', () => {
       })
       .mockResolvedValueOnce({
         success: true, output: '{}', totalCostUsd: 0.3,
-        reviewResult: { success: true, review_summary: 'Fixed', review_issues: [], screenshots: [] },
+        reviewResult: { success: true, reviewSummary: 'Fixed', reviewIssues: [], screenshots: [] },
         passed: true, blockerIssues: [],
       });
 

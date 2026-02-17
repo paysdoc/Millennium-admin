@@ -137,7 +137,7 @@ export function formatWorkflowComment(stage: WorkflowStage, ctx: WorkflowContext
     case 'branch_created': return formatBranchCreatedComment(ctx);
     case 'plan_building': return formatPlanBuildingComment(ctx);
     case 'plan_created': return formatPlanCreatedComment(ctx);
-    case 'plan_file_created': return formatPlanFileCreatedComment(ctx);
+    case 'planFile_created': return formatPlanFileCreatedComment(ctx);
     case 'plan_committing': return formatPlanCommittingComment(ctx);
     case 'implementing': return formatImplementingComment(ctx);
     case 'build_progress': return formatBuildProgressComment(ctx);

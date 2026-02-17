@@ -1146,11 +1146,11 @@ describe('executeReviewPhase', () => {
       costUsd: 3.0,
       totalRetries: 3,
       blockerIssues: [{
-        review_issue_number: 1,
-        screenshot_path: '/img/issue.png',
-        issue_description: 'Button broken',
-        issue_resolution: 'Fix button',
-        issue_severity: 'blocker',
+        reviewIssueNumber: 1,
+        screenshotPath: '/img/issue.png',
+        issueDescription: 'Button broken',
+        issueResolution: 'Fix button',
+        issueSeverity: 'blocker',
       }],
       modelUsage: {},
     });

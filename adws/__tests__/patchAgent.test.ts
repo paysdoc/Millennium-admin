@@ -18,11 +18,11 @@ import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
 
 function createReviewIssue(overrides: Partial<ReviewIssue> = {}): ReviewIssue {
   return {
-    review_issue_number: 1,
-    screenshot_path: '/path/to/issue.png',
-    issue_description: 'Button color is wrong',
-    issue_resolution: 'Change button color to blue',
-    issue_severity: 'blocker',
+    reviewIssueNumber: 1,
+    screenshotPath: '/path/to/issue.png',
+    issueDescription: 'Button color is wrong',
+    issueResolution: 'Change button color to blue',
+    issueSeverity: 'blocker',
     ...overrides,
   };
 }
@@ -47,13 +47,13 @@ describe('formatPatchArgs', () => {
     expect(result).toContain('Issue #1');
     // Spec path and screenshots should be empty
     const lines = result.split('\n');
-    // Line 0: adw_id, Line 1: issue desc, Line 2: resolution, Line 3: spec_path, Line 4: agent_name, Line 5: screenshots
+    // Line 0: adwId, Line 1: issue desc, Line 2: resolution, Line 3: spec_path, Line 4: agent_name, Line 5: screenshots
     expect(lines[3]).toBe(''); // spec_path empty
     expect(lines[5]).toBe(''); // screenshots empty
   });
 
   it('formats with different issue numbers', () => {
-    const issue = createReviewIssue({ review_issue_number: 5 });
+    const issue = createReviewIssue({ reviewIssueNumber: 5 });
     const result = formatPatchArgs('adw-789', issue);
 
     expect(result).toContain('Issue #5');
@@ -105,8 +105,8 @@ describe('runPatchAgent', () => {
     expect(args).toContain('/specs/plan.md');
   });
 
-  it('uses issue screenshot_path as screenshots arg', async () => {
-    const issue = createReviewIssue({ screenshot_path: '/img/blocker.png' });
+  it('uses issue screenshotPath as screenshots arg', async () => {
+    const issue = createReviewIssue({ screenshotPath: '/img/blocker.png' });
     await runPatchAgent('adw-123', issue, '/logs');
 
     const args = vi.mocked(runClaudeAgentWithCommand).mock.calls[0][1];

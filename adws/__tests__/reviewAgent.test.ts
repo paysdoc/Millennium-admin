@@ -19,8 +19,8 @@ import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
 function createReviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
   return {
     success: true,
-    review_summary: 'Implementation matches the spec.',
-    review_issues: [],
+    reviewSummary: 'Implementation matches the spec.',
+    reviewIssues: [],
     screenshots: ['/path/to/screenshot.png'],
     ...overrides,
   };
@@ -28,11 +28,11 @@ function createReviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult
 
 function createBlockerIssue(overrides: Partial<ReviewIssue> = {}): ReviewIssue {
   return {
-    review_issue_number: 1,
-    screenshot_path: '/path/to/issue.png',
-    issue_description: 'Button color is wrong',
-    issue_resolution: 'Change button color to blue',
-    issue_severity: 'blocker',
+    reviewIssueNumber: 1,
+    screenshotPath: '/path/to/issue.png',
+    issueDescription: 'Button color is wrong',
+    issueResolution: 'Change button color to blue',
+    issueSeverity: 'blocker',
     ...overrides,
   };
 }
@@ -71,16 +71,16 @@ describe('extractJson (ReviewResult parsing)', () => {
   it('parses result with review issues', () => {
     const reviewResult = createReviewResult({
       success: false,
-      review_issues: [
+      reviewIssues: [
         createBlockerIssue(),
-        { ...createBlockerIssue({ review_issue_number: 2, issue_severity: 'skippable' }) },
+        { ...createBlockerIssue({ reviewIssueNumber: 2, issueSeverity: 'skippable' }) },
       ],
     });
     const result = extractJson<ReviewResult>(JSON.stringify(reviewResult));
 
-    expect(result?.review_issues).toHaveLength(2);
-    expect(result?.review_issues[0].issue_severity).toBe('blocker');
-    expect(result?.review_issues[1].issue_severity).toBe('skippable');
+    expect(result?.reviewIssues).toHaveLength(2);
+    expect(result?.reviewIssues[0].issueSeverity).toBe('blocker');
+    expect(result?.reviewIssues[1].issueSeverity).toBe('skippable');
   });
 });
 
@@ -114,10 +114,10 @@ describe('runReviewAgent', () => {
   it('correctly identifies blocker issues from review results', async () => {
     const reviewResult = createReviewResult({
       success: false,
-      review_issues: [
+      reviewIssues: [
         createBlockerIssue(),
-        createBlockerIssue({ review_issue_number: 2, issue_severity: 'tech_debt' }),
-        createBlockerIssue({ review_issue_number: 3, issue_severity: 'blocker' }),
+        createBlockerIssue({ reviewIssueNumber: 2, issueSeverity: 'tech-debt' }),
+        createBlockerIssue({ reviewIssueNumber: 3, issueSeverity: 'blocker' }),
       ],
     });
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
@@ -129,17 +129,17 @@ describe('runReviewAgent', () => {
     const result = await runReviewAgent('adw-123', 'specs/plan.md', '/logs');
 
     expect(result.blockerIssues).toHaveLength(2);
-    expect(result.blockerIssues[0].review_issue_number).toBe(1);
-    expect(result.blockerIssues[1].review_issue_number).toBe(3);
+    expect(result.blockerIssues[0].reviewIssueNumber).toBe(1);
+    expect(result.blockerIssues[1].reviewIssueNumber).toBe(3);
     expect(result.passed).toBe(false);
   });
 
-  it('returns passed: true when no blockers exist (even with skippable/tech_debt issues)', async () => {
+  it('returns passed: true when no blockers exist (even with skippable/tech-debt issues)', async () => {
     const reviewResult = createReviewResult({
       success: true,
-      review_issues: [
-        createBlockerIssue({ review_issue_number: 1, issue_severity: 'skippable' }),
-        createBlockerIssue({ review_issue_number: 2, issue_severity: 'tech_debt' }),
+      reviewIssues: [
+        createBlockerIssue({ reviewIssueNumber: 1, issueSeverity: 'skippable' }),
+        createBlockerIssue({ reviewIssueNumber: 2, issueSeverity: 'tech-debt' }),
       ],
     });
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({

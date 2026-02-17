@@ -4,15 +4,13 @@ Based on the `Instructions` below, take the `Variables` follow the `Run` section
 
 ## Variables
 
-The following variables are provided as structured text in `$ARGUMENTS`:
-
-- **agent_name**: The name of the agent making the commit
-- **issue_class**: The issue classification (e.g., feat, bug, chore, review)
-- **issue**: The full GitHub issue or PR details as JSON
+agentName: $1
+issueClass: $2
+issue: $3
 
 ## Instructions
 
-- Generate a concise commit message in the format: `<agent_name>: <issue_class>: <commit message>`
+- Generate a concise commit message in the format: `<agentName>: <issueClass>: <commit message>`
 - The `<commit message>` should be:
   - Present tense (e.g., "add", "fix", "update", not "added", "fixed", "updated")
   - 50 characters or less
@@ -34,5 +32,3 @@ The following variables are provided as structured text in `$ARGUMENTS`:
 ## Report
 
 Return ONLY the commit message that was used (no other text)
-
-$ARGUMENTS

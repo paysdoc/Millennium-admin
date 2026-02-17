@@ -91,7 +91,7 @@ export type AgentIdentifier =
   | 'review-agent'
   | 'patch-agent'
   // Git workflow agents
-  | 'branch-name-agent'
+  | 'branchName-agent'
   | 'commit-agent';
 
 /**

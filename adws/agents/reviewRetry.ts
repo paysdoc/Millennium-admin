@@ -62,8 +62,8 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
 
     // Patch each blocker issue
     for (const blockerIssue of lastBlockerIssues) {
-      log(`Patching blocker #${blockerIssue.review_issue_number}: ${blockerIssue.issue_description}`, 'info');
-      AgentStateManager.appendLog(statePath, `Patching blocker #${blockerIssue.review_issue_number}`);
+      log(`Patching blocker #${blockerIssue.reviewIssueNumber}: ${blockerIssue.issueDescription}`, 'info');
+      AgentStateManager.appendLog(statePath, `Patching blocker #${blockerIssue.reviewIssueNumber}`);
 
       const patchResult = await runPatchAgent(
         adwId, blockerIssue, logsDir, specFile, undefined, initAgentState(statePath, 'patch-agent'), cwd,
@@ -71,8 +71,8 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
       trackCost(patchResult as AgentRunResult, costState, statePath);
 
       const msg = patchResult.success ? 'Patch applied for' : 'Patch failed for';
-      log(`${msg} blocker #${blockerIssue.review_issue_number}`, patchResult.success ? 'success' : 'error');
-      AgentStateManager.appendLog(statePath, `${msg} blocker #${blockerIssue.review_issue_number}`);
+      log(`${msg} blocker #${blockerIssue.reviewIssueNumber}`, patchResult.success ? 'success' : 'error');
+      AgentStateManager.appendLog(statePath, `${msg} blocker #${blockerIssue.reviewIssueNumber}`);
     }
 
     // Commit and push changes before re-review

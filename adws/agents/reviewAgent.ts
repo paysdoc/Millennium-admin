@@ -12,11 +12,11 @@ import { extractJson } from '../core/jsonParser';
  * Matches the JSON output structure defined in .claude/commands/review.md
  */
 export interface ReviewIssue {
-  review_issue_number: number;
-  screenshot_path: string;
-  issue_description: string;
-  issue_resolution: string;
-  issue_severity: 'skippable' | 'tech_debt' | 'blocker';
+  reviewIssueNumber: number;
+  screenshotPath: string;
+  issueDescription: string;
+  issueResolution: string;
+  issueSeverity: 'skippable' | 'tech-debt' | 'blocker';
 }
 
 /**
@@ -25,8 +25,8 @@ export interface ReviewIssue {
  */
 export interface ReviewResult {
   success: boolean;
-  review_summary: string;
-  review_issues: ReviewIssue[];
+  reviewSummary: string;
+  reviewIssues: ReviewIssue[];
   screenshots: string[];
 }
 
@@ -62,7 +62,7 @@ export async function runReviewAgent(
   const agentName = 'review_agent';
   const outputFile = path.join(logsDir, 'review-agent.jsonl');
 
-  // Format args as: adw_id\nspec_file\nagent_name
+  // Format args as: adwId\nspec_file\nagent_name
   const args = `${adwId}\n${specFile}\n${agentName}`;
 
   const result = await runClaudeAgentWithCommand(
@@ -78,8 +78,8 @@ export async function runReviewAgent(
 
   // Parse the review result from the output
   const reviewResult = extractJson<ReviewResult>(result.output);
-  const blockerIssues = reviewResult?.review_issues?.filter(
-    issue => issue.issue_severity === 'blocker'
+  const blockerIssues = reviewResult?.reviewIssues?.filter(
+    issue => issue.issueSeverity === 'blocker'
   ) ?? [];
   const passed = reviewResult?.success === true || blockerIssues.length === 0;
 

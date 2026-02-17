@@ -18,8 +18,8 @@ export function formatPatchArgs(
   specPath?: string,
   screenshots?: string,
 ): string {
-  const reviewChangeRequest = `Issue #${reviewIssue.review_issue_number}: ${reviewIssue.issue_description}\nResolution: ${reviewIssue.issue_resolution}`;
-  return `${adwId}\n${reviewChangeRequest}\n${specPath ?? ''}\npatch_agent\n${screenshots ?? ''}`;
+  const reviewChangeRequest = `Issue #${reviewIssue.reviewIssueNumber}: ${reviewIssue.issueDescription}\nResolution: ${reviewIssue.issueResolution}`;
+  return `${adwId}\n${reviewChangeRequest}\n${specPath ?? ''}\npatchAgent\n${screenshots ?? ''}`;
 }
 
 /**
@@ -43,18 +43,18 @@ export async function runPatchAgent(
   statePath?: string,
   cwd?: string
 ): Promise<AgentResult> {
-  const args = formatPatchArgs(adwId, reviewIssue, specPath, reviewIssue.screenshot_path);
-  const outputFile = path.join(logsDir, `patch-agent-issue-${reviewIssue.review_issue_number}.jsonl`);
+  const args = formatPatchArgs(adwId, reviewIssue, specPath, reviewIssue.screenshotPath);
+  const outputFile = path.join(logsDir, `patch-agent-issue-${reviewIssue.reviewIssueNumber}.jsonl`);
 
-  log(`Patch Agent starting for issue #${reviewIssue.review_issue_number}:`, 'info');
-  log(`  Description: ${reviewIssue.issue_description}`, 'info');
-  log(`  Resolution: ${reviewIssue.issue_resolution}`, 'info');
+  log(`Patch Agent starting for issue #${reviewIssue.reviewIssueNumber}:`, 'info');
+  log(`  Description: ${reviewIssue.issueDescription}`, 'info');
+  log(`  Resolution: ${reviewIssue.issueResolution}`, 'info');
   log(`  Model: opus`, 'info');
 
   return runClaudeAgentWithCommand(
     '/patch',
     args,
-    `Patch: ${reviewIssue.review_issue_number}`,
+    `Patch: ${reviewIssue.reviewIssueNumber}`,
     outputFile,
     'opus',
     onProgress,

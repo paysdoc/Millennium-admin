@@ -2,7 +2,7 @@
 /**
  * Health Check Script for ADW System
  *
- * Usage: npx tsx adws/healthCheck.tsx <issue_number>
+ * Usage: npx tsx adws/healthCheck.tsx <issueNumber>
  *
  * Performs comprehensive health checks:
  * 1. Validates all required environment variables
@@ -52,12 +52,12 @@ export interface HealthCheckResult {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/healthCheck.tsx <issue_number>');
+  console.error('Usage: npx tsx adws/healthCheck.tsx <issueNumber>');
   console.error('');
   console.error('Performs comprehensive health checks for the ADW system.');
   console.error('');
   console.error('Arguments:');
-  console.error('  issue_number  - GitHub issue number to validate');
+  console.error('  issueNumber  - GitHub issue number to validate');
   console.error('');
   console.error('Checks performed:');
   console.error('  - Environment variables (ANTHROPIC_API_KEY, etc.)');

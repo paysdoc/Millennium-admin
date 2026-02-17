@@ -5,7 +5,7 @@
  * Removes all comments from a GitHub issue.
  * Useful for resetting an issue when a workflow has gone wrong.
  *
- * Usage: npx tsx adws/adwClearComments.tsx <issue_number>
+ * Usage: npx tsx adws/adwClearComments.tsx <issueNumber>
  */
 
 import { log } from './core';
@@ -21,12 +21,12 @@ interface ClearCommentsResult {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwClearComments.tsx <issue_number>');
+  console.error('Usage: npx tsx adws/adwClearComments.tsx <issueNumber>');
   console.error('');
   console.error('Removes all comments from a GitHub issue.');
   console.error('');
   console.error('Arguments:');
-  console.error('  issue_number  - GitHub issue number to clear comments from');
+  console.error('  issueNumber  - GitHub issue number to clear comments from');
   process.exit(1);
 }
 
