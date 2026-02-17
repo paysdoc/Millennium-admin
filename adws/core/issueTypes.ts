@@ -44,18 +44,21 @@ export const adwCommandToIssueTypeMap: Record<AdwSlashCommand, IssueClassSlashCo
 /**
  * Maps ADW workflow commands to their dedicated orchestrator scripts.
  * Commands present in this map bypass issue-type-based routing and route
- * directly to the specified orchestrator. Commands omitted from this map
- * (e.g., `/adw_review`, `/adw_document`, `/adw_patch`) fall back to
- * issue-type-based routing in `getWorkflowScript()`.
+ * directly to the specified orchestrator.
  */
 export const adwCommandToOrchestratorMap: Partial<Record<AdwSlashCommand, string>> = {
   '/adw_plan': 'adws/adwPlan.tsx',
   '/adw_build': 'adws/adwBuild.tsx',
   '/adw_test': 'adws/adwTest.tsx',
+  '/adw_review': 'adws/adwPrReview.tsx',
+  '/adw_document': 'adws/adwDocument.tsx',
+  '/adw_patch': 'adws/adwPatch.tsx',
   '/adw_plan_build': 'adws/adwPlanBuild.tsx',
   '/adw_plan_build_test': 'adws/adwPlanBuildTest.tsx',
+  '/adw_plan_build_review': 'adws/adwPlanBuildReview.tsx',
+  '/adw_plan_build_document': 'adws/adwPlanBuildDocument.tsx',
   '/adw_plan_build_test_review': 'adws/adwPlanBuildTestReview.tsx',
-  '/adw_sdlc': 'adws/adwPlanBuildTestReview.tsx',
+  '/adw_sdlc': 'adws/adwSdlc.tsx',
 } as const;
 
 /**

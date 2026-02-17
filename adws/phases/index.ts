@@ -14,6 +14,7 @@ export { executePlanPhase, buildContinuationPrompt, MAX_CONTINUATION_OUTPUT_LENG
 export { executeBuildPhase } from './buildPhase';
 export { executeTestPhase } from './testPhase';
 export { executePRPhase } from './prPhase';
+export { executeDocumentPhase } from './documentPhase';
 export {
   type PRReviewWorkflowConfig,
   initializePRReviewWorkflow,

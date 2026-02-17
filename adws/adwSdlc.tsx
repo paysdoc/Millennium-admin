@@ -1,8 +1,8 @@
 #!/usr/bin/env npx tsx
 /**
- * ADW Plan, Build, Test & Review - Plan+Build+Test+PR+Review Orchestrator
+ * ADW SDLC - Full Software Development Life Cycle Orchestrator
  *
- * Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id]
+ * Usage: npx tsx adws/adwSdlc.tsx <github-issueNumber> [adw-id]
  *
  * Workflow:
  * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
@@ -11,7 +11,8 @@
  * 4. Test Phase: run unit tests with retry, run E2E tests with retry
  * 5. PR Phase: create pull request (only if all tests pass)
  * 6. Review Phase: review implementation against spec, patch blockers, retry
- * 7. Finalize: update state, post completion comment
+ * 7. Document Phase: generate feature documentation (includes review screenshots)
+ * 8. Finalize: update state, post completion comment
  *
  * Environment Requirements:
  * - ANTHROPIC_API_KEY: Anthropic API key
@@ -21,6 +22,7 @@
  * - MAX_REVIEW_RETRY_ATTEMPTS: Maximum retry attempts for review-patch loop (default: 3)
  */
 
+import * as path from 'path';
 import { mergeModelUsageMaps, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
@@ -29,6 +31,7 @@ import {
   executeTestPhase,
   executePRPhase,
   executeReviewPhase,
+  executeDocumentPhase,
   completeWorkflow,
   handleWorkflowError,
 } from './workflowPhases';
@@ -37,9 +40,9 @@ import {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id]');
+  console.error('Usage: npx tsx adws/adwSdlc.tsx <github-issueNumber> [adw-id]');
   console.error('');
-  console.error('This orchestrator runs the complete Plan+Build+Test+PR+Review workflow.');
+  console.error('This orchestrator runs the full SDLC: Plan+Build+Test+PR+Review+Document.');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY           - Anthropic API key');
@@ -70,13 +73,21 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string | 
 }
 
 /**
+ * Derives the review screenshots directory from the review result.
+ * Review screenshots are stored in the agent state directory.
+ */
+function getReviewScreenshotsDir(adwId: string): string {
+  return path.join('agents', adwId, 'review-agent', 'review_img');
+}
+
+/**
  * Main orchestrator workflow.
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
-  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-review-orchestrator');
+  const config = await initializeWorkflow(issueNumber, adwId, 'sdlc-orchestrator');
 
   let totalCostUsd = 0;
   let totalModelUsage = {};
@@ -105,6 +116,12 @@ async function main(): Promise<void> {
     const reviewResult = await executeReviewPhase(config);
     totalCostUsd += reviewResult.costUsd;
     totalModelUsage = mergeModelUsageMaps(totalModelUsage, reviewResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
+    const screenshotsDir = getReviewScreenshotsDir(config.adwId);
+    const docResult = await executeDocumentPhase(config, screenshotsDir);
+    totalCostUsd += docResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, docResult.modelUsage);
     persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
 
     await completeWorkflow(config, totalCostUsd, {

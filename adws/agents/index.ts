@@ -75,3 +75,17 @@ export {
   type ReviewRetryOptions,
 } from './reviewRetry';
 
+// PR Agent
+export {
+  runPullRequestAgent,
+  formatPullRequestArgs,
+  extractPrUrlFromOutput,
+} from './prAgent';
+
+// Document Agent
+export {
+  runDocumentAgent,
+  formatDocumentArgs,
+  extractDocPathFromOutput,
+} from './documentAgent';
+

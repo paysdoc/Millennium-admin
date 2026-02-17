@@ -28,10 +28,15 @@ vi.mock('../core', () => ({
     '/adw_plan': 'adws/adwPlan.tsx',
     '/adw_build': 'adws/adwBuild.tsx',
     '/adw_test': 'adws/adwTest.tsx',
+    '/adw_review': 'adws/adwPrReview.tsx',
+    '/adw_document': 'adws/adwDocument.tsx',
+    '/adw_patch': 'adws/adwPatch.tsx',
     '/adw_plan_build': 'adws/adwPlanBuild.tsx',
     '/adw_plan_build_test': 'adws/adwPlanBuildTest.tsx',
+    '/adw_plan_build_review': 'adws/adwPlanBuildReview.tsx',
+    '/adw_plan_build_document': 'adws/adwPlanBuildDocument.tsx',
     '/adw_plan_build_test_review': 'adws/adwPlanBuildTestReview.tsx',
-    '/adw_sdlc': 'adws/adwPlanBuildTestReview.tsx',
+    '/adw_sdlc': 'adws/adwSdlc.tsx',
   },
 }));
 
@@ -419,21 +424,21 @@ describe('getWorkflowScript', () => {
     expect(getWorkflowScript('/feature', '/adw_plan_build_test')).toBe('adws/adwPlanBuildTest.tsx');
   });
 
-  it('returns adwPlanBuildTestReview when adwCommand is /adw_sdlc', () => {
-    expect(getWorkflowScript('/feature', '/adw_sdlc')).toBe('adws/adwPlanBuildTestReview.tsx');
+  it('returns adwSdlc when adwCommand is /adw_sdlc', () => {
+    expect(getWorkflowScript('/feature', '/adw_sdlc')).toBe('adws/adwSdlc.tsx');
   });
 
-  // Unmapped ADW commands fall back to issue-type routing
-  it('falls back to issue-type routing when adwCommand is /adw_patch', () => {
-    expect(getWorkflowScript('/bug', '/adw_patch')).toBe('adws/adwPlanBuild.tsx');
+  // All ADW commands now have dedicated orchestrators
+  it('returns adwPatch when adwCommand is /adw_patch', () => {
+    expect(getWorkflowScript('/bug', '/adw_patch')).toBe('adws/adwPatch.tsx');
   });
 
-  it('falls back to issue-type routing when adwCommand is /adw_document', () => {
-    expect(getWorkflowScript('/chore', '/adw_document')).toBe('adws/adwPlanBuildTest.tsx');
+  it('returns adwDocument when adwCommand is /adw_document', () => {
+    expect(getWorkflowScript('/chore', '/adw_document')).toBe('adws/adwDocument.tsx');
   });
 
-  it('falls back to issue-type routing when adwCommand is /adw_review', () => {
-    expect(getWorkflowScript('/pr_review', '/adw_review')).toBe('adws/adwPlanBuild.tsx');
+  it('returns adwPrReview when adwCommand is /adw_review', () => {
+    expect(getWorkflowScript('/pr_review', '/adw_review')).toBe('adws/adwPrReview.tsx');
   });
 
   // ADW command takes priority over issueType

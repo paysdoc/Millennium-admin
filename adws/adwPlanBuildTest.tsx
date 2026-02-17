@@ -93,7 +93,11 @@ async function main(): Promise<void> {
     totalModelUsage = mergeModelUsageMaps(totalModelUsage, testResult.modelUsage);
     persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
 
-    executePRPhase(config);
+    const prResult = await executePRPhase(config);
+    totalCostUsd += prResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, prResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
     await completeWorkflow(config, totalCostUsd, {
       unitTestsPassed: testResult.unitTestsPassed,
       e2eTestsPassed: testResult.e2eTestsPassed,

@@ -139,6 +139,13 @@ vi.mock('../agents', () => ({
   runUnitTestsWithRetry: vi.fn(),
   runE2ETestsWithRetry: vi.fn(),
   runReviewWithRetry: vi.fn(),
+  runPullRequestAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'https://github.com/test/pr/1',
+    prUrl: 'https://github.com/test/pr/1',
+    totalCostUsd: 0.1,
+    modelUsage: {},
+  }),
 }));
 
 vi.mock('../triggers/issueClassifier', () => ({
@@ -166,7 +173,7 @@ import {
   copyEnvToWorktree,
   inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry } from '../agents';
+import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry, runPullRequestAgent } from '../agents';
 import { classifyGitHubIssue } from '../triggers/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
@@ -553,26 +560,34 @@ describe('executePRPhase', () => {
     vi.clearAllMocks();
   });
 
-  it('creates PR when stage should execute', () => {
+  it('creates PR when stage should execute', async () => {
     vi.mocked(shouldExecuteStage).mockReturnValue(true);
     const config = createWorkflowConfig();
 
-    executePRPhase(config);
+    const result = await executePRPhase(config);
 
-    expect(createPullRequest).toHaveBeenCalledWith(
-      config.issue, '', '', 'main', '/mock/worktree'
+    expect(runPullRequestAgent).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      config.adwId,
+      config.logsDir,
+      undefined,
+      config.worktreePath,
     );
     expect(config.ctx.prUrl).toBe('https://github.com/test/pr/1');
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'pr_created', expect.anything());
+    expect(result.costUsd).toBeCloseTo(0.1);
   });
 
-  it('skips PR when already completed', () => {
+  it('skips PR when already completed', async () => {
     vi.mocked(shouldExecuteStage).mockReturnValue(false);
     const config = createWorkflowConfig();
 
-    executePRPhase(config);
+    const result = await executePRPhase(config);
 
-    expect(createPullRequest).not.toHaveBeenCalled();
+    expect(runPullRequestAgent).not.toHaveBeenCalled();
+    expect(result.costUsd).toBe(0);
   });
 });
 

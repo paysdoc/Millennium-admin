@@ -30,6 +30,10 @@ export type WorkflowStage =
   | 'review_passed'
   | 'review_failed'
   | 'review_patching'
+  // Document workflow stages
+  | 'document_running'
+  | 'document_completed'
+  | 'document_failed'
   // Token limit recovery
   | 'token_limit_recovery';
 
