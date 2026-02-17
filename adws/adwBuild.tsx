@@ -84,8 +84,8 @@ async function main(): Promise<void> {
   const branchName = getCurrentBranch(cwd || undefined);
   log(`Current branch: ${branchName}`, 'info');
 
-  const planPath = getPlanFilePath(issueNumber);
-  if (!planFileExists(issueNumber)) {
+  const planPath = getPlanFilePath(issueNumber, cwd || undefined);
+  if (!planFileExists(issueNumber, cwd || undefined)) {
     log(`Plan file not found: ${planPath}`, 'error');
     log('Run adwPlan.tsx first to generate the plan.', 'error');
     process.exit(1);

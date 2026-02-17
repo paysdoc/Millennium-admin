@@ -52,7 +52,7 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
   }
 
   // Plan agent step
-  const planPath = getPlanFilePath(issueNumber);
+  const planPath = getPlanFilePath(issueNumber, worktreePath);
   ctx.planPath = planPath;
   let costUsd = 0;
   let modelUsage = emptyModelUsageMap();

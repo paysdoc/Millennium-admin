@@ -210,7 +210,7 @@ export async function executeReviewPhase(config: WorkflowConfig): Promise<{
   log('Phase: Review', 'info');
   AgentStateManager.appendLog(orchestratorStatePath, 'Starting review phase');
 
-  const specFile = getPlanFilePath(issueNumber);
+  const specFile = getPlanFilePath(issueNumber, worktreePath);
 
   postWorkflowComment(issueNumber, 'review_running', ctx);
 
