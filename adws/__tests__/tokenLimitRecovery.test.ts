@@ -65,7 +65,7 @@ vi.mock('../agents', () => ({
   runReviewWithRetry: vi.fn(),
 }));
 
-vi.mock('../triggers/issueClassifier', () => ({
+vi.mock('../core/issueClassifier', () => ({
   classifyGitHubIssue: vi.fn(),
 }));
 

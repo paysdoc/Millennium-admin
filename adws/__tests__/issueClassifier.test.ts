@@ -5,7 +5,7 @@ import {
   classifyIssueForTrigger,
   classifyGitHubIssue,
   getWorkflowScript,
-} from '../triggers/issueClassifier';
+} from '../core/issueClassifier';
 import { adwCommandToIssueTypeMap, adwCommandToOrchestratorMap, AdwSlashCommand, GitHubIssue } from '../core/dataTypes';
 
 vi.mock('../core', () => ({

@@ -141,7 +141,7 @@ vi.mock('../agents', () => ({
   runReviewWithRetry: vi.fn(),
 }));
 
-vi.mock('../triggers/issueClassifier', () => ({
+vi.mock('../core/issueClassifier', () => ({
   classifyGitHubIssue: vi.fn().mockResolvedValue({
     issueType: '/feature',
     success: true,
@@ -167,7 +167,7 @@ import {
   inferIssueTypeFromBranch,
 } from '../github';
 import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry } from '../agents';
-import { classifyGitHubIssue } from '../triggers/issueClassifier';
+import { classifyGitHubIssue } from '../core/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
   return {

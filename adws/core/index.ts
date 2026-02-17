@@ -86,3 +86,7 @@ export {
   persistTokenCounts,
 } from './costReport';
 
+// Issue classifier
+export type { IssueClassificationResult } from './issueClassifier';
+export { parseAdwClassificationOutput, classifyWithAdwCommand, classifyIssueForTrigger, classifyGitHubIssue, getWorkflowScript } from './issueClassifier';
+
