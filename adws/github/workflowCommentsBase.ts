@@ -66,6 +66,16 @@ export function isActionableComment(commentBody: string): boolean {
   return ACTIONABLE_COMMENT_PATTERN.test(commentBody);
 }
 
+/** Extracts the content following the `## Take action` heading. Returns null if no heading or empty content. */
+export function extractActionableContent(commentBody: string): string | null {
+  const match = commentBody.match(ACTIONABLE_COMMENT_PATTERN);
+  if (!match) return null;
+
+  const headingEnd = (match.index ?? 0) + match[0].length;
+  const content = commentBody.slice(headingEnd).trim();
+  return content.length > 0 ? content : null;
+}
+
 /** Truncates text to a maximum length with ellipsis. */
 export function truncateText(text: string, maxLength: number): string {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;

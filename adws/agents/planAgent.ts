@@ -7,17 +7,28 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
+import { isAdwComment, extractActionableContent } from '../github/workflowCommentsBase';
 
 /**
  * Formats issue context as arguments for plan commands.
- * This creates the full context that replaces $ARGUMENTS in the command templates.
+ * Filters out ADW bot comments and surfaces actionable comment content prominently.
  */
-function formatIssueContextAsArgs(issue: GitHubIssue): string {
-  const commentsSection = issue.comments.length > 0
-    ? issue.comments
+export function formatIssueContextAsArgs(issue: GitHubIssue): string {
+  const humanComments = issue.comments.filter(c => !isAdwComment(c.body));
+
+  const latestActionableContent = [...issue.comments]
+    .reverse()
+    .reduce<string | null>((found, c) => found ?? extractActionableContent(c.body), null);
+
+  const commentsSection = humanComments.length > 0
+    ? humanComments
         .map(c => `**${c.author.login}** (${c.createdAt}):\n${c.body}`)
         .join('\n\n---\n\n')
     : 'No comments.';
+
+  const actionableSection = latestActionableContent
+    ? `\n\n### Actionable Comment\n${latestActionableContent}`
+    : '';
 
   return `## GitHub Issue #${issue.number}
 **Title:** ${issue.title}
@@ -27,7 +38,7 @@ function formatIssueContextAsArgs(issue: GitHubIssue): string {
 **Created:** ${issue.createdAt}
 
 ### Description
-${issue.body || 'No description provided.'}
+${issue.body || 'No description provided.'}${actionableSection}
 
 ### Comments
 ${commentsSection}`;
