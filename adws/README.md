@@ -68,9 +68,21 @@ npx tsx adws/adwPlanBuildTest.tsx 123
 # Process with review (plan + build + test + review)
 npx tsx adws/adwPlanBuildTestReview.tsx 123
 
+# Process with review but skip tests (plan + build + review)
+npx tsx adws/adwPlanBuildReview.tsx 123
+
+# Process with documentation (plan + build + document)
+npx tsx adws/adwPlanBuildDocument.tsx 123
+
+# Run complete SDLC (plan + build + test + review + document)
+npx tsx adws/adwSdlc.tsx 123
+
 # Run individual phases
 npx tsx adws/adwPlan.tsx 123               # Planning phase only
 npx tsx adws/adwBuild.tsx 123 <adw-id>     # Build phase only (requires existing plan)
+npx tsx adws/adwTest.tsx [adw-id]          # Testing phase only
+npx tsx adws/adwDocument.tsx [adw-id]      # Documentation phase only
+npx tsx adws/adwPatch.tsx 123 [adw-id]     # Direct patch from issue
 
 # Run continuous monitoring (polls every 20 seconds)
 npx tsx adws/triggers/trigger_cron.ts
@@ -78,8 +90,6 @@ npx tsx adws/triggers/trigger_cron.ts
 # Start webhook server (for instant GitHub events)
 npx tsx adws/triggers/trigger_webhook.ts
 ```
-
-> **Not yet ported to TypeScript:** `adwTest` (standalone), `adwReview` (standalone), `adwDocument`, `adwPatch`, `adwPlanBuildReview`, `adwPlanBuildDocument`, `adwSdlc`. See individual sections below for details.
 
 ## ADW Workflow Scripts
 
@@ -124,21 +134,23 @@ npx tsx adws/adwBuild.tsx <issueNumber> <adw-id>
 3. Commits implementation changes
 4. Updates pull request
 
-#### adwTest - Testing Phase
-> **Status: Not yet ported to TypeScript.** Testing is available as part of orchestrator pipelines (e.g., `adwPlanBuildTest.tsx`).
-
+#### adwTest.tsx - Testing Phase
 Runs test suites and handles test failures.
+
+**Usage:**
+```bash
+npx tsx adws/adwTest.tsx [adw-id] [--cwd <path>]
+```
 
 **Requirements:**
 - Working directory with test suite
 - Optional: E2E test setup
 
 **What it does:**
-1. Runs application test suite
-2. Optionally runs E2E tests (browser automation)
-3. Auto-resolves test failures (up to 3 attempts)
-4. Reports results to GitHub issue
-5. Commits test results
+1. Runs unit test suite with automatic failure resolution
+2. Runs E2E tests (browser automation) with automatic failure resolution
+3. Auto-resolves test failures (up to MAX_TEST_RETRY_ATTEMPTS attempts)
+4. Reports pass/fail results
 
 #### adwPrReview.tsx - Review Phase
 Reviews implementation against specifications.
@@ -162,36 +174,39 @@ npx tsx adws/adwPrReview.tsx <issueNumber> <adw-id> [--skip-resolution]
 6. Uploads screenshots to cloud storage
 7. Posts detailed review report
 
-#### adwDocument - Documentation Phase
-> **Status: Not yet ported to TypeScript.**
+#### adwDocument.tsx - Documentation Phase
+Generates comprehensive documentation using the `/document` skill.
 
-Generates comprehensive documentation.
-
-**Requirements:**
-- Completed review phase (needs review artifacts)
-- ADW ID is mandatory
-
-**What it does:**
-1. Analyzes implementation and review results
-2. Generates technical documentation
-3. Creates user-facing guides
-4. Includes screenshots from review
-5. Commits to `app_docs/` directory
-
-#### adwPatch - Direct Patch Workflow
-> **Status: Not yet ported to TypeScript.**
-
-Quick patches triggered by 'adwPatch' keyword.
+**Usage:**
+```bash
+npx tsx adws/adwDocument.tsx [adw-id] [--cwd <path>]
+```
 
 **Requirements:**
-- Issue or comment containing 'adwPatch' keyword
-- Clear change request in the content
+- ADW ID (optional, auto-generated if not provided)
 
 **What it does:**
-1. Searches for 'adwPatch' in issue/comments
-2. Creates targeted patch plan
-3. Implements specific changes
-4. Commits and creates PR
+1. Analyzes git diff against main branch
+2. Generates technical documentation in `app_docs/`
+3. Updates conditional docs registry
+4. Optionally includes screenshots from review phase
+
+#### adwPatch.tsx - Direct Patch Workflow
+Creates direct patches from GitHub issues without a full plan cycle.
+
+**Usage:**
+```bash
+npx tsx adws/adwPatch.tsx <issueNumber> [adw-id] [--cwd <path>]
+```
+
+**Requirements:**
+- GitHub issue number
+
+**What it does:**
+1. Fetches GitHub issue details
+2. Creates a targeted patch plan using the `/patch` skill
+3. Implements the patch using the build agent
+4. Commits changes and creates PR
 5. Skips full planning phase
 
 ### Orchestrator Scripts
@@ -231,39 +246,51 @@ npx tsx adws/adwPlanBuildTestReview.tsx <issueNumber> [adw-id]
 3. Testing (ensures functionality)
 4. Review (validates against spec, auto-fixes issues)
 
-#### adwPlanBuildReview - Plan + Build + Review
-> **Status: Not yet ported to TypeScript.**
-
+#### adwPlanBuildReview.tsx - Plan + Build + Review
 Pipeline with review but skipping tests.
+
+**Usage:**
+```bash
+npx tsx adws/adwPlanBuildReview.tsx <issueNumber> [adw-id]
+```
 
 **Phases:**
 1. Planning (creates implementation spec)
 2. Building (implements solution)
-3. Review (validates against spec without test results)
+3. PR creation
+4. Review (validates against spec, auto-fixes issues)
 
 **Note:** Review phase evaluates implementation against specification but without test verification. Best for non-critical changes or when testing is handled separately.
 
-#### adwPlanBuildDocument - Plan + Build + Document
-> **Status: Not yet ported to TypeScript.**
-
+#### adwPlanBuildDocument.tsx - Plan + Build + Document
 Fast documentation pipeline skipping tests and review.
+
+**Usage:**
+```bash
+npx tsx adws/adwPlanBuildDocument.tsx <issueNumber> [adw-id]
+```
 
 **Phases:**
 1. Planning (creates implementation spec)
 2. Building (implements solution)
-3. Document (generates documentation without screenshots)
+3. PR creation
+4. Document (generates documentation without screenshots)
 
-#### adwSdlc - Complete SDLC
-> **Status: Not yet ported to TypeScript.**
-
+#### adwSdlc.tsx - Complete SDLC
 Full Software Development Life Cycle automation.
+
+**Usage:**
+```bash
+npx tsx adws/adwSdlc.tsx <issueNumber> [adw-id]
+```
 
 **Phases:**
 1. **Plan**: Creates detailed implementation spec
 2. **Build**: Implements the solution
 3. **Test**: Runs comprehensive test suite
-4. **Review**: Validates implementation vs spec
-5. **Document**: Generates technical and user docs
+4. **PR**: Creates pull request
+5. **Review**: Validates implementation vs spec
+6. **Document**: Generates technical and user docs (includes review screenshots)
 
 **Output:**
 - Feature implementation
@@ -353,7 +380,6 @@ npx tsx adws/adwPlanBuildTest.tsx 789
 ```
 
 ### Run complete SDLC
-> **Status: Not yet ported to TypeScript.**
 ```bash
 # Full SDLC with review and documentation
 npx tsx adws/adwSdlc.tsx 789
@@ -451,9 +477,12 @@ The system uses a modular TypeScript architecture with composable scripts:
 Orchestrators combine phases internally, managing state between each step:
 ```bash
 # Use an orchestrator that combines the phases you need
-npx tsx adws/adwPlanBuild.tsx 123            # plan + build
-npx tsx adws/adwPlanBuildTest.tsx 123         # plan + build + test
-npx tsx adws/adwPlanBuildTestReview.tsx 123   # plan + build + test + review
+npx tsx adws/adwPlanBuild.tsx 123              # plan + build
+npx tsx adws/adwPlanBuildTest.tsx 123           # plan + build + test
+npx tsx adws/adwPlanBuildReview.tsx 123         # plan + build + review
+npx tsx adws/adwPlanBuildDocument.tsx 123       # plan + build + document
+npx tsx adws/adwPlanBuildTestReview.tsx 123     # plan + build + test + review
+npx tsx adws/adwSdlc.tsx 123                   # plan + build + test + review + document
 ```
 
 ### Workflow Output Structure
@@ -504,8 +533,10 @@ app_docs/                         # Generated documentation
 - `buildAgent.ts` - Build/implementation agent
 - `testAgent.ts` - Testing agent
 - `reviewAgent.ts` - Review agent
-- `gitAgent.ts` - Git operations agent
+- `gitAgent.ts` - Git operations agent (branch name, commit)
 - `patchAgent.ts` - Patch/quick-fix agent
+- `prAgent.ts` - Pull request creation agent
+- `documentAgent.ts` - Documentation generation agent
 - `tokenManager.ts` - Token count management
 
 **Core** (`core/`):
@@ -529,15 +560,23 @@ app_docs/                         # Generated documentation
 - `planPhase.ts` - Planning phase implementation
 - `buildPhase.ts` - Build phase implementation
 - `testPhase.ts` - Testing phase implementation
+- `prPhase.ts` - PR creation phase implementation
+- `documentPhase.ts` - Documentation phase implementation
 - `prReviewPhase.ts` - PR review phase implementation
 
 **Orchestrators** (root `.tsx` files):
 - `adwPlan.tsx` - Planning phase workflow
 - `adwBuild.tsx` - Implementation phase workflow
+- `adwTest.tsx` - Standalone testing workflow
+- `adwDocument.tsx` - Standalone documentation workflow
+- `adwPatch.tsx` - Standalone direct patch workflow
+- `adwPrReview.tsx` - Standalone PR review orchestration
 - `adwPlanBuild.tsx` - Plan + build orchestration
 - `adwPlanBuildTest.tsx` - Plan + build + test orchestration
+- `adwPlanBuildReview.tsx` - Plan + build + review orchestration
+- `adwPlanBuildDocument.tsx` - Plan + build + document orchestration
 - `adwPlanBuildTestReview.tsx` - Plan + build + test + review orchestration
-- `adwPrReview.tsx` - Standalone PR review orchestration
+- `adwSdlc.tsx` - Full SDLC orchestration (plan + build + test + review + document)
 
 **Triggers** (`triggers/`):
 - `trigger_cron.ts` - Cron-based polling monitor

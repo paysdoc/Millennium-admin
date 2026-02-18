@@ -33,7 +33,7 @@ describe('testAgent', () => {
   const testLogsDir = `${uniqueTestDir}/test-logs`;
   // Use a unique temp directory for e2e tests instead of the real .claude/commands/e2e-examples
   const testBaseDir = `${uniqueTestDir}/mock-project`;
-  const e2eTestsDir = path.join(testBaseDir, '.claude/commands/e2e-examples');
+  const e2eTestsDir = path.join(testBaseDir, 'e2e-tests');
 
   beforeEach(() => {
     vi.clearAllMocks();

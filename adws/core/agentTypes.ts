@@ -77,6 +77,11 @@ export type AgentIdentifier =
   | 'plan-build-orchestrator'
   | 'plan-build-test-orchestrator'
   | 'plan-build-test-review-orchestrator'
+  | 'plan-build-review-orchestrator'
+  | 'plan-build-document-orchestrator'
+  | 'sdlc-orchestrator'
+  | 'document-orchestrator'
+  | 'patch-orchestrator'
   | 'classifier'
   | 'plan-agent'
   | 'build-agent'
@@ -92,7 +97,10 @@ export type AgentIdentifier =
   | 'patch-agent'
   // Git workflow agents
   | 'branchName-agent'
-  | 'commit-agent';
+  | 'commit-agent'
+  // PR and document agents
+  | 'pr-agent'
+  | 'document-agent';
 
 /**
  * Execution status for tracking agent progress.

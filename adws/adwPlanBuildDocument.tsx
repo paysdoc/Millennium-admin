@@ -1,15 +1,16 @@
 #!/usr/bin/env npx tsx
 /**
- * ADW Plan & Build - Plan+Build+PR Orchestrator
+ * ADW Plan, Build & Document - Plan+Build+PR+Document Orchestrator
  *
- * Usage: npx tsx adws/adwPlanBuild.tsx <github-issueNumber> [adw-id]
+ * Usage: npx tsx adws/adwPlanBuildDocument.tsx <github-issueNumber> [adw-id]
  *
  * Workflow:
  * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
  * 2. Plan Phase: classify issue, create branch, run plan agent, commit plan
  * 3. Build Phase: run build agent, commit implementation
  * 4. PR Phase: create pull request
- * 5. Finalize: update state, post completion comment
+ * 5. Document Phase: generate feature documentation
+ * 6. Finalize: update state, post completion comment
  *
  * Environment Requirements:
  * - ANTHROPIC_API_KEY: Anthropic API key
@@ -23,6 +24,7 @@ import {
   executePlanPhase,
   executeBuildPhase,
   executePRPhase,
+  executeDocumentPhase,
   completeWorkflow,
   handleWorkflowError,
 } from './workflowPhases';
@@ -31,9 +33,9 @@ import {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlanBuild.tsx <github-issueNumber> [adw-id]');
+  console.error('Usage: npx tsx adws/adwPlanBuildDocument.tsx <github-issueNumber> [adw-id]');
   console.error('');
-  console.error('This orchestrator runs the complete Plan+Build+PR workflow.');
+  console.error('This orchestrator runs the Plan+Build+PR+Document workflow (no tests or review).');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
@@ -68,7 +70,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, adwId } = parseArguments(args);
 
-  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-orchestrator');
+  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-document-orchestrator');
 
   let totalCostUsd = 0;
   let totalModelUsage = {};
@@ -87,6 +89,11 @@ async function main(): Promise<void> {
     const prResult = await executePRPhase(config);
     totalCostUsd += prResult.costUsd;
     totalModelUsage = mergeModelUsageMaps(totalModelUsage, prResult.modelUsage);
+    persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
+
+    const docResult = await executeDocumentPhase(config);
+    totalCostUsd += docResult.costUsd;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, docResult.modelUsage);
     persistTokenCounts(config.orchestratorStatePath, totalCostUsd, totalModelUsage);
 
     await completeWorkflow(config, totalCostUsd, undefined, totalModelUsage);
