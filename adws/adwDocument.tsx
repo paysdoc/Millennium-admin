@@ -16,6 +16,7 @@
 
 import {
   log,
+  setLogAdwId,
   generateAdwId,
   ensureLogsDirectory,
   AgentStateManager,
@@ -57,6 +58,7 @@ function parseArguments(args: string[]): { adwId: string; cwd: string | null } {
   }
 
   const adwId = args[0] || generateAdwId();
+  setLogAdwId(adwId);
   return { adwId, cwd };
 }
 

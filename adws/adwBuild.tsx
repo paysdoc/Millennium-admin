@@ -26,6 +26,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   log,
+  setLogAdwId,
   generateAdwId,
   ensureLogsDirectory,
   IssueClassSlashCommand,
@@ -77,6 +78,7 @@ async function main(): Promise<void> {
 
   // Step 2: Determine ADW ID
   const adwId = providedAdwId || generateAdwId(issue.title);
+  setLogAdwId(adwId);
   const logsDir = ensureLogsDirectory(adwId);
   log(`ADW ID: ${adwId}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
