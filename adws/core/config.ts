@@ -4,6 +4,7 @@
 
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import type { SlashCommand } from './issueTypes';
 
 // Load environment variables from .env file at project root
 dotenv.config();
@@ -46,3 +47,68 @@ export const TOKEN_LIMIT_THRESHOLD = parseFloat(process.env.TOKEN_LIMIT_THRESHOL
 
 /** Maximum number of continuation attempts before failing (default: 3). */
 export const MAX_TOKEN_CONTINUATIONS = Math.max(1, parseInt(process.env.MAX_TOKEN_CONTINUATIONS || '3', 10)) || 3;
+
+/** Allowlist of environment variable names safe to pass to Claude CLI subprocesses. */
+const SAFE_ENV_VARS: readonly string[] = [
+  'ANTHROPIC_API_KEY',
+  'GITHUB_PAT',
+  'GH_TOKEN',
+  'GITHUB_PERSONAL_ACCESS_TOKEN',
+  'CLAUDE_CODE_PATH',
+  'HOME',
+  'USER',
+  'PATH',
+  'SHELL',
+  'TERM',
+  'LANG',
+  'LC_ALL',
+  'NODE_PATH',
+  'NODE_ENV',
+  'PWD',
+];
+
+/**
+ * Builds a filtered environment object containing only whitelisted variables.
+ * Prevents leaking secrets (DB credentials, AWS keys, etc.) to Claude CLI subprocesses.
+ */
+export function getSafeSubprocessEnv(): NodeJS.ProcessEnv {
+  const safeEnv: Record<string, string | undefined> = {};
+  for (const key of SAFE_ENV_VARS) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      safeEnv[key] = value;
+    }
+  }
+  return safeEnv as NodeJS.ProcessEnv;
+}
+
+/** Centralized model routing map. Maps every slash command to its model. */
+export const SLASH_COMMAND_MODEL_MAP: Record<SlashCommand, 'opus' | 'sonnet' | 'haiku'> = {
+  // Classification (fast, cheap)
+  '/classify_adw': 'haiku',
+  '/classify_issue': 'haiku',
+  // Planning (complex reasoning)
+  '/feature': 'opus',
+  '/bug': 'opus',
+  '/chore': 'opus',
+  '/pr_review': 'opus',
+  // Implementation (complex reasoning)
+  '/implement': 'opus',
+  '/patch': 'opus',
+  // Review (complex reasoning)
+  '/review': 'opus',
+  // Test running (structured, cheap)
+  '/test': 'sonnet',
+  '/test_e2e': 'sonnet',
+  // Test resolution (complex reasoning)
+  '/resolve_failed_test': 'opus',
+  '/resolve_failed_e2e_test': 'opus',
+  // Git operations (structured, cheap)
+  '/generate_branch_name': 'sonnet',
+  '/commit': 'sonnet',
+  '/pull_request': 'sonnet',
+  // Documentation
+  '/document': 'sonnet',
+  // Utility
+  '/find_plan_file': 'sonnet',
+};

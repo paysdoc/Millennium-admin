@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { log } from '../core';
+import { log, SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 
 /**
@@ -67,7 +67,7 @@ export async function runPullRequestAgent(
     args,
     'Pull Request',
     outputFile,
-    'sonnet',
+    SLASH_COMMAND_MODEL_MAP['/pull_request'],
     undefined,
     statePath,
     cwd,

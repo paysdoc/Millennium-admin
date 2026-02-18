@@ -3,7 +3,8 @@
  */
 import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
-import { CLAUDE_CODE_PATH, log, AgentStateManager, type ModelUsageMap, type TokenUsageSnapshot, MAX_THINKING_TOKENS, TOKEN_LIMIT_THRESHOLD } from '../core';
+import * as path from 'path';
+import { CLAUDE_CODE_PATH, log, AgentStateManager, getSafeSubprocessEnv, type ModelUsageMap, type TokenUsageSnapshot, MAX_THINKING_TOKENS, TOKEN_LIMIT_THRESHOLD } from '../core';
 import { parseJsonlOutput, type JsonlParserState, type ProgressCallback } from './jsonlParser';
 import { computeTotalTokens } from './tokenManager';
 
@@ -182,6 +183,20 @@ function handleAgentProcess(
 }
 
 /**
+ * Saves the prompt to a file in the agent's state directory for replay and audit.
+ * Extracts the slash command name from the prompt start for the filename.
+ */
+function savePrompt(prompt: string, statePath: string): void {
+  const promptsDir = path.join(statePath, 'prompts');
+  fs.mkdirSync(promptsDir, { recursive: true });
+
+  const match = prompt.match(/^\/(\w+)/);
+  const filename = match ? `${match[1]}.txt` : 'prompt.txt';
+
+  fs.writeFileSync(path.join(promptsDir, filename), prompt, 'utf-8');
+}
+
+/**
  * Runs a Claude Code agent with the given prompt.
  * Streams output to a log file and returns the result.
  *
@@ -206,6 +221,7 @@ export async function runClaudeAgent(
   if (statePath) {
     AgentStateManager.appendLog(statePath, `Starting ${agentName} agent`, prompt);
     AgentStateManager.appendLog(statePath, `Model: ${model}`);
+    savePrompt(prompt, statePath);
   }
 
   const args = [
@@ -224,7 +240,7 @@ export async function runClaudeAgent(
 
   const claude = spawn(CLAUDE_CODE_PATH, args, {
     cwd: cwd || process.cwd(),
-    env: { ...process.env }
+    env: getSafeSubprocessEnv(),
   });
 
   // Write prompt to stdin and close it
@@ -265,6 +281,7 @@ export async function runClaudeAgentWithCommand(
   if (statePath) {
     AgentStateManager.appendLog(statePath, `Starting ${agentName} agent with command: ${command}`, prompt);
     AgentStateManager.appendLog(statePath, `Model: ${model}`);
+    savePrompt(prompt, statePath);
   }
 
   const cliArgs = [
@@ -285,7 +302,7 @@ export async function runClaudeAgentWithCommand(
 
   const claude = spawn(CLAUDE_CODE_PATH, cliArgs, {
     cwd: cwd || process.cwd(),
-    env: { ...process.env },
+    env: getSafeSubprocessEnv(),
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

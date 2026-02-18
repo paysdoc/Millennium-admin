@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { GitHubIssue, PRDetails, log } from '../core';
+import { GitHubIssue, PRDetails, log, SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult, ProgressCallback } from './claudeAgent';
 
 /**
@@ -59,9 +59,9 @@ export async function runPrReviewBuildAgent(
   log(`  PR: #${prDetails.number} - ${prDetails.title}`, 'info');
   log(`  Output file: ${outputFile}`, 'info');
   log(`  Revision plan length: ${revisionPlan.length} characters`, 'info');
-  log(`  Model: opus`, 'info');
+  log(`  Model: ${SLASH_COMMAND_MODEL_MAP['/implement']}`, 'info');
 
-  return runClaudeAgentWithCommand('/implement', args, 'PR Review Build', outputFile, 'opus', onProgress, statePath, cwd);
+  return runClaudeAgentWithCommand('/implement', args, 'PR Review Build', outputFile, SLASH_COMMAND_MODEL_MAP['/implement'], onProgress, statePath, cwd);
 }
 
 /**
@@ -92,7 +92,7 @@ export async function runBuildAgent(
   log(`  Issue URL: ${issue.url}`, 'info');
   log(`  Output file: ${outputFile}`, 'info');
   log(`  Plan content length: ${planContent.length} characters`, 'info');
-  log(`  Model: opus`, 'info');
+  log(`  Model: ${SLASH_COMMAND_MODEL_MAP['/implement']}`, 'info');
 
-  return runClaudeAgentWithCommand('/implement', args, 'Build', outputFile, 'opus', onProgress, statePath, cwd);
+  return runClaudeAgentWithCommand('/implement', args, 'Build', outputFile, SLASH_COMMAND_MODEL_MAP['/implement'], onProgress, statePath, cwd);
 }

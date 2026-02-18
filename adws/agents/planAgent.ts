@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment } from '../core';
+import { GitHubIssue, IssueClassSlashCommand, PRDetails, PRReviewComment, SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 
 /**
@@ -151,7 +151,7 @@ export async function runPrReviewPlanAgent(
   const args = formatPrReviewContextAsArgs(prDetails, comments, existingPlanContent);
   const outputFile = path.join(logsDir, 'pr-review-plan-agent.jsonl');
 
-  return runClaudeAgentWithCommand('/pr_review', args, 'PR Review Plan', outputFile, 'opus', undefined, statePath, cwd);
+  return runClaudeAgentWithCommand('/pr_review', args, 'PR Review Plan', outputFile, SLASH_COMMAND_MODEL_MAP['/pr_review'], undefined, statePath, cwd);
 }
 
 /**
@@ -175,5 +175,5 @@ export async function runPlanAgent(
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
   // Use the issueType directly as the command (e.g., '/feature', '/bug', '/chore', '/pr_review')
-  return runClaudeAgentWithCommand(issueType, args, 'Plan', outputFile, 'opus', undefined, statePath, cwd);
+  return runClaudeAgentWithCommand(issueType, args, 'Plan', outputFile, SLASH_COMMAND_MODEL_MAP[issueType], undefined, statePath, cwd);
 }

@@ -17,9 +17,13 @@ vi.mock('../agents/claudeAgent', () => ({
   }),
 }));
 
-vi.mock('../core', () => ({
-  log: vi.fn(),
-}));
+vi.mock('../core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+  };
+});
 
 import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
 

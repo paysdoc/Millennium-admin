@@ -15,6 +15,14 @@ import { isActionableComment, isAdwRunningForIssue, truncateText } from '../gith
 import { removeWorktreesForIssue } from '../github/worktreeOperations';
 import { classifyIssueForTrigger, getWorkflowScript } from '../core/issueClassifier';
 import { handlePullRequestEvent } from './webhookHandlers';
+import {
+  checkEnvironmentVariables,
+  checkGitRepository,
+  checkClaudeCodeCLI,
+  checkGitHubCLI,
+  checkDirectoryStructure,
+  type CheckResult,
+} from '../healthCheckChecks';
 
 // Re-export for any external consumers
 export { handlePullRequestEvent, extractIssueNumberFromPRBody } from './webhookHandlers';
@@ -40,6 +48,14 @@ function jsonResponse(
   res.end(JSON.stringify(body));
 }
 
+interface HealthCheckResult {
+  success: boolean;
+  timestamp: string;
+  checks: Record<string, CheckResult>;
+  warnings: string[];
+  errors: string[];
+}
+
 function spawnDetached(command: string, args: string[]): void {
   log(`Spawning: ${command} ${args.join(' ')}`);
   const child = spawn(command, args, {
@@ -50,6 +66,37 @@ function spawnDetached(command: string, args: string[]): void {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/health' && req.method === 'GET') {
+    const result: HealthCheckResult = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      checks: {},
+      warnings: [],
+      errors: [],
+    };
+
+    result.checks.environmentVariables = checkEnvironmentVariables();
+    result.checks.gitRepository = checkGitRepository();
+    result.checks.claudeCodeCLI = checkClaudeCodeCLI();
+    result.checks.gitHubCLI = checkGitHubCLI();
+    result.checks.directoryStructure = checkDirectoryStructure();
+
+    for (const [checkName, checkResult] of Object.entries(result.checks)) {
+      if (checkResult.error) {
+        result.errors.push(`${checkName}: ${checkResult.error}`);
+      }
+      if (checkResult.warning) {
+        result.warnings.push(`${checkName}: ${checkResult.warning}`);
+      }
+      if (!checkResult.success) {
+        result.success = false;
+      }
+    }
+
+    jsonResponse(res, 200, result as unknown as Record<string, unknown>);
+    return;
+  }
+
   if (req.url !== '/webhook') {
     jsonResponse(res, 404, { error: 'not found' });
     return;

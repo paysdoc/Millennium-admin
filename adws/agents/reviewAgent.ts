@@ -4,6 +4,7 @@
  */
 
 import * as path from 'path';
+import { SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 import { extractJson } from '../core/jsonParser';
 
@@ -70,7 +71,7 @@ export async function runReviewAgent(
     args,
     'Review',
     outputFile,
-    'opus',
+    SLASH_COMMAND_MODEL_MAP['/review'],
     undefined,
     statePath,
     cwd

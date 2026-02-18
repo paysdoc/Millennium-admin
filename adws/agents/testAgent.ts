@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 import { extractJson, extractJsonArray } from '../core/jsonParser';
 
@@ -84,7 +85,7 @@ export async function runTestAgent(
     '',
     'Test Runner',
     outputFile,
-    'sonnet',
+    SLASH_COMMAND_MODEL_MAP['/test'],
     undefined,
     statePath,
     cwd
@@ -127,7 +128,7 @@ export async function runE2ETestAgent(
     testFilePath,
     `E2E Test: ${testName}`,
     outputFile,
-    'sonnet',
+    SLASH_COMMAND_MODEL_MAP['/test_e2e'],
     undefined,
     statePath,
     cwd
@@ -174,7 +175,7 @@ export async function runResolveTestAgent(
     failureJson,
     `Resolve: ${failedTest.test_name}`,
     outputFile,
-    'opus',
+    SLASH_COMMAND_MODEL_MAP['/resolve_failed_test'],
     undefined,
     statePath,
     cwd
@@ -214,7 +215,7 @@ export async function runResolveE2ETestAgent(
     failureJson,
     `Resolve E2E: ${displayName}`,
     outputFile,
-    'opus',
+    SLASH_COMMAND_MODEL_MAP['/resolve_failed_e2e_test'],
     undefined,
     statePath,
     cwd

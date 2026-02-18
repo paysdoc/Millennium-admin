@@ -108,7 +108,7 @@ export async function executeBuildPhase(config: WorkflowConfig): Promise<{ costU
         // Save partial state
         AgentStateManager.writeState(buildAgentStatePath, {
           output: buildResult.output.substring(0, 1000),
-          tokenUsage: buildResult.tokenUsage,
+          metadata: { tokenUsage: buildResult.tokenUsage },
           execution: AgentStateManager.completeExecution(
             AgentStateManager.createExecutionState('running'),
             true
