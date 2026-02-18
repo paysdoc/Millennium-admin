@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import { getPlanFilePath, planFileExists } from '../agents/planAgent';
+import { getPlanFilePath, planFileExists, formatIssueContextAsArgs } from '../agents/planAgent';
+import { GitHubIssue, GitHubComment } from '../core';
 
 vi.mock('fs');
 
@@ -135,5 +136,97 @@ describe('planFileExists', () => {
     expect(fs.statSync).toHaveBeenCalledWith(
       '/worktree/path/specs/issue-7-adw-xyz-sdlc_planner-task.md'
     );
+  });
+});
+
+describe('formatIssueContextAsArgs', () => {
+  const makeComment = (body: string, author = 'user1', createdAt = '2025-01-01T00:00:00Z'): GitHubComment => ({
+    id: `comment-${Math.random()}`,
+    author: { login: author, isBot: false },
+    body,
+    createdAt,
+  });
+
+  const makeIssue = (comments: GitHubComment[]): GitHubIssue => ({
+    number: 42,
+    title: 'Test issue',
+    body: 'Issue body',
+    state: 'OPEN',
+    author: { login: 'author', isBot: false },
+    assignees: [],
+    labels: [],
+    comments,
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
+    url: 'https://github.com/owner/repo/issues/42',
+  });
+
+  it('filters out ADW bot comments from the Comments section', () => {
+    const comments = [
+      makeComment('Human comment'),
+      makeComment('## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123`'),
+      makeComment('Another human comment'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    expect(result).toContain('Human comment');
+    expect(result).toContain('Another human comment');
+    expect(result).not.toContain('ADW Workflow Started');
+  });
+
+  it('includes non-ADW human comments in the Comments section', () => {
+    const comments = [
+      makeComment('Please fix this', 'alice'),
+      makeComment('I agree', 'bob'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    expect(result).toContain('**alice**');
+    expect(result).toContain('Please fix this');
+    expect(result).toContain('**bob**');
+    expect(result).toContain('I agree');
+  });
+
+  it('adds Actionable Comment section when an actionable comment is present', () => {
+    const comments = [
+      makeComment('## Take action\n\nPlease also update the tests'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    expect(result).toContain('### Actionable Comment');
+    expect(result).toContain('Please also update the tests');
+  });
+
+  it('does not add Actionable Comment section when no actionable comment exists', () => {
+    const comments = [
+      makeComment('Just a regular comment'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    expect(result).not.toContain('### Actionable Comment');
+  });
+
+  it('uses the latest actionable comment when multiple exist', () => {
+    const comments = [
+      makeComment('## Take action\n\nFirst directive', 'user1', '2025-01-01T01:00:00Z'),
+      makeComment('Some other comment', 'user2', '2025-01-01T02:00:00Z'),
+      makeComment('## Take action\n\nSecond directive', 'user1', '2025-01-01T03:00:00Z'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    const actionableSection = result.split('### Actionable Comment')[1].split('### Comments')[0];
+    expect(actionableSection).toContain('Second directive');
+    expect(actionableSection).not.toContain('First directive');
+  });
+
+  it('shows "No comments." when all comments are ADW bot comments and no actionable comment exists', () => {
+    const comments = [
+      makeComment('## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123`'),
+      makeComment('## :tada: ADW Workflow Completed\n\n**ADW ID:** `adw-123`'),
+    ];
+    const result = formatIssueContextAsArgs(makeIssue(comments));
+
+    expect(result).toContain('### Comments\nNo comments.');
+    expect(result).not.toContain('### Actionable Comment');
   });
 });
