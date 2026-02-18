@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { log } from '../core';
+import { log, SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult, ProgressCallback } from './claudeAgent';
 import { ReviewIssue } from './reviewAgent';
 
@@ -49,14 +49,14 @@ export async function runPatchAgent(
   log(`Patch Agent starting for issue #${reviewIssue.reviewIssueNumber}:`, 'info');
   log(`  Description: ${reviewIssue.issueDescription}`, 'info');
   log(`  Resolution: ${reviewIssue.issueResolution}`, 'info');
-  log(`  Model: opus`, 'info');
+  log(`  Model: ${SLASH_COMMAND_MODEL_MAP['/patch']}`, 'info');
 
   return runClaudeAgentWithCommand(
     '/patch',
     args,
     `Patch: ${reviewIssue.reviewIssueNumber}`,
     outputFile,
-    'opus',
+    SLASH_COMMAND_MODEL_MAP['/patch'],
     onProgress,
     statePath,
     cwd

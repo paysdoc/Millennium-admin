@@ -150,8 +150,6 @@ export interface AgentState {
   execution: AgentExecutionState;
   /** Agent-specific output or summary */
   output?: string;
-  /** Token usage snapshot at time of interruption (for token limit recovery). */
-  tokenUsage?: TokenUsageSnapshot;
   /** Additional metadata for agent-specific data */
   metadata?: Record<string, unknown>;
 }

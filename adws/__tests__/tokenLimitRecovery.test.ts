@@ -274,12 +274,14 @@ describe('executeBuildPhase - token limit recovery', () => {
     const config = createWorkflowConfig();
     await executeBuildPhase(config);
 
-    // Verify state was saved with token usage
+    // Verify state was saved with token usage inside metadata
     expect(AgentStateManager.writeState).toHaveBeenCalledWith(
       '/mock/state/path',
       expect.objectContaining({
-        tokenUsage: expect.objectContaining({
-          totalTokens: 180000,
+        metadata: expect.objectContaining({
+          tokenUsage: expect.objectContaining({
+            totalTokens: 180000,
+          }),
         }),
       })
     );

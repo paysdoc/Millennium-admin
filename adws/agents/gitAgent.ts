@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { GitHubIssue, IssueClassSlashCommand, log } from '../core';
+import { GitHubIssue, IssueClassSlashCommand, log, SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
 
 /**
@@ -86,7 +86,7 @@ export async function runGenerateBranchNameAgent(
     args,
     'Branch Name',
     outputFile,
-    'sonnet',
+    SLASH_COMMAND_MODEL_MAP['/generate_branch_name'],
     undefined,
     statePath,
   );
@@ -151,7 +151,7 @@ export async function runCommitAgent(
     args,
     'Commit',
     outputFile,
-    'sonnet',
+    SLASH_COMMAND_MODEL_MAP['/commit'],
     undefined,
     statePath,
     cwd

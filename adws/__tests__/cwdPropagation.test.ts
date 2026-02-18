@@ -7,10 +7,14 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock the config module
-vi.mock('../core/config', () => ({
-  CLAUDE_CODE_PATH: '/usr/local/bin/claude',
-  AGENTS_STATE_DIR: '/tmp/test-agents',
-}));
+vi.mock('../core/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/config')>();
+  return {
+    ...actual,
+    CLAUDE_CODE_PATH: '/usr/local/bin/claude',
+    AGENTS_STATE_DIR: '/tmp/test-agents',
+  };
+});
 
 // Import after mocks are set up
 import { spawn } from 'child_process';

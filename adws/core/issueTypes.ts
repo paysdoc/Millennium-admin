@@ -108,7 +108,17 @@ export type SlashCommand =
   | '/generate_branch_name'
   | '/commit'
   | '/pull_request'
-  | '/implement';
+  | '/implement'
+  // Test commands
+  | '/test'
+  | '/test_e2e'
+  | '/resolve_failed_test'
+  | '/resolve_failed_e2e_test'
+  // Review and patch commands
+  | '/review'
+  | '/patch'
+  // Documentation
+  | '/document';
 
 /**
  * GitHub user model.
