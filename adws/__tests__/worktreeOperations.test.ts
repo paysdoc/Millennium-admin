@@ -1104,7 +1104,9 @@ branch refs/heads/main
 
 `;
     vi.mocked(execSync).mockReturnValue(worktreeListOutput);
-    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.existsSync).mockImplementation(
+      (p) => p === '/mock/project/.env'
+    );
     vi.mocked(fs.copyFileSync).mockReturnValue(undefined);
 
     copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
@@ -1114,6 +1116,81 @@ branch refs/heads/main
       '/mock/project/.env',
       '/mock/project/.worktrees/feature-branch/.env'
     );
+  });
+
+  it('copies .env.local when it exists in main repo', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.copyFileSync).mockReturnValue(undefined);
+
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.existsSync).toHaveBeenCalledWith('/mock/project/.env.local');
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      '/mock/project/.env.local',
+      '/mock/project/.worktrees/feature-branch/.env.local'
+    );
+  });
+
+  it('copies .env but not .env.local when only .env exists', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockImplementation(
+      (p) => p === '/mock/project/.env'
+    );
+    vi.mocked(fs.copyFileSync).mockReturnValue(undefined);
+
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      '/mock/project/.env',
+      '/mock/project/.worktrees/feature-branch/.env'
+    );
+  });
+
+  it('copies .env.local but not .env when only .env.local exists', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockImplementation(
+      (p) => p === '/mock/project/.env.local'
+    );
+    vi.mocked(fs.copyFileSync).mockReturnValue(undefined);
+
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+    expect(fs.copyFileSync).toHaveBeenCalledWith(
+      '/mock/project/.env.local',
+      '/mock/project/.worktrees/feature-branch/.env.local'
+    );
+  });
+
+  it('copies neither when neither exists', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+
+    copyEnvToWorktree('/mock/project/.worktrees/feature-branch');
+
+    expect(fs.copyFileSync).not.toHaveBeenCalled();
   });
 
   it('does nothing when .env does not exist (no error)', () => {
