@@ -78,6 +78,10 @@ export function getWorktreeForBranch(branchName: string): string | null {
  * @throws Error if worktree creation fails
  */
 export function createWorktree(branchName: string, baseBranch?: string): string {
+  if (!branchName || !branchName.trim()) {
+    throw new Error('branchName must be a non-empty string');
+  }
+
   const worktreePath = getWorktreePath(branchName);
   const worktreesDir = getWorktreesDir();
 
@@ -126,7 +130,7 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
       log(`Created worktree for existing branch '${branchName}' at ${worktreePath}`, 'success');
     } else if (baseBranch) {
       // Branch doesn't exist, create worktree with new branch from base
-      execSync(`git worktree add -b "${branchName}" "${worktreePath}" ${baseBranch}`, { stdio: 'pipe' });
+      execSync(`git worktree add -b "${branchName}" "${worktreePath}" "${baseBranch}"`, { stdio: 'pipe' });
       log(`Created worktree with new branch '${branchName}' from '${baseBranch}' at ${worktreePath}`, 'success');
     } else {
       // No base branch provided and branch doesn't exist
@@ -149,6 +153,10 @@ export function createWorktree(branchName: string, baseBranch?: string): string 
  * @throws Error if worktree creation fails
  */
 export function createWorktreeForNewBranch(branchName: string, baseBranch?: string): string {
+  if (!branchName || !branchName.trim()) {
+    throw new Error('branchName must be a non-empty string');
+  }
+
   const worktreePath = getWorktreePath(branchName);
   const worktreesDir = getWorktreesDir();
 
@@ -159,7 +167,7 @@ export function createWorktreeForNewBranch(branchName: string, baseBranch?: stri
 
   try {
     const base = baseBranch || 'HEAD';
-    execSync(`git worktree add -b "${branchName}" "${worktreePath}" ${base}`, { stdio: 'pipe' });
+    execSync(`git worktree add -b "${branchName}" "${worktreePath}" "${base}"`, { stdio: 'pipe' });
     log(`Created worktree with new branch '${branchName}' at ${worktreePath}`, 'success');
     return worktreePath;
   } catch (error) {

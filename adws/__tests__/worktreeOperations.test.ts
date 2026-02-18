@@ -244,6 +244,14 @@ branch refs/heads/main
     );
   });
 
+  it('throws error when branchName is empty string', () => {
+    expect(() => createWorktree('')).toThrow('branchName must be a non-empty string');
+  });
+
+  it('throws error when branchName is whitespace-only', () => {
+    expect(() => createWorktree('  ')).toThrow('branchName must be a non-empty string');
+  });
+
   it('throws error when git worktree add fails', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(execSync).mockImplementation((cmd) => {
@@ -315,6 +323,14 @@ branch refs/heads/main
     );
     expect(worktreeAddCall).toBeDefined();
     expect(String(worktreeAddCall![0])).toContain('develop');
+  });
+
+  it('throws error when branchName is empty string', () => {
+    expect(() => createWorktreeForNewBranch('')).toThrow('branchName must be a non-empty string');
+  });
+
+  it('throws error when branchName is whitespace-only', () => {
+    expect(() => createWorktreeForNewBranch('  ')).toThrow('branchName must be a non-empty string');
   });
 
   it('creates worktrees directory if it does not exist', () => {
@@ -867,7 +883,7 @@ branch refs/heads/feature/issue-51
     expect(String(execCalls[3][0])).toContain('git commit');
     expect(String(execCalls[3][0])).toContain('WIP: auto-commit');
     expect(String(execCalls[4][0])).toContain('git push');
-    expect(String(execCalls[5][0])).toBe('git checkout main && git pull');
+    expect(String(execCalls[5][0])).toBe('git checkout "main" && git pull');
   });
 
   it('skips commit when there are no uncommitted changes', () => {
@@ -885,7 +901,7 @@ branch refs/heads/feature/issue-51
 
     const execCalls = vi.mocked(execSync).mock.calls;
     expect(execCalls).toHaveLength(3);
-    expect(String(execCalls[2][0])).toBe('git checkout main && git pull');
+    expect(String(execCalls[2][0])).toBe('git checkout "main" && git pull');
   });
 
   it('continues even when push fails', () => {
@@ -909,7 +925,7 @@ branch refs/heads/feature/issue-51
 
     const execCalls = vi.mocked(execSync).mock.calls;
     expect(execCalls).toHaveLength(6);
-    expect(String(execCalls[5][0])).toBe('git checkout main && git pull');
+    expect(String(execCalls[5][0])).toBe('git checkout "main" && git pull');
   });
 
   it('throws error when checkout fails', () => {
@@ -968,7 +984,7 @@ branch refs/heads/feature/issue-51
     expect(result).toBe('/mock/project/.worktrees/feature-issue-51');
     const execCalls = vi.mocked(execSync).mock.calls;
     const checkoutCall = execCalls.find((call) =>
-      String(call[0]).includes('git checkout main')
+      String(call[0]).includes('git checkout "main"')
     );
     expect(checkoutCall).toBeDefined();
   });

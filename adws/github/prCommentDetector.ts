@@ -18,7 +18,7 @@ export function getLastAdwCommitTimestamp(branchName: string): Date | null {
   try {
     // Get commits on the branch that match ADW commit message patterns
     const output = execSync(
-      `git log ${branchName} --format="%aI %s" --no-merges`,
+      `git log "${branchName}" --format="%aI %s" --no-merges`,
       { encoding: 'utf-8' }
     );
 

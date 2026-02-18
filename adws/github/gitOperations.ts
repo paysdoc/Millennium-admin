@@ -185,14 +185,14 @@ export function checkoutDefaultBranch(): string {
   log(`Default branch is: ${defaultBranch}`, 'info');
 
   try {
-    execSync(`git checkout ${defaultBranch}`, { stdio: 'pipe' });
+    execSync(`git checkout "${defaultBranch}"`, { stdio: 'pipe' });
     log(`Checked out branch: ${defaultBranch}`, 'success');
   } catch (error) {
     throw new Error(`Failed to checkout default branch '${defaultBranch}': ${error}`);
   }
 
   try {
-    execSync(`git pull origin ${defaultBranch}`, { stdio: 'pipe' });
+    execSync(`git pull origin "${defaultBranch}"`, { stdio: 'pipe' });
     log(`Pulled latest changes from origin/${defaultBranch}`, 'success');
   } catch (error) {
     throw new Error(`Failed to pull latest changes for '${defaultBranch}': ${error}`);
@@ -213,7 +213,7 @@ export function checkoutDefaultBranch(): string {
 export function mergeLatestFromDefaultBranch(defaultBranch: string, cwd: string): void {
   log(`Fetching origin/${defaultBranch} in ${cwd}...`, 'info');
   try {
-    execSync(`git fetch origin ${defaultBranch}`, { stdio: 'pipe', cwd });
+    execSync(`git fetch origin "${defaultBranch}"`, { stdio: 'pipe', cwd });
   } catch (error) {
     log(`Warning: Failed to fetch origin/${defaultBranch}: ${error}`, 'info');
     return;
@@ -221,7 +221,7 @@ export function mergeLatestFromDefaultBranch(defaultBranch: string, cwd: string)
 
   log(`Merging origin/${defaultBranch} into current branch...`, 'info');
   try {
-    execSync(`git merge origin/${defaultBranch} --no-edit`, { stdio: 'pipe', cwd });
+    execSync(`git merge "origin/${defaultBranch}" --no-edit`, { stdio: 'pipe', cwd });
     log(`Merged latest changes from origin/${defaultBranch}`, 'success');
   } catch (error) {
     log(`Warning: Failed to merge origin/${defaultBranch}: ${error}`, 'info');

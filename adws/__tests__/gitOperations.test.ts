@@ -79,12 +79,12 @@ describe('checkoutDefaultBranch', () => {
     );
     expect(execSync).toHaveBeenNthCalledWith(
       2,
-      'git checkout main',
+      'git checkout "main"',
       { stdio: 'pipe' }
     );
     expect(execSync).toHaveBeenNthCalledWith(
       3,
-      'git pull origin main',
+      'git pull origin "main"',
       { stdio: 'pipe' }
     );
   });
@@ -100,12 +100,12 @@ describe('checkoutDefaultBranch', () => {
     expect(result).toBe('develop');
     expect(execSync).toHaveBeenNthCalledWith(
       2,
-      'git checkout develop',
+      'git checkout "develop"',
       { stdio: 'pipe' }
     );
     expect(execSync).toHaveBeenNthCalledWith(
       3,
-      'git pull origin develop',
+      'git pull origin "develop"',
       { stdio: 'pipe' }
     );
   });
