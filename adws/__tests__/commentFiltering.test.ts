@@ -9,7 +9,7 @@ vi.mock('../core/utils', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { isAdwComment, isActionableComment, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
+import { isAdwComment, isActionableComment, extractActionableContent, isAdwRunningForIssue, ADW_SIGNATURE } from '../github/workflowCommentsBase';
 import { AgentStateManager } from '../core/agentState';
 
 describe('isAdwComment', () => {
@@ -119,6 +119,43 @@ describe('isActionableComment', () => {
 
   it('returns true for case-insensitive match (## TAKE ACTION)', () => {
     expect(isActionableComment('## TAKE ACTION')).toBe(true);
+  });
+});
+
+describe('extractActionableContent', () => {
+  it('returns the content after ## Take action heading', () => {
+    expect(extractActionableContent('## Take action\n\nPlease fix the bug.')).toBe('Please fix the bug.');
+  });
+
+  it('returns null for a comment without ## Take action', () => {
+    expect(extractActionableContent('Just a regular comment')).toBeNull();
+  });
+
+  it('returns null for a comment with only ## Take action and no body text', () => {
+    expect(extractActionableContent('## Take action')).toBeNull();
+  });
+
+  it('returns trimmed content', () => {
+    expect(extractActionableContent('## Take action\n\n  content with spaces  \n\n')).toBe('content with spaces');
+  });
+
+  it('returns only the text after ## Take action when text exists before it', () => {
+    const comment = 'Some context here\n\n## Take action\n\nDo the thing.';
+    expect(extractActionableContent(comment)).toBe('Do the thing.');
+  });
+
+  it('handles multiline content after ## Take action', () => {
+    const comment = '## Take action\n\nLine one.\nLine two.\nLine three.';
+    expect(extractActionableContent(comment)).toBe('Line one.\nLine two.\nLine three.');
+  });
+
+  it('is case-insensitive for the heading', () => {
+    expect(extractActionableContent('## take action\n\nLowercase heading.')).toBe('Lowercase heading.');
+    expect(extractActionableContent('## TAKE ACTION\n\nUppercase heading.')).toBe('Uppercase heading.');
+  });
+
+  it('returns null for empty string input', () => {
+    expect(extractActionableContent('')).toBeNull();
   });
 });
 
