@@ -22,6 +22,7 @@
 
 import {
   log,
+  setLogAdwId,
   generateAdwId,
   ensureLogsDirectory,
   AgentStateManager,
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
   log(`Fetched issue: ${issue.title}`, 'success');
 
   const adwId = providedAdwId || generateAdwId(issue.title);
+  setLogAdwId(adwId);
   const logsDir = ensureLogsDirectory(adwId);
   const branchName = getCurrentBranch(cwd || undefined);
   const issueType = inferIssueTypeFromBranch(branchName);
