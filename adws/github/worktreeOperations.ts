@@ -71,8 +71,8 @@ export function getMainRepoPath(): string {
 }
 
 /**
- * Copies the .env file from the main repository to the worktree.
- * This is necessary because .env is in .gitignore and won't be included in worktrees.
+ * Copies the .env and .env.local files from the main repository to the worktree.
+ * This is necessary because these files are in .gitignore and won't be included in worktrees.
  *
  * @param worktreePath - The absolute path to the worktree
  */
@@ -87,6 +87,16 @@ export function copyEnvToWorktree(worktreePath: string): void {
       log(`Copied .env file to worktree at ${worktreePath}`, 'info');
     } else {
       log(`No .env file found in main repository at ${mainRepoPath}, skipping copy`, 'info');
+    }
+
+    const sourceEnvLocalPath = path.join(mainRepoPath, '.env.local');
+    const destEnvLocalPath = path.join(worktreePath, '.env.local');
+
+    if (fs.existsSync(sourceEnvLocalPath)) {
+      fs.copyFileSync(sourceEnvLocalPath, destEnvLocalPath);
+      log(`Copied .env.local file to worktree at ${worktreePath}`, 'info');
+    } else {
+      log(`No .env.local file found in main repository at ${mainRepoPath}, skipping copy`, 'info');
     }
   } catch (error) {
     log(`Warning: Failed to copy .env to worktree: ${error}`, 'info');
