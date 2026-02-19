@@ -255,7 +255,7 @@ export async function runClaudeAgent(
  * The command is passed as a CLI argument rather than via stdin.
  *
  * @param command - The slash command to invoke (e.g., '/implement', '/feature')
- * @param args - Arguments to pass to the command (replaces $ARGUMENTS)
+ * @param args - Arguments to pass to the command. A string replaces $ARGUMENTS; an array passes each element as a separate positional argument ($1, $2, $3, ...).
  * @param agentName - Human-readable name for logging
  * @param outputFile - Path to write JSONL output
  * @param model - The model to use ('opus', 'sonnet', 'haiku')
@@ -265,7 +265,7 @@ export async function runClaudeAgent(
  */
 export async function runClaudeAgentWithCommand(
   command: string,
-  args: string,
+  args: string | readonly string[],
   agentName: string,
   outputFile: string,
   model: string = 'sonnet',
@@ -274,8 +274,12 @@ export async function runClaudeAgentWithCommand(
   cwd?: string
 ): Promise<AgentResult> {
   // Build the prompt as "command 'args'" for the CLI
-  // The args are single-quoted to preserve formatting
-  const prompt = `${command} '${args.replace(/'/g, "'\\''")}'`;
+  // Each arg is single-quoted to preserve formatting
+  const escapeArg = (a: string): string => `'${a.replace(/'/g, "'\\''")}'`;
+  const quotedArgs = typeof args === 'string'
+    ? escapeArg(args)
+    : args.map(escapeArg).join(' ');
+  const prompt = `${command} ${quotedArgs}`;
 
   // Write initial state if state path provided
   if (statePath) {
@@ -298,7 +302,7 @@ export async function runClaudeAgentWithCommand(
   log(`  Slash command: ${command}`, 'info');
   log(`  Model: ${model}`, 'info');
   log(`  Output file: ${outputFile}`, 'info');
-  log(`  Args length: ${args.length} characters`, 'info');
+  log(`  Args length: ${Array.isArray(args) ? `${args.length} elements` : `${args.length} characters`}`, 'info');
 
   const claude = spawn(CLAUDE_CODE_PATH, cliArgs, {
     cwd: cwd || process.cwd(),
