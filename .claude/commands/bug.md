@@ -3,9 +3,9 @@
 Create a new plan to resolve the `Bug` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files.
 
 ## Variables
-issueNumber: $1
-adwId: $2
-issueJson: $3
+issueNumber: $1, default 0 if not provided
+adwId: $2, default to `adw-unknown` if not provided
+issueJson: $3, default to empty JSON object if not provided (`{}`)
 
 ## Instructions
 
@@ -103,7 +103,8 @@ Execute every command to validate the bug is fixed with zero regressions.
 ```
 
 ## Bug
-Extract the bug details from the `issueJson` variable (parse the JSON and use the title and body fields).
+If the `issueJson` variable contains a valid JSON object with `title` and `body` fields, extract the bug details from it.
+Otherwise, use the text passed as the argument to this command as the bug description directly.
 
 ## Report
 - Summarize the work you've just done in a concise bullet point list.

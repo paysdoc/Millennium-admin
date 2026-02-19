@@ -3,9 +3,9 @@
 Create a new plan to implement the `Feature` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files.
 
 ## Variables
-issueNumber: $1
-adwId: $2
-issueJson: $3
+issueNumber: $1, default 0 if not provided
+adwId: $2, default to `adw-unknown` if not provided
+issueJson: $3, default to empty JSON object if not provided (`{}`)
 
 ## Instructions
 
@@ -123,7 +123,8 @@ Execute every command to validate the feature works correctly with zero regressi
 ```
 
 ## Feature
-Extract the feature details from the `issueJson` variable (parse the JSON and use the title and body fields).
+If the `issueJson` variable contains a valid JSON object with `title` and `body` fields, extract the feature details from it.
+Otherwise, use the text passed as the argument to this command as the feature description directly.
 
 ## Report
 
