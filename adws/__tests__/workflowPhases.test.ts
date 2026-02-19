@@ -652,6 +652,59 @@ describe('executePRPhase', () => {
     expect(runPullRequestAgent).not.toHaveBeenCalled();
     expect(result.costUsd).toBe(0);
   });
+
+  it('commits uncommitted changes before creating PR', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(true);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(true);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(hasUncommittedChanges).toHaveBeenCalledWith('/mock/worktree');
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pre-pr-commit',
+      '/feature',
+      JSON.stringify(config.issue),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree',
+    );
+
+    // Verify commit happens before PR creation
+    const commitOrder = vi.mocked(runCommitAgent).mock.invocationCallOrder[0];
+    const prOrder = vi.mocked(runPullRequestAgent).mock.invocationCallOrder[0];
+    expect(commitOrder).toBeLessThan(prOrder);
+  });
+
+  it('skips commit when no uncommitted changes', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(true);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(false);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(hasUncommittedChanges).toHaveBeenCalledWith('/mock/worktree');
+    expect(runCommitAgent).not.toHaveBeenCalled();
+    expect(runPullRequestAgent).toHaveBeenCalled();
+  });
+
+  it('commits before PR even when PR stage is skipped', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(false);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(true);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pre-pr-commit',
+      '/feature',
+      JSON.stringify(config.issue),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree',
+    );
+    expect(runPullRequestAgent).not.toHaveBeenCalled();
+  });
 });
 
 describe('completeWorkflow', () => {
