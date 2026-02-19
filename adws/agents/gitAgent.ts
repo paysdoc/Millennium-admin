@@ -12,11 +12,9 @@ import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
  */
 export function formatBranchNameArgs(
   issueClass: IssueClassSlashCommand,
-  adwId: string,
   issue: GitHubIssue
 ): string {
   return `issueClass: ${issueClass}
-adwId: ${adwId}
 issue: ${JSON.stringify(issue)}`;
 }
 
@@ -61,25 +59,22 @@ export function extractBranchNameFromOutput(output: string): string {
  * Branch creation happens in the orchestrator via worktree operations.
  *
  * @param issueType - Issue classification slash command
- * @param adwId - ADW session identifier
  * @param issue - GitHub issue details
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory
  */
 export async function runGenerateBranchNameAgent(
   issueType: IssueClassSlashCommand,
-  adwId: string,
   issue: GitHubIssue,
   logsDir: string,
   statePath?: string,
 ): Promise<AgentResult & { branchName: string }> {
-  const args = formatBranchNameArgs(issueType, adwId, issue);
+  const args = formatBranchNameArgs(issueType, issue);
   const outputFile = path.join(logsDir, 'branchName-agent.jsonl');
 
   log('Branch Name Agent starting:', 'info');
   log(`  Issue: #${issue.number} - ${issue.title}`, 'info');
   log(`  Issue type: ${issueType}`, 'info');
-  log(`  ADW ID: ${adwId}`, 'info');
 
   const result = await runClaudeAgentWithCommand(
     '/generate_branch_name',

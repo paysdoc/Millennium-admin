@@ -84,7 +84,7 @@ export async function initializeWorkflow(
       log(`Reusing branch from previous workflow: ${branchName}`, 'info');
     } else {
       const branchResult = await runGenerateBranchNameAgent(
-        issueType, resolvedAdwId, issue, logsDir
+        issueType, issue, logsDir
       );
       branchName = branchResult.branchName;
       log(`Branch name generated: ${branchName}`, 'success');

@@ -45,21 +45,25 @@ function createMockIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
 }
 
 describe('formatBranchNameArgs', () => {
-  it('includes issueClass, adwId, and issue JSON', () => {
+  it('includes issueClass and issue JSON', () => {
     const issue = createMockIssue();
-    const result = formatBranchNameArgs('/feature', 'abc123', issue);
+    const result = formatBranchNameArgs('/feature', issue);
 
     expect(result).toContain('issueClass: /feature');
-    expect(result).toContain('adwId: abc123');
     expect(result).toContain('"number":123');
     expect(result).toContain('"title":"Add user authentication"');
+  });
+
+  it('does not include adwId', () => {
+    const result = formatBranchNameArgs('/feature', createMockIssue());
+    expect(result).not.toContain('adwId');
   });
 
   it('handles different issue classes', () => {
     const issueClasses: IssueClassSlashCommand[] = ['/bug', '/chore', '/pr_review'];
 
     for (const issueClass of issueClasses) {
-      const result = formatBranchNameArgs(issueClass, 'id1', createMockIssue());
+      const result = formatBranchNameArgs(issueClass, createMockIssue());
       expect(result).toContain(`issueClass: ${issueClass}`);
     }
   });
@@ -67,32 +71,32 @@ describe('formatBranchNameArgs', () => {
 
 describe('extractBranchNameFromOutput', () => {
   it('extracts branch name from clean output', () => {
-    const result = extractBranchNameFromOutput('feat-issue-123-adw-abc123-add-user-auth');
-    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    const result = extractBranchNameFromOutput('feat-issue-123-add-user-auth');
+    expect(result).toBe('feat-issue-123-add-user-auth');
   });
 
   it('handles output with leading/trailing whitespace', () => {
-    const result = extractBranchNameFromOutput('  feat-issue-123-adw-abc123-add-user-auth  \n');
-    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    const result = extractBranchNameFromOutput('  feat-issue-123-add-user-auth  \n');
+    expect(result).toBe('feat-issue-123-add-user-auth');
   });
 
   it('extracts last line when output has extra text', () => {
-    const output = 'Creating branch...\nSwitching to main...\nfeat-issue-123-adw-abc123-add-user-auth';
+    const output = 'Creating branch...\nSwitching to main...\nfeat-issue-123-add-user-auth';
     const result = extractBranchNameFromOutput(output);
-    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    expect(result).toBe('feat-issue-123-add-user-auth');
   });
 
   it('handles output with empty lines', () => {
-    const output = '\n\nfeat-issue-123-adw-abc123-add-user-auth\n\n';
+    const output = '\n\nfeat-issue-123-add-user-auth\n\n';
     const result = extractBranchNameFromOutput(output);
-    expect(result).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    expect(result).toBe('feat-issue-123-add-user-auth');
   });
 });
 
 describe('validateBranchName', () => {
   it('passes valid branch names through unchanged', () => {
-    expect(validateBranchName('feat-issue-123-adw-abc123-add-user-auth')).toBe(
-      'feat-issue-123-adw-abc123-add-user-auth'
+    expect(validateBranchName('feat-issue-123-add-user-auth')).toBe(
+      'feat-issue-123-add-user-auth'
     );
   });
 
@@ -186,13 +190,13 @@ describe('runGenerateBranchNameAgent', () => {
     vi.clearAllMocks();
     vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
       success: true,
-      output: 'feat-issue-123-adw-abc123-add-user-auth',
+      output: 'feat-issue-123-add-user-auth',
     });
   });
 
   it('calls runClaudeAgentWithCommand with /generate_branch_name', async () => {
     const issue = createMockIssue();
-    await runGenerateBranchNameAgent('/feature', 'abc123', issue, '/logs');
+    await runGenerateBranchNameAgent('/feature', issue, '/logs');
 
     expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
       '/generate_branch_name',
@@ -206,28 +210,28 @@ describe('runGenerateBranchNameAgent', () => {
   });
 
   it('uses sonnet model', async () => {
-    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+    await runGenerateBranchNameAgent('/feature', createMockIssue(), '/logs');
 
     const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
     expect(call[4]).toBe('sonnet');
   });
 
   it('extracts branch name from result', async () => {
-    const result = await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+    const result = await runGenerateBranchNameAgent('/feature', createMockIssue(), '/logs');
 
-    expect(result.branchName).toBe('feat-issue-123-adw-abc123-add-user-auth');
+    expect(result.branchName).toBe('feat-issue-123-add-user-auth');
     expect(result.success).toBe(true);
   });
 
   it('does not pass cwd to agent (no git operations needed)', async () => {
-    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs');
+    await runGenerateBranchNameAgent('/feature', createMockIssue(), '/logs');
 
     const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
     expect(call[7]).toBeUndefined();
   });
 
   it('passes statePath when provided', async () => {
-    await runGenerateBranchNameAgent('/feature', 'abc123', createMockIssue(), '/logs', '/state/path');
+    await runGenerateBranchNameAgent('/feature', createMockIssue(), '/logs', '/state/path');
 
     const call = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
     expect(call[6]).toBe('/state/path');

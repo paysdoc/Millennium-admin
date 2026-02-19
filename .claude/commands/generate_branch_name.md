@@ -5,12 +5,11 @@ Based on the `Instructions` below, take the `Variables` follow the `Run` section
 ## Variables
 
 issueClass: $1
-adwId: $2
-issue: $3
+issue: $2
 
 ## Instructions
 
-- Generate a branch name in the format: `<issueClass>-issue-<issueNumber>-adw-<adwId>-<concise_name>`
+- Generate a branch name in the format: `<issueClass>-issue-<issueNumber>-<concise_name>`
 - The `<concise_name>` should be:
   - 3-6 words maximum
   - All lowercase
@@ -18,10 +17,10 @@ issue: $3
   - Descriptive of the main task/feature
   - No special characters except hyphens
 - Examples:
-  - `feat-issue-123-adw-a1b2c3d4-add-user-auth`
-  - `bug-issue-456-adw-e5f6g7h8-fix-login-error`
-  - `chore-issue-789-adw-i9j0k1l2-update-dependencies`
-  - `test-issue-323-adw-m3n4o5p6-fix-failing-tests`
+  - `feat-issue-123-add-user-auth`
+  - `bug-issue-456-fix-login-error`
+  - `chore-issue-789-update-dependencies`
+  - `test-issue-323-fix-failing-tests`
 - Extract the issue number, title, and body from the issue JSON
 
 ## Run
