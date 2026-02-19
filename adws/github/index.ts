@@ -30,6 +30,8 @@ export {
   checkoutDefaultBranch,
   inferIssueTypeFromBranch,
   mergeLatestFromDefaultBranch,
+  deleteLocalBranch,
+  deleteRemoteBranch,
 } from './gitOperations';
 
 // Pull Request Creator
@@ -42,6 +44,7 @@ export {
   listWorktrees,
   createWorktree,
   createWorktreeForNewBranch,
+  killProcessesInDirectory,
   removeWorktree,
   removeWorktreesForIssue,
   getWorktreeForBranch,
