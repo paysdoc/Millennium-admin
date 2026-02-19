@@ -52,19 +52,23 @@ export interface ReviewAgentResult extends AgentResult {
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
  * @param cwd - Optional working directory for the agent (defaults to process.cwd())
+ * @param applicationUrl - Optional application URL for the dev server (e.g. http://localhost:12345)
  */
 export async function runReviewAgent(
   adwId: string,
   specFile: string,
   logsDir: string,
   statePath?: string,
-  cwd?: string
+  cwd?: string,
+  applicationUrl?: string
 ): Promise<ReviewAgentResult> {
   const agentName = 'review_agent';
   const outputFile = path.join(logsDir, 'review-agent.jsonl');
 
-  // Format args as: adwId\nspec_file\nagent_name
-  const args = `${adwId}\n${specFile}\n${agentName}`;
+  // Format args as: adwId\nspec_file\nagent_name[\napplicationUrl]
+  const args = applicationUrl
+    ? `${adwId}\n${specFile}\n${agentName}\n${applicationUrl}`
+    : `${adwId}\n${specFile}\n${agentName}`;
 
   const result = await runClaudeAgentWithCommand(
     '/review',

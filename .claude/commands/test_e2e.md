@@ -30,7 +30,8 @@ applicationUrl: $4 if provided, otherwise use http://localhost:3000
 
 ## Setup
 
-Read and Execute `.claude/commands/prepare_app.md` now to prepare the application for the test.
+Extract the port number from the `applicationUrl` (e.g. if applicationUrl is `http://localhost:12345`, the port is `12345`).
+Read and Execute `.claude/commands/prepare_app.md` with the extracted port number to prepare the application for the test.
 
 ## Screenshot Directory
 

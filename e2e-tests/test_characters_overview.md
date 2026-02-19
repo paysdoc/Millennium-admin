@@ -6,7 +6,7 @@ As a user, I want to view the characters overview page and see either a list of 
 ## Test Steps
 
 1. **Navigate to home page**
-   - Go to http://localhost:3000
+   - Go to the `Application URL`
    - Wait for page to fully load
 
 2. **Verify page header**

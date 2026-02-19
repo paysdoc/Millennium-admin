@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { log, setLogAdwId, ensureLogsDirectory, generateAdwId, type PRDetails, type PRReviewComment, AgentStateManager, type AgentState, MAX_TEST_RETRY_ATTEMPTS, COST_REPORT_CURRENCIES, type ModelUsageMap, buildCostBreakdown } from '../core';
+import { log, setLogAdwId, ensureLogsDirectory, generateAdwId, type PRDetails, type PRReviewComment, AgentStateManager, type AgentState, MAX_TEST_RETRY_ATTEMPTS, COST_REPORT_CURRENCIES, type ModelUsageMap, buildCostBreakdown, allocateRandomPort } from '../core';
 import { fetchPRDetails, getUnaddressedComments, pushBranch, postPRWorkflowComment, type PRReviewWorkflowContext, ensureWorktree, inferIssueTypeFromBranch } from '../github';
 import { getPlanFilePath, runPrReviewPlanAgent, runPrReviewBuildAgent, runCommitAgent, type ProgressCallback, type ProgressInfo, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
 
@@ -26,13 +26,14 @@ export interface PRReviewWorkflowConfig {
   logsDir: string;
   orchestratorStatePath: string;
   ctx: PRReviewWorkflowContext;
+  applicationUrl: string;
 }
 
 /**
  * Initializes a PR review workflow: fetches PR details, checks for unaddressed
  * comments, sets up worktree, and initializes state.
  */
-export function initializePRReviewWorkflow(prNumber: number, adwId: string | null): PRReviewWorkflowConfig {
+export async function initializePRReviewWorkflow(prNumber: number, adwId: string | null): Promise<PRReviewWorkflowConfig> {
   const prDetails = fetchPRDetails(prNumber);
   log(`Fetched PR: ${prDetails.title}`, 'success');
   // Resolve ADW ID: use provided or generate from PR title
@@ -77,6 +78,13 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string | nul
   };
   const worktreePath = ensureWorktree(prDetails.headBranch);
   log(`Worktree path: ${worktreePath}`, 'info');
+
+  // Allocate a random port for the dedicated dev server instance
+  const port = await allocateRandomPort();
+  const applicationUrl = `http://localhost:${port}`;
+  log(`Allocated port ${port} for dev server (${applicationUrl})`, 'info');
+  AgentStateManager.appendLog(orchestratorStatePath, `Allocated port ${port} for dev server`);
+
   postPRWorkflowComment(prNumber, 'pr_review_starting', ctx);
   return {
     prNumber,
@@ -88,6 +96,7 @@ export function initializePRReviewWorkflow(prNumber: number, adwId: string | nul
     logsDir,
     orchestratorStatePath,
     ctx,
+    applicationUrl,
   };
 }
 
@@ -194,7 +203,7 @@ export async function executePRReviewBuildPhase(config: PRReviewWorkflowConfig, 
  * Executes the PR review Test phase: runs unit and E2E tests with retry.
  */
 export async function executePRReviewTestPhase(config: PRReviewWorkflowConfig): Promise<void> {
-  const { prNumber, unaddressedComments, worktreePath, logsDir, orchestratorStatePath, ctx } = config;
+  const { prNumber, unaddressedComments, worktreePath, logsDir, orchestratorStatePath, ctx, applicationUrl } = config;
 
   postPRWorkflowComment(prNumber, 'pr_review_testing', ctx);
   log('Running validation tests...', 'info');
@@ -233,6 +242,7 @@ export async function executePRReviewTestPhase(config: PRReviewWorkflowConfig): 
     maxRetries: MAX_TEST_RETRY_ATTEMPTS,
     onTestFailed,
     cwd: worktreePath,
+    applicationUrl,
   });
 
   if (!e2eTestsResult.passed) {

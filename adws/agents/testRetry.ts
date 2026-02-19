@@ -33,6 +33,8 @@ export interface TestRetryOptions {
   onTestFailed?: (attempt: number, maxAttempts: number) => void;
   /** Optional working directory for agent operations (defaults to process.cwd()) */
   cwd?: string;
+  /** Optional application URL for the dev server (e.g. http://localhost:12345) */
+  applicationUrl?: string;
 }
 
 export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
@@ -76,7 +78,7 @@ export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<Tes
 }
 
 export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
-  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd } = opts;
+  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd, applicationUrl } = opts;
   const e2eTestFiles = discoverE2ETestFiles(cwd);
   const costState = { costUsd: 0, modelUsage: emptyModelUsageMap() };
   let totalRetries = 0;
@@ -96,7 +98,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
   for (const testFile of e2eTestFiles) {
     log(`Running E2E test: ${testFile}`, 'info');
     AgentStateManager.appendLog(statePath, `Running E2E test: ${testFile}`);
-    const e2eResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd);
+    const e2eResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd, applicationUrl);
     trackCost(e2eResult as AgentRunResult, costState, statePath);
 
     if (!e2eResult.passed && e2eResult.e2eResult) {
@@ -133,12 +135,12 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       log(`Resolving E2E test: ${result.testName} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
       AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.testName}`);
 
-      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd);
+      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd, applicationUrl);
       trackCost(resolveResult as AgentRunResult, costState, statePath);
       totalRetries++;
 
       log(`Re-running E2E test: ${testFile}`, 'info');
-      const retryResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd);
+      const retryResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd, applicationUrl);
       trackCost(retryResult as AgentRunResult, costState, statePath);
 
       if (retryResult.passed) {

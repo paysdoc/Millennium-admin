@@ -2,7 +2,7 @@
 
 ## Variables
 
-PORT: 3000
+PORT: $1 if provided, otherwise 3000
 
 ## Workflow
 
