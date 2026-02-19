@@ -130,7 +130,7 @@ describe('cwd propagation', () => {
   describe('runE2ETestAgent', () => {
     it('passes cwd to spawn when provided', async () => {
       const e2eResult: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'passed',
         screenshots: [],
         error: null,
@@ -181,7 +181,7 @@ describe('cwd propagation', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'failed',
         screenshots: [],
         error: 'Element not found',

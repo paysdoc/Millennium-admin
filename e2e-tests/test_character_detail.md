@@ -46,3 +46,19 @@ So that I can understand a character's full profile and relationships at a glanc
 - Back navigation works correctly
 - 5 screenshots are taken
 - Page handles characters with no connections gracefully
+
+## Output Format
+```json
+{
+  "testName": "Character Detail Page",
+  "status": "passed|failed",
+  "screenshots": [
+    "/path/to/e2e-screenshots/character_detail/01_home_page.png",
+    "/path/to/e2e-screenshots/character_detail/02_character_detail.png",
+    "/path/to/e2e-screenshots/character_detail/03_character_info.png",
+    "/path/to/e2e-screenshots/character_detail/04_connections.png",
+    "/path/to/e2e-screenshots/character_detail/05_back_to_overview.png"
+  ],
+  "error": null
+}
+```

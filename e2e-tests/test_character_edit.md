@@ -62,6 +62,24 @@ So that I can quickly update character data without navigating to a separate edi
 - Wikipedia-style design is maintained throughout editing
 - 10 screenshots are taken
 
+## Output Format
+```json
+{
+  "testName": "Character Edit Functionality",
+  "status": "passed|failed",
+  "screenshots": [
+    "/path/to/e2e-screenshots/character_edit/01_home_page.png",
+    "/path/to/e2e-screenshots/character_edit/02_character_detail.png",
+    "/path/to/e2e-screenshots/character_edit/03_field_editing.png",
+    "/path/to/e2e-screenshots/character_edit/04_cancel_edit.png",
+    "/path/to/e2e-screenshots/character_edit/05_apply_edit.png",
+    "/path/to/e2e-screenshots/character_edit/06_after_refresh.png",
+    "/path/to/e2e-screenshots/character_edit/07_restored_state.png"
+  ],
+  "error": null
+}
+```
+
 ## Notes
 - The test should handle potential network delays during save operations
 - If a save error occurs, verify the error message is displayed

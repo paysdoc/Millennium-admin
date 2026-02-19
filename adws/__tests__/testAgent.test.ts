@@ -146,7 +146,7 @@ describe('testAgent', () => {
   describe('runE2ETestAgent', () => {
     it('uses sonnet model for E2E test execution', async () => {
       const e2eResult: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'passed',
         screenshots: [],
         error: null,
@@ -165,7 +165,7 @@ describe('testAgent', () => {
 
     it('parses E2E test result from JSON output', async () => {
       const e2eResult: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'failed',
         screenshots: ['/path/to/screenshot.png'],
         error: 'Element not found',
@@ -176,14 +176,14 @@ describe('testAgent', () => {
       const result = await runE2ETestAgent('/path/to/test_login.md', testLogsDir);
 
       expect(result.e2eResult).not.toBeNull();
-      expect(result.e2eResult?.test_name).toBe('Login Test');
+      expect(result.e2eResult?.testName).toBe('Login Test');
       expect(result.e2eResult?.status).toBe('failed');
       expect(result.passed).toBe(false);
     });
 
-    it('adds test_path to the result', async () => {
+    it('adds testPath to the result', async () => {
       const e2eResult: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'passed',
         screenshots: [],
         error: null,
@@ -194,7 +194,40 @@ describe('testAgent', () => {
       const testPath = '/path/to/test_login.md';
       const result = await runE2ETestAgent(testPath, testLogsDir);
 
-      expect(result.e2eResult?.test_path).toBe(testPath);
+      expect(result.e2eResult?.testPath).toBe(testPath);
+    });
+
+    it('normalizes snake_case test_name to camelCase testName', async () => {
+      // Simulate agent output with snake_case test_name
+      const snakeCaseResult = {
+        test_name: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
+      };
+      const mockSpawn = createMockSpawn({ result: JSON.stringify(snakeCaseResult) });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      const result = await runE2ETestAgent('/path/to/test_login.md', testLogsDir);
+
+      expect(result.e2eResult).not.toBeNull();
+      expect(result.e2eResult?.testName).toBe('Login Test');
+    });
+
+    it('preserves camelCase testName without normalization', async () => {
+      const camelCaseResult: E2ETestResult = {
+        testName: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
+      };
+      const mockSpawn = createMockSpawn({ result: JSON.stringify(camelCaseResult) });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      const result = await runE2ETestAgent('/path/to/test_login.md', testLogsDir);
+
+      expect(result.e2eResult).not.toBeNull();
+      expect(result.e2eResult?.testName).toBe('Login Test');
     });
   });
 
@@ -250,11 +283,11 @@ describe('testAgent', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'failed',
         screenshots: [],
         error: 'Element not found',
-        test_path: '/path/to/test_login.md',
+        testPath: '/path/to/test_login.md',
       };
 
       await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
@@ -271,11 +304,11 @@ describe('testAgent', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'failed',
         screenshots: ['/path/to/screenshot.png'],
         error: 'Element not found',
-        test_path: '/path/to/test_login.md',
+        testPath: '/path/to/test_login.md',
       };
 
       await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
@@ -289,17 +322,17 @@ describe('testAgent', () => {
       expect(prompt).toContain('Login Test');
     });
 
-    it('handles undefined test_name without throwing', async () => {
+    it('handles undefined testName without throwing', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
-      // Create a test result with undefined test_name (simulating API error parsing)
+      // Create a test result with undefined testName (simulating API error parsing)
       const failedE2ETest = {
-        test_name: undefined,
+        testName: undefined,
         status: 'failed',
         screenshots: [],
         error: 'API returned error instead of JSON',
-        test_path: '/path/to/test_login.md',
+        testPath: '/path/to/test_login.md',
       } as unknown as E2ETestResult;
 
       // Should not throw TypeError
@@ -309,12 +342,12 @@ describe('testAgent', () => {
       expect(result.success).toBe(true);
     });
 
-    it('uses fallback filename when test_name is undefined', async () => {
+    it('uses fallback filename when testName is undefined', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest = {
-        test_name: undefined,
+        testName: undefined,
         status: 'failed',
         screenshots: [],
         error: 'API returned error',
@@ -326,12 +359,12 @@ describe('testAgent', () => {
       expect(spawn).toHaveBeenCalled();
     });
 
-    it('still passes original undefined test_name in JSON payload', async () => {
+    it('still passes original undefined testName in JSON payload', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest = {
-        test_name: undefined,
+        testName: undefined,
         status: 'failed',
         screenshots: [],
         error: 'API returned error',
@@ -351,9 +384,9 @@ describe('testAgent', () => {
   });
 
   describe('isValidE2ETestResult', () => {
-    it('returns true for valid E2ETestResult with test_name', () => {
+    it('returns true for valid E2ETestResult with testName', () => {
       const result: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'passed',
         screenshots: [],
         error: null,
@@ -365,9 +398,9 @@ describe('testAgent', () => {
       expect(isValidE2ETestResult(null)).toBe(false);
     });
 
-    it('returns false when test_name is undefined', () => {
+    it('returns false when testName is undefined', () => {
       const result = {
-        test_name: undefined,
+        testName: undefined,
         status: 'failed',
         screenshots: [],
         error: 'Some error',
@@ -375,9 +408,9 @@ describe('testAgent', () => {
       expect(isValidE2ETestResult(result)).toBe(false);
     });
 
-    it('returns false when test_name is empty string', () => {
+    it('returns false when testName is empty string', () => {
       const result: E2ETestResult = {
-        test_name: '',
+        testName: '',
         status: 'failed',
         screenshots: [],
         error: 'Some error',
@@ -385,12 +418,22 @@ describe('testAgent', () => {
       expect(isValidE2ETestResult(result)).toBe(false);
     });
 
-    it('returns false when test_name is not a string', () => {
+    it('returns false when testName is not a string', () => {
       const result = {
-        test_name: 123,
+        testName: 123,
         status: 'failed',
         screenshots: [],
         error: 'Some error',
+      } as unknown as E2ETestResult;
+      expect(isValidE2ETestResult(result)).toBe(false);
+    });
+
+    it('returns false when only snake_case test_name is present (no testName)', () => {
+      const result = {
+        test_name: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
       } as unknown as E2ETestResult;
       expect(isValidE2ETestResult(result)).toBe(false);
     });

@@ -49,7 +49,7 @@ As a user, I want to view the characters overview page and see either a list of 
 ## Output Format
 ```json
 {
-  "test_name": "Characters Overview Page",
+  "testName": "Characters Overview Page",
   "status": "passed|failed",
   "screenshots": [
     "/path/to/e2e-screenshots/characters_overview/01_page_loaded.png",
