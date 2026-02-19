@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import { getPlanFilePath, planFileExists, formatIssueContextAsArgs } from '../agents/planAgent';
+import { getPlanFilePath, planFileExists, readPlanFile, formatIssueContextAsArgs } from '../agents/planAgent';
 import { GitHubIssue, GitHubComment } from '../core';
 
 vi.mock('fs');
@@ -135,6 +135,60 @@ describe('planFileExists', () => {
     expect(planFileExists(7, '/worktree/path')).toBe(true);
     expect(fs.statSync).toHaveBeenCalledWith(
       '/worktree/path/specs/issue-7-adw-xyz-sdlc_planner-task.md'
+    );
+  });
+});
+
+describe('readPlanFile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns file content when the plan file exists', () => {
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'issue-5-adw-abc-sdlc_planner-my-plan.md',
+    ] as any);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Plan content\n\nDetailed plan here');
+
+    const result = readPlanFile(5);
+
+    expect(result).toBe('# Plan content\n\nDetailed plan here');
+  });
+
+  it('returns null when the plan file does not exist', () => {
+    vi.mocked(fs.readdirSync).mockReturnValue([] as any);
+    vi.mocked(fs.statSync).mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
+
+    expect(readPlanFile(99)).toBeNull();
+  });
+
+  it('returns null when file read throws an error', () => {
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'issue-5-adw-abc-sdlc_planner-my-plan.md',
+    ] as any);
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('EACCES: permission denied');
+    });
+
+    expect(readPlanFile(5)).toBeNull();
+  });
+
+  it('uses worktreePath for full path resolution', () => {
+    vi.mocked(fs.readdirSync).mockReturnValue([
+      'issue-7-adw-xyz-sdlc_planner-task.md',
+    ] as any);
+    vi.mocked(fs.readFileSync).mockReturnValue('# Plan');
+
+    readPlanFile(7, '/worktree/path');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      '/worktree/path/specs/issue-7-adw-xyz-sdlc_planner-task.md',
+      'utf-8'
     );
   });
 });
