@@ -91,6 +91,16 @@ describe('extractBranchNameFromOutput', () => {
     const result = extractBranchNameFromOutput(output);
     expect(result).toBe('feat-issue-123-add-user-auth');
   });
+
+  it('strips backticks from LLM output', () => {
+    const result = extractBranchNameFromOutput('`feat-issue-123-add-user-auth`');
+    expect(result).toBe('feat-issue-123-add-user-auth');
+  });
+
+  it('strips triple backticks from LLM output', () => {
+    const result = extractBranchNameFromOutput('```feat-issue-123-add-user-auth```');
+    expect(result).toBe('feat-issue-123-add-user-auth');
+  });
 });
 
 describe('validateBranchName', () => {
@@ -139,6 +149,11 @@ describe('validateBranchName', () => {
 
   it('throws an error when all characters are invalid', () => {
     expect(() => validateBranchName('~^:*?[]\\')).toThrow('Branch name is empty after validation');
+  });
+
+  it('removes backticks from branch names', () => {
+    expect(validateBranchName('`feat-issue-123-add-auth`')).toBe('feat-issue-123-add-auth');
+    expect(validateBranchName('feat-`issue`-123')).toBe('feat-issue-123');
   });
 });
 

@@ -25,8 +25,8 @@ issue: ${JSON.stringify(issue)}`;
 export function validateBranchName(name: string): string {
   let sanitized = name.trim();
 
-  // Remove characters invalid in git branch names
-  sanitized = sanitized.replace(/[~^:*?[\]@{}\\]/g, '');
+  // Remove characters invalid in git branch names or dangerous in shell contexts
+  sanitized = sanitized.replace(/[~^:*?[\]@{}\\`]/g, '');
   sanitized = sanitized.replace(/\.\./g, '');
   sanitized = sanitized.replace(/\s+/g, '-');
 
@@ -49,7 +49,7 @@ export function validateBranchName(name: string): string {
 export function extractBranchNameFromOutput(output: string): string {
   const trimmed = output.trim();
   const lines = trimmed.split('\n').filter(line => line.trim());
-  const rawName = lines[lines.length - 1].trim();
+  const rawName = lines[lines.length - 1].trim().replace(/^`+|`+$/g, '');
   return validateBranchName(rawName);
 }
 
