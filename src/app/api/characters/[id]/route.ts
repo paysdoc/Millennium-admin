@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { updateCharacter } from '@/lib/characters'
 import { Character } from '@/types/character'
 
@@ -49,6 +50,8 @@ export async function PATCH(
     }
 
     const updatedCharacter = await updateCharacter(id, updateData)
+    revalidatePath(`/characters/${id}`)
+    revalidatePath('/')
     return NextResponse.json(updatedCharacter)
   } catch (error) {
     if (error instanceof Error && error.message === 'Character not found') {
