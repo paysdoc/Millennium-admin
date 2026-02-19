@@ -189,7 +189,7 @@ const server = http.createServer((req, res) => {
               `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
               'success'
             );
-            spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
+            spawnDetached('npx', ['tsx', workflowScript, String(issueNumber), '--issue-type', classification.issueType]);
           });
         })
         .catch((error) => {
@@ -258,7 +258,7 @@ const server = http.createServer((req, res) => {
             `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
             'success'
           );
-          spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
+          spawnDetached('npx', ['tsx', workflowScript, String(issueNumber), '--issue-type', classification.issueType]);
         })
         .catch((error) => {
           log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');

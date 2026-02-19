@@ -65,6 +65,7 @@ const SAFE_ENV_VARS: readonly string[] = [
   'NODE_PATH',
   'NODE_ENV',
   'PWD',
+  'PORT',
 ];
 
 /**

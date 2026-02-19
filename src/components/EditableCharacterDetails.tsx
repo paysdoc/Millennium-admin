@@ -46,8 +46,10 @@ export default function EditableCharacterDetails({
     biography: character.biography,
   })
 
+  const fieldsRef = useRef<EditableFields>({ ...originalData.current })
   const [fields, setFields] = useState<EditableFields>({ ...originalData.current })
   const [isSaving, setIsSaving] = useState(false)
+  const isSavingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   const hasChanges = Object.keys(fields).some(
@@ -55,24 +57,30 @@ export default function EditableCharacterDetails({
   )
 
   const handleFieldChange = (fieldName: keyof EditableFields) => (value: string | null) => {
-    setFields((prev) => ({ ...prev, [fieldName]: value }))
+    fieldsRef.current = { ...fieldsRef.current, [fieldName]: value }
+    setFields({ ...fieldsRef.current })
     setError(null)
   }
 
   const handleCancel = () => {
+    fieldsRef.current = { ...originalData.current }
     setFields({ ...originalData.current })
     setError(null)
   }
 
   const handleApply = async () => {
+    if (isSavingRef.current) return
+    isSavingRef.current = true
     setIsSaving(true)
     setError(null)
+
+    const currentFields = fieldsRef.current
 
     try {
       const response = await fetch(`/api/characters/${character.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields),
+        body: JSON.stringify(currentFields),
       })
 
       if (!response.ok) {
@@ -81,12 +89,13 @@ export default function EditableCharacterDetails({
       }
 
       const updatedCharacter: Character = await response.json()
-      originalData.current = { ...fields }
+      originalData.current = { ...currentFields }
       onSave?.(updatedCharacter)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save changes')
     } finally {
       setIsSaving(false)
+      isSavingRef.current = false
     }
   }
 

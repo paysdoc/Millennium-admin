@@ -247,6 +247,7 @@ describe('testAgent', () => {
       expect(result.allPassed).toBe(false);
       expect(result.exitCode).toBe(1);
     });
+
   });
 
   describe('runResolveTestAgent', () => {
@@ -393,6 +394,26 @@ describe('testAgent', () => {
       expect(prompt).toContain('/resolve_failed_e2e_test');
       // The undefined should be serialized in JSON (undefined becomes omitted or null)
       expect(prompt).toContain('API returned error');
+    });
+
+    it('includes applicationUrl in failure JSON when provided', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Fixed the E2E issue' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      const failedE2ETest: E2ETestResult = {
+        testName: 'Login Test',
+        status: 'failed',
+        error: 'Element not found',
+        testPath: '/path/to/login.spec.ts',
+      };
+
+      await runResolveE2ETestAgent(failedE2ETest, testLogsDir, undefined, undefined, 'http://localhost:45678');
+
+      const calls = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1];
+      const args = lastCall[1] as string[];
+      const prompt = args[args.length - 1];
+      expect(prompt).toContain('http://localhost:45678');
     });
   });
 

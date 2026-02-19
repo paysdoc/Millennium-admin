@@ -29,12 +29,14 @@ export interface ReviewRetryOptions {
   issueContext: string;
   onReviewFailed?: (attempt: number, maxAttempts: number) => void;
   cwd?: string;
+  /** Optional application URL for the dev server (e.g. http://localhost:12345) */
+  applicationUrl?: string;
 }
 
 export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<ReviewRetryResult> {
   const {
     adwId, specFile, logsDir, orchestratorStatePath: statePath,
-    maxRetries, branchName, issueType, issueContext, onReviewFailed, cwd,
+    maxRetries, branchName, issueType, issueContext, onReviewFailed, cwd, applicationUrl,
   } = opts;
 
   let retryCount = 0;
@@ -46,7 +48,7 @@ export async function runReviewWithRetry(opts: ReviewRetryOptions): Promise<Revi
     AgentStateManager.appendLog(statePath, `Review attempt ${retryCount + 1}/${maxRetries}`);
 
     const reviewResult: ReviewAgentResult = await runReviewAgent(
-      adwId, specFile, logsDir, initAgentState(statePath, 'review-agent'), cwd,
+      adwId, specFile, logsDir, initAgentState(statePath, 'review-agent'), cwd, applicationUrl,
     );
     trackCost(reviewResult as AgentRunResult, costState, statePath);
 

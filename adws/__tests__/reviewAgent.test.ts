@@ -192,4 +192,46 @@ describe('runReviewAgent', () => {
       '/worktree'
     );
   });
+
+  it('appends applicationUrl as 4th line in args when provided', async () => {
+    vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
+      success: true,
+      output: JSON.stringify(createReviewResult()),
+      totalCostUsd: 0.5,
+    });
+
+    await runReviewAgent('adw-123', 'specs/plan.md', '/logs', undefined, undefined, 'http://localhost:45678');
+
+    expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
+      '/review',
+      'adw-123\nspecs/plan.md\nreview_agent\nhttp://localhost:45678',
+      'Review',
+      expect.any(String),
+      'opus',
+      undefined,
+      undefined,
+      undefined
+    );
+  });
+
+  it('omits applicationUrl from args when not provided', async () => {
+    vi.mocked(runClaudeAgentWithCommand).mockResolvedValue({
+      success: true,
+      output: JSON.stringify(createReviewResult()),
+      totalCostUsd: 0.5,
+    });
+
+    await runReviewAgent('adw-123', 'specs/plan.md', '/logs');
+
+    expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
+      '/review',
+      'adw-123\nspecs/plan.md\nreview_agent',
+      'Review',
+      expect.any(String),
+      'opus',
+      undefined,
+      undefined,
+      undefined
+    );
+  });
 });

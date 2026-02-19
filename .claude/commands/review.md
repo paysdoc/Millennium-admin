@@ -7,6 +7,7 @@ Follow the `Instructions` below to **review work done against a specification fi
 adwId: $1
 specFile: $2
 agentName: $3 if provided, otherwise use 'reviewAgent'
+applicationUrl: $4 if provided, otherwise use http://localhost:3000
 reviewImage_dir: `<absolute path to codebase>/agents/<adwId>/<agentName>/reviewImg/`
 
 ## Instructions
@@ -47,7 +48,9 @@ reviewImage_dir: `<absolute path to codebase>/agents/<adwId>/<agentName>/reviewI
 
 ## Setup
 
-IMPORTANT: Read and **Execute** `.claude/commands/prepare_app.md` now to prepare the application for the review.
+Extract the port number from the `applicationUrl` (e.g. if applicationUrl is `http://localhost:12345`, the port is `12345`).
+IMPORTANT: Read and **Execute** `.claude/commands/prepare_app.md` with the extracted port number to prepare the application for the review.
+Use the `applicationUrl` when navigating to the application for screenshots.
 
 ## Report
 

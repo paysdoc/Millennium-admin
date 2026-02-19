@@ -2,7 +2,7 @@
  * Workflow initialization, completion, error handling, and review phase.
  */
 
-import { log, setLogAdwId, ensureLogsDirectory, generateAdwId, type IssueClassSlashCommand, type GitHubIssue, AgentStateManager, type AgentState, type AgentIdentifier, type RecoveryState, shouldExecuteStage, hasUncommittedChanges, getNextStage, MAX_REVIEW_RETRY_ATTEMPTS, COST_REPORT_CURRENCIES, type ModelUsageMap, buildCostBreakdown, persistTokenCounts } from '../core';
+import { log, setLogAdwId, ensureLogsDirectory, generateAdwId, type IssueClassSlashCommand, type GitHubIssue, AgentStateManager, type AgentState, type AgentIdentifier, type RecoveryState, shouldExecuteStage, hasUncommittedChanges, getNextStage, MAX_REVIEW_RETRY_ATTEMPTS, COST_REPORT_CURRENCIES, type ModelUsageMap, buildCostBreakdown, persistTokenCounts, allocateRandomPort } from '../core';
 import { fetchGitHubIssue, postWorkflowComment, type WorkflowContext, detectRecoveryState, getDefaultBranch, checkoutDefaultBranch, ensureWorktree, getWorktreeForBranch, mergeLatestFromDefaultBranch, copyEnvToWorktree, findWorktreeForIssue } from '../github';
 import { runGenerateBranchNameAgent, getPlanFilePath, runReviewWithRetry } from '../agents';
 import { classifyGitHubIssue } from '../core/issueClassifier';
@@ -24,6 +24,7 @@ export interface WorkflowConfig {
   recoveryState: RecoveryState;
   ctx: WorkflowContext;
   branchName: string;
+  applicationUrl: string;
 }
 
 /**
@@ -155,6 +156,12 @@ export async function initializeWorkflow(
     postWorkflowComment(issueNumber, 'starting', ctx);
   }
 
+  // Allocate a random port for the dedicated dev server instance
+  const port = await allocateRandomPort();
+  const applicationUrl = `http://localhost:${port}`;
+  log(`Allocated port ${port} for dev server (${applicationUrl})`, 'info');
+  AgentStateManager.appendLog(orchestratorStatePath, `Allocated port ${port} for dev server`);
+
   return {
     issueNumber,
     adwId: resolvedAdwId,
@@ -168,6 +175,7 @@ export async function initializeWorkflow(
     recoveryState,
     ctx,
     branchName,
+    applicationUrl,
   };
 }
 
@@ -216,7 +224,7 @@ export async function executeReviewPhase(config: WorkflowConfig): Promise<{
   reviewPassed: boolean;
   totalRetries: number;
 }> {
-  const { orchestratorStatePath, issueNumber, issue, issueType, ctx, logsDir, worktreePath, branchName, adwId } = config;
+  const { orchestratorStatePath, issueNumber, issue, issueType, ctx, logsDir, worktreePath, branchName, adwId, applicationUrl } = config;
 
   log('Phase: Review', 'info');
   AgentStateManager.appendLog(orchestratorStatePath, 'Starting review phase');
@@ -239,6 +247,7 @@ export async function executeReviewPhase(config: WorkflowConfig): Promise<{
       postWorkflowComment(issueNumber, 'review_patching', ctx);
     },
     cwd: worktreePath,
+    applicationUrl,
   });
 
   if (reviewResult.passed) {
