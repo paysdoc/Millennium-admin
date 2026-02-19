@@ -78,7 +78,8 @@ async function checkAndTrigger(): Promise<void> {
       'success'
     );
 
-    const child = spawn('npx', ['tsx', workflowScript, String(issue.number), '--issue-type', classification.issueType], {
+    const adwIdArgs = classification.adwId ? [classification.adwId] : [];
+    const child = spawn('npx', ['tsx', workflowScript, String(issue.number), ...adwIdArgs, '--issue-type', classification.issueType], {
       detached: true,
       stdio: 'ignore',
     });
