@@ -28,7 +28,7 @@ export interface BranchCheckoutStatus {
  * @returns A safe directory name derived from the branch name
  */
 function sanitizeBranchName(branchName: string): string {
-  return branchName.replace(/[/\\:*?"<>|]/g, '-');
+  return branchName.replace(/[/\\:*?"<>|`]/g, '-');
 }
 
 /**
