@@ -3,7 +3,7 @@
  */
 
 import { log, setLogAdwId, ensureLogsDirectory, generateAdwId, type IssueClassSlashCommand, type GitHubIssue, AgentStateManager, type AgentState, type AgentIdentifier, type RecoveryState, shouldExecuteStage, hasUncommittedChanges, getNextStage, MAX_REVIEW_RETRY_ATTEMPTS, COST_REPORT_CURRENCIES, type ModelUsageMap, buildCostBreakdown, persistTokenCounts } from '../core';
-import { fetchGitHubIssue, postWorkflowComment, type WorkflowContext, detectRecoveryState, getDefaultBranch, checkoutDefaultBranch, ensureWorktree, getWorktreeForBranch, mergeLatestFromDefaultBranch, copyEnvToWorktree } from '../github';
+import { fetchGitHubIssue, postWorkflowComment, type WorkflowContext, detectRecoveryState, getDefaultBranch, checkoutDefaultBranch, ensureWorktree, getWorktreeForBranch, mergeLatestFromDefaultBranch, copyEnvToWorktree, findWorktreeForIssue } from '../github';
 import { runGenerateBranchNameAgent, getPlanFilePath, runReviewWithRetry } from '../agents';
 import { classifyGitHubIssue } from '../core/issueClassifier';
 
@@ -78,30 +78,40 @@ export async function initializeWorkflow(
     worktreePath = options.cwd;
     log('Using provided worktree (merged latest code)', 'info');
   } else {
-    // Reuse recovered branch name or generate a new one
-    if (recoveryState.branchName) {
-      branchName = recoveryState.branchName;
-      log(`Reusing branch from previous workflow: ${branchName}`, 'info');
+    // Try to find an existing worktree by issue type and number first
+    const issueWorktree = findWorktreeForIssue(issueType, issueNumber);
+    if (issueWorktree) {
+      branchName = issueWorktree.branchName;
+      worktreePath = issueWorktree.worktreePath;
+      mergeLatestFromDefaultBranch(defaultBranch, worktreePath);
+      copyEnvToWorktree(worktreePath);
+      log(`Reusing existing worktree found by issue pattern at ${worktreePath}`, 'info');
     } else {
-      const branchResult = await runGenerateBranchNameAgent(
-        issueType, issue, logsDir
-      );
-      branchName = branchResult.branchName;
-      log(`Branch name generated: ${branchName}`, 'success');
-    }
+      // Reuse recovered branch name or generate a new one
+      if (recoveryState.branchName) {
+        branchName = recoveryState.branchName;
+        log(`Reusing branch from previous workflow: ${branchName}`, 'info');
+      } else {
+        const branchResult = await runGenerateBranchNameAgent(
+          issueType, issue, logsDir
+        );
+        branchName = branchResult.branchName;
+        log(`Branch name generated: ${branchName}`, 'success');
+      }
 
-    // Check if a worktree already exists for this branch
-    const existingWorktree = getWorktreeForBranch(branchName);
-    if (existingWorktree) {
-      log(`Reusing existing worktree at ${existingWorktree}`, 'info');
-      mergeLatestFromDefaultBranch(defaultBranch, existingWorktree);
-      copyEnvToWorktree(existingWorktree);
-      worktreePath = existingWorktree;
-    } else {
-      // Ensure main repo is on default branch with latest code
-      checkoutDefaultBranch();
-      // Create worktree with new branch atomically via git worktree add -b
-      worktreePath = ensureWorktree(branchName, defaultBranch);
+      // Check if a worktree already exists for this branch
+      const existingWorktree = getWorktreeForBranch(branchName);
+      if (existingWorktree) {
+        log(`Reusing existing worktree at ${existingWorktree}`, 'info');
+        mergeLatestFromDefaultBranch(defaultBranch, existingWorktree);
+        copyEnvToWorktree(existingWorktree);
+        worktreePath = existingWorktree;
+      } else {
+        // Ensure main repo is on default branch with latest code
+        checkoutDefaultBranch();
+        // Create worktree with new branch atomically via git worktree add -b
+        worktreePath = ensureWorktree(branchName, defaultBranch);
+      }
     }
     log(`Worktree path: ${worktreePath}`, 'info');
   }

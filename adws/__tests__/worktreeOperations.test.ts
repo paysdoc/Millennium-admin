@@ -41,6 +41,7 @@ import {
   freeBranchFromMainRepo,
   getWorktreesDir,
   copyEnvToWorktree,
+  findWorktreeForIssue,
 } from '../github/worktreeOperations';
 
 describe('getWorktreePath', () => {
@@ -1376,5 +1377,182 @@ branch refs/heads/feature/issue-100-large-fix
     );
     expect(removeCalls).toHaveLength(1);
     expect(String(removeCalls[0][0])).toContain('feature-issue-1-small-fix');
+  });
+});
+
+describe('findWorktreeForIssue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns worktree result when matching worktree exists', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toEqual({
+      worktreePath: '/mock/project/.worktrees/feature-issue-42-add-login',
+      branchName: 'feature/issue-42-add-login',
+    });
+  });
+
+  it('returns null when no matching worktree exists', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toBeNull();
+  });
+
+  it('matches correct prefix for bug issues', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/bugfix-issue-42-fix-bug
+HEAD def456
+branch refs/heads/bugfix/issue-42-fix-bug
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/bug', 42);
+
+    expect(result).toEqual({
+      worktreePath: '/mock/project/.worktrees/bugfix-issue-42-fix-bug',
+      branchName: 'bugfix/issue-42-fix-bug',
+    });
+  });
+
+  it('matches correct prefix for chore issues', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/chore-issue-42-update-readme
+HEAD def456
+branch refs/heads/chore/issue-42-update-readme
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/chore', 42);
+
+    expect(result).toEqual({
+      worktreePath: '/mock/project/.worktrees/chore-issue-42-update-readme',
+      branchName: 'chore/issue-42-update-readme',
+    });
+  });
+
+  it('does not match different issue type prefix', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/bugfix-issue-42-fix-bug
+HEAD def456
+branch refs/heads/bugfix/issue-42-fix-bug
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toBeNull();
+  });
+
+  it('does not match different issue number', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 99);
+
+    expect(result).toBeNull();
+  });
+
+  it('does not match partial issue numbers', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-10-medium-fix
+HEAD def456
+branch refs/heads/feature/issue-10-medium-fix
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 1);
+
+    expect(result).toBeNull();
+  });
+
+  it('ignores the main worktree', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/feature/issue-42-add-login
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when git command fails', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('git error');
+    });
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns the first match when multiple worktrees exist for the same issue', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login-v2
+HEAD ghi789
+branch refs/heads/feature/issue-42-add-login-v2
+
+`;
+    vi.mocked(execSync).mockReturnValue(worktreeListOutput);
+
+    const result = findWorktreeForIssue('/feature', 42);
+
+    expect(result).toEqual({
+      worktreePath: '/mock/project/.worktrees/feature-issue-42-add-login',
+      branchName: 'feature/issue-42-add-login',
+    });
   });
 });

@@ -51,7 +51,9 @@ export {
   freeBranchFromMainRepo,
   getWorktreesDir,
   copyEnvToWorktree,
+  findWorktreeForIssue,
   type BranchCheckoutStatus,
+  type WorktreeForIssueResult,
 } from './worktreeOperations';
 
 // PR Comment Detector

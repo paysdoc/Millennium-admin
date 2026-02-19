@@ -100,6 +100,7 @@ vi.mock('../github', () => ({
   getWorktreeForBranch: vi.fn().mockReturnValue(null),
   mergeLatestFromDefaultBranch: vi.fn(),
   copyEnvToWorktree: vi.fn(),
+  findWorktreeForIssue: vi.fn().mockReturnValue(null),
   inferIssueTypeFromBranch: vi.fn().mockReturnValue('/feature'),
 }));
 
@@ -171,6 +172,7 @@ import {
   getWorktreeForBranch,
   mergeLatestFromDefaultBranch,
   copyEnvToWorktree,
+  findWorktreeForIssue,
   inferIssueTypeFromBranch,
 } from '../github';
 import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry, runPullRequestAgent } from '../agents';
@@ -366,6 +368,37 @@ describe('initializeWorkflow', () => {
     expect(generateAdwId).toHaveBeenCalledWith('Test issue');
     expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
     expect(config.branchName).toBe('bug-issue-1-adw-old-id-fix-login');
+  });
+
+  it('reuses existing worktree found by issue pattern and skips branch name generation', async () => {
+    vi.mocked(findWorktreeForIssue).mockReturnValue({
+      worktreePath: '/existing/issue-worktree',
+      branchName: 'feature/issue-1-original-name',
+    });
+
+    const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
+
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(getWorktreeForBranch).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(mergeLatestFromDefaultBranch).toHaveBeenCalledWith('main', '/existing/issue-worktree');
+    expect(copyEnvToWorktree).toHaveBeenCalledWith('/existing/issue-worktree');
+    expect(config.worktreePath).toBe('/existing/issue-worktree');
+    expect(config.branchName).toBe('feature/issue-1-original-name');
+  });
+
+  it('falls back to branch name generation when findWorktreeForIssue returns null', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState());
+    vi.mocked(findWorktreeForIssue).mockReturnValue(null);
+    vi.mocked(getWorktreeForBranch).mockReturnValue(null);
+
+    const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
+
+    expect(findWorktreeForIssue).toHaveBeenCalledWith('/feature', 1);
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(ensureWorktree).toHaveBeenCalled();
+    expect(config.branchName).toBe('feature/issue-1-test');
   });
 });
 
