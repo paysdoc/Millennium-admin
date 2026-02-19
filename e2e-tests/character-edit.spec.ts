@@ -70,8 +70,9 @@ test.describe('Character Edit Functionality', () => {
     await expect(applyButton).toBeVisible()
     await applyButton.click()
 
-    // Wait for save to complete (buttons disappear)
-    await expect(applyButton).not.toBeVisible()
+    // Wait for save to fully complete (action buttons section disappears
+    // only after PATCH response is received and hasChanges becomes false)
+    await expect(page.locator('.infobox-actions')).not.toBeVisible()
 
     // Verify the edited value is shown
     const editedField = page.locator('[data-field="first_names"].editable-field')
@@ -94,6 +95,6 @@ test.describe('Character Edit Functionality', () => {
     await expect(restoreApplyButton).toBeVisible()
     await restoreApplyButton.click()
 
-    await expect(restoreApplyButton).not.toBeVisible()
+    await expect(page.locator('.infobox-actions')).not.toBeVisible()
   })
 })

@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache'
 import { getSupabaseClient } from './supabase'
 import { isTableNotFoundError } from './schema'
 import { handleDatabaseError } from './errors'
@@ -9,6 +10,7 @@ import { CategoryKey, CategoryName } from '@/types/character'
  * Returns an empty map if the table does not exist.
  */
 export async function fetchCategoryNames(): Promise<Map<CategoryKey, string>> {
+  noStore()
   const supabase = getSupabaseClient()
 
   try {

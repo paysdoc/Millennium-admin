@@ -24,9 +24,11 @@ export default function EditableField({
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [localValue, setLocalValue] = useState(value ?? '')
+  const localValueRef = useRef(value ?? '')
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(null)
 
   useEffect(() => {
+    localValueRef.current = value ?? ''
     setLocalValue(value ?? '')
   }, [value])
 
@@ -45,7 +47,7 @@ export default function EditableField({
 
   const handleBlur = () => {
     setIsEditing(false)
-    const newValue = localValue.trim() || null
+    const newValue = localValueRef.current.trim() || null
     onChange(newValue)
   }
 
@@ -54,16 +56,19 @@ export default function EditableField({
       e.preventDefault()
       handleBlur()
     } else if (e.key === 'Escape') {
+      localValueRef.current = value ?? ''
       setLocalValue(value ?? '')
       setIsEditing(false)
     }
   }
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    localValueRef.current = e.target.value
     setLocalValue(e.target.value)
   }
 
   const handleSelectChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    localValueRef.current = e.target.value
     setLocalValue(e.target.value)
     onChange(e.target.value || null)
     setIsEditing(false)

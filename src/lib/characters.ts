@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache'
 import { getSupabaseClient, getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
 import { handleDatabaseError } from './errors'
@@ -15,6 +16,7 @@ import {
  * Maps database rows to the application Character interface.
  */
 export async function fetchAllCharacters(): Promise<Character[]> {
+  noStore()
   const supabase = getSupabaseClient()
 
   try {
@@ -48,6 +50,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
  * Returns null if the character is not found.
  */
 export async function fetchCharacterById(id: string): Promise<Character | null> {
+  noStore()
   const supabase = getSupabaseClient()
 
   try {

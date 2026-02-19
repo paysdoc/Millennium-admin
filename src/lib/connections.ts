@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache'
 import { getSupabaseClient } from './supabase'
 import { isTableNotFoundError } from './schema'
 import { handleDatabaseError } from './errors'
@@ -7,6 +8,7 @@ import { Connection } from '@/types/connection'
  * Fetch all connections from the `connection` table.
  */
 export async function fetchAllConnections(): Promise<Connection[]> {
+  noStore()
   const supabase = getSupabaseClient()
 
   try {
@@ -37,6 +39,7 @@ export async function fetchAllConnections(): Promise<Connection[]> {
 export async function fetchConnectionsByCharacter(
   characterId: string
 ): Promise<Connection[]> {
+  noStore()
   const supabase = getSupabaseClient()
 
   try {
