@@ -51,6 +51,7 @@ vi.mock('../core', async (importOriginal) => {
     MAX_TEST_RETRY_ATTEMPTS: 5,
     MAX_REVIEW_RETRY_ATTEMPTS: 3,
     MAX_TOKEN_CONTINUATIONS: 3,
+    allocateRandomPort: vi.fn().mockResolvedValue(12345),
   };
 });
 
@@ -222,6 +223,7 @@ function createWorkflowConfig(overrides: Partial<WorkflowConfig> = {}): Workflow
     recoveryState: createRecoveryState(),
     ctx: { issueNumber: 1, adwId: 'test-adw-id' } as WorkflowContext,
     branchName: 'feature/issue-1-test',
+    applicationUrl: 'http://localhost:12345',
     ...overrides,
   };
 }
@@ -737,6 +739,7 @@ function createPRReviewWorkflowConfig(overrides: Partial<PRReviewWorkflowConfig>
     worktreePath: '/mock/worktree',
     logsDir: '/mock/logs',
     orchestratorStatePath: '/mock/state/path',
+    applicationUrl: 'http://localhost:12345',
     ctx: {
       issueNumber: 10,
       adwId: 'test-adw-id',
@@ -755,10 +758,10 @@ describe('initializePRReviewWorkflow', () => {
     vi.mocked(getUnaddressedComments).mockReturnValue(createMockPRReviewComments());
   });
 
-  it('fetches PR details and returns config', () => {
+  it('fetches PR details and returns config', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
-    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+    const config = await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(fetchPRDetails).toHaveBeenCalledWith(42);
     expect(config.prNumber).toBe(42);
@@ -768,48 +771,48 @@ describe('initializePRReviewWorkflow', () => {
     mockExit.mockRestore();
   });
 
-  it('exits when PR is closed', () => {
+  it('exits when PR is closed', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'CLOSED' }));
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('exits when PR is merged', () => {
+  it('exits when PR is merged', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'MERGED' }));
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('exits when no unaddressed comments', () => {
+  it('exits when no unaddressed comments', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(getUnaddressedComments).mockReturnValue([]);
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('sets up worktree via ensureWorktree with head branch', () => {
-    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+  it('sets up worktree via ensureWorktree with head branch', async () => {
+    const config = await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-10-test');
     expect(config.worktreePath).toBe('/mock/worktree');
   });
 
-  it('initializes orchestrator state with correct metadata', () => {
-    initializePRReviewWorkflow(42, 'test-adw-id');
+  it('initializes orchestrator state with correct metadata', async () => {
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(AgentStateManager.initializeState).toHaveBeenCalledWith('test-adw-id', 'pr-review-orchestrator');
     expect(AgentStateManager.writeState).toHaveBeenCalledWith(
@@ -821,8 +824,8 @@ describe('initializePRReviewWorkflow', () => {
     );
   });
 
-  it('posts pr_review_starting comment', () => {
-    initializePRReviewWorkflow(42, 'test-adw-id');
+  it('posts pr_review_starting comment', async () => {
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_starting', expect.objectContaining({
       prNumber: 42,
@@ -830,8 +833,8 @@ describe('initializePRReviewWorkflow', () => {
     }));
   });
 
-  it('generates ADW ID from PR title when adwId is null', () => {
-    const config = initializePRReviewWorkflow(42, null);
+  it('generates ADW ID from PR title when adwId is null', async () => {
+    const config = await initializePRReviewWorkflow(42, null);
 
     expect(generateAdwId).toHaveBeenCalledWith('Test PR');
     expect(config.adwId).toBe('test-issue-abc123');

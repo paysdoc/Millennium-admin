@@ -116,6 +116,7 @@ function createWorkflowConfig(overrides: Partial<WorkflowConfig> = {}): Workflow
     recoveryState: createRecoveryState(),
     ctx: { issueNumber: 1, adwId: 'test-adw-id' } as WorkflowContext,
     branchName: 'feature/issue-1-test',
+    applicationUrl: 'http://localhost:3000',
     ...overrides,
   };
 }

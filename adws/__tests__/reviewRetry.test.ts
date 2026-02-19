@@ -228,4 +228,23 @@ describe('runReviewWithRetry', () => {
 
     expect(runPatchAgent).toHaveBeenCalledTimes(3);
   });
+
+  it('threads applicationUrl through to runReviewAgent', async () => {
+    vi.mocked(runReviewAgent).mockResolvedValue({
+      success: true, output: '{}', totalCostUsd: 0.5,
+      reviewResult: { success: true, reviewSummary: 'All good', reviewIssues: [], screenshots: [] },
+      passed: true, blockerIssues: [],
+    });
+
+    await runReviewWithRetry(createOptions({ applicationUrl: 'http://localhost:45678' }));
+
+    expect(runReviewAgent).toHaveBeenCalledWith(
+      'adw-123',
+      'specs/issue-1-plan.md',
+      '/logs',
+      expect.any(String),
+      undefined,
+      'http://localhost:45678',
+    );
+  });
 });

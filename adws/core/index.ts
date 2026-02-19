@@ -93,3 +93,6 @@ export {
 export type { IssueClassificationResult } from './issueClassifier';
 export { parseAdwClassificationOutput, classifyWithAdwCommand, classifyIssueForTrigger, classifyGitHubIssue, getWorkflowScript } from './issueClassifier';
 
+// Port allocator
+export { allocateRandomPort } from './portAllocator';
+

@@ -10,6 +10,7 @@ Fix a specific failing E2E test using the provided failure details.
      - `testPath`: The path to the test file (you will need this for re-execution)
      - `error`: The specific error that occurred
      - `screenshots`: Any captured screenshots showing the failure state
+     - `applicationUrl`: If present, use this URL instead of the default `http://localhost:3000` when re-running the test
    - Understand what the test is trying to validate from a user interaction perspective
 
 2. **Understand Test Execution**

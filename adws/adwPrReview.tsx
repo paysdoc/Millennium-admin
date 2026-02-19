@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const config = initializePRReviewWorkflow(prNumber, null);
+  const config = await initializePRReviewWorkflow(prNumber, null);
 
   try {
     const { planOutput } = await executePRReviewPlanPhase(config);

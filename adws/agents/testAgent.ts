@@ -112,20 +112,25 @@ export async function runTestAgent(
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
  * @param cwd - Optional working directory for the agent (defaults to process.cwd())
+ * @param applicationUrl - Optional application URL for the dev server (e.g. http://localhost:12345)
  */
 export async function runE2ETestAgent(
   testFilePath: string,
   logsDir: string,
   statePath?: string,
-  cwd?: string
+  cwd?: string,
+  applicationUrl?: string
 ): Promise<E2ETestAgentResult> {
   const testName = path.basename(testFilePath, '.md');
   const outputFile = path.join(logsDir, `e2e-test-agent-${testName}.jsonl`);
 
+  // Build args: test file path, plus applicationUrl if provided
+  const args = applicationUrl ? `${testFilePath}\n${applicationUrl}` : testFilePath;
+
   // Run /test_e2e command with the test file path as argument
   const result = await runClaudeAgentWithCommand(
     '/test_e2e',
-    testFilePath,
+    args,
     `E2E Test: ${testName}`,
     outputFile,
     SLASH_COMMAND_MODEL_MAP['/test_e2e'],
@@ -202,12 +207,14 @@ export async function runResolveTestAgent(
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
  * @param cwd - Optional working directory for the agent (defaults to process.cwd())
+ * @param applicationUrl - Optional application URL for the dev server (e.g. http://localhost:12345)
  */
 export async function runResolveE2ETestAgent(
   failedE2ETest: E2ETestResult,
   logsDir: string,
   statePath?: string,
-  cwd?: string
+  cwd?: string,
+  applicationUrl?: string
 ): Promise<AgentResult> {
   // Handle undefined or invalid testName gracefully
   const rawTestName = failedE2ETest.testName;
@@ -216,8 +223,11 @@ export async function runResolveE2ETestAgent(
     : 'unknown-test';
   const outputFile = path.join(logsDir, `resolve-e2e-${safeTestName}.jsonl`);
 
-  // Format the failed E2E test as JSON for the resolver
-  const failureJson = JSON.stringify(failedE2ETest, null, 2);
+  // Include applicationUrl in the failure JSON so the resolver knows which URL to use
+  const failurePayload = applicationUrl
+    ? { ...failedE2ETest, applicationUrl }
+    : failedE2ETest;
+  const failureJson = JSON.stringify(failurePayload, null, 2);
 
   // Use fallback display name if testName is undefined
   const displayName = rawTestName ?? 'unknown';
