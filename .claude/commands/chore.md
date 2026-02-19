@@ -3,9 +3,9 @@
 Create a new plan to resolve the `Chore` using the exact specified markdown `Plan Format`. Follow the `Instructions` to create the plan use the `Relevant Files` to focus on the right files. Follow the `Report` section to properly report the results of your work.
 
 ## Variables
-issueNumber: $1
-adwId: $2
-issueJson: $3
+issueNumber: $1, default 0 if not provided
+adwId: $2, default to `adw-unknown` if not provided
+issueJson: $3, default to empty JSON object if not provided (`{}`)
 
 ## Instructions
 
@@ -79,7 +79,8 @@ Execute every command to validate the chore is complete with zero regressions.
 ```
 
 ## Chore
-Extract the chore details from the `issueJson` variable (parse the JSON and use the title and body fields).
+If the `issueJson` variable contains a valid JSON object with `title` and `body` fields, extract the chore details from it.
+Otherwise, use the text passed as the argument to this command as the chore description directly.
 
 ## Report
 
