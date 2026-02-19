@@ -111,7 +111,6 @@ export type SlashCommand =
   | '/implement'
   // Test commands
   | '/test'
-  | '/test_e2e'
   | '/resolve_failed_test'
   | '/resolve_failed_e2e_test'
   // Review and patch commands

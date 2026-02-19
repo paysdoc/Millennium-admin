@@ -19,7 +19,7 @@ vi.mock('../core/config', async (importOriginal) => {
 // Import after mocks are set up
 import { spawn } from 'child_process';
 import { runClaudeAgent, runClaudeAgentWithCommand } from '../agents/claudeAgent';
-import { runTestAgent, runE2ETestAgent, runResolveTestAgent, runResolveE2ETestAgent } from '../agents/testAgent';
+import { runTestAgent, runResolveTestAgent, runResolveE2ETestAgent } from '../agents/testAgent';
 import { TestResult, E2ETestResult } from '../agents/testAgent';
 
 // Generate a unique test directory
@@ -127,29 +127,6 @@ describe('cwd propagation', () => {
     });
   });
 
-  describe('runE2ETestAgent', () => {
-    it('passes cwd to spawn when provided', async () => {
-      const e2eResult: E2ETestResult = {
-        testName: 'Login Test',
-        status: 'passed',
-        screenshots: [],
-        error: null,
-      };
-      const mockSpawn = createMockSpawn({ result: JSON.stringify(e2eResult) });
-      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
-
-      await runE2ETestAgent('/path/to/test.md', testLogsDir, undefined, customCwd);
-
-      expect(spawn).toHaveBeenCalledWith(
-        '/usr/local/bin/claude',
-        expect.any(Array),
-        expect.objectContaining({
-          cwd: customCwd,
-        })
-      );
-    });
-  });
-
   describe('runResolveTestAgent', () => {
     it('passes cwd to spawn when provided', async () => {
       const mockSpawn = createMockSpawn({ result: 'Fixed' });
@@ -183,7 +160,6 @@ describe('cwd propagation', () => {
       const failedE2ETest: E2ETestResult = {
         testName: 'Login Test',
         status: 'failed',
-        screenshots: [],
         error: 'Element not found',
       };
 
