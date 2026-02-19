@@ -5,9 +5,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn } from 'child_process';
 import { SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
-import { extractJson, extractJsonArray } from '../core/jsonParser';
+import { extractJsonArray } from '../core/jsonParser';
 
 /**
  * Individual test result from the /test command.
@@ -22,16 +23,32 @@ export interface TestResult {
 }
 
 /**
- * E2E test result from the /test_e2e command.
- * Matches the JSON output structure defined in .claude/commands/test_e2e.md
+ * E2E test result parsed from Playwright JSON reporter output.
  */
 export interface E2ETestResult {
   testName: string;
   status: 'passed' | 'failed';
-  screenshots: string[];
   error: string | null;
-  /** The path to the test file (added for resolution context) */
+  /** The path to the spec file */
   testPath?: string;
+}
+
+/**
+ * Result from running Playwright E2E tests via subprocess.
+ */
+export interface PlaywrightE2EResult {
+  /** Whether all E2E tests passed */
+  allPassed: boolean;
+  /** Individual results per spec file */
+  results: E2ETestResult[];
+  /** Failed spec results */
+  failedResults: E2ETestResult[];
+  /** Raw stdout from the Playwright process */
+  stdout: string;
+  /** Raw stderr from the Playwright process */
+  stderr: string;
+  /** Process exit code */
+  exitCode: number | null;
 }
 
 /**
@@ -44,16 +61,6 @@ export interface TestAgentResult extends AgentResult {
   allPassed: boolean;
   /** Failed tests for resolution */
   failedTests: TestResult[];
-}
-
-/**
- * Result from running the /test_e2e command for a single test file.
- */
-export interface E2ETestAgentResult extends AgentResult {
-  /** Parsed E2E test result from the JSON output */
-  e2eResult: E2ETestResult | null;
-  /** Whether the E2E test passed */
-  passed: boolean;
 }
 
 /**
@@ -101,69 +108,6 @@ export async function runTestAgent(
     testResults,
     allPassed,
     failedTests,
-  };
-}
-
-/**
- * Runs the /test_e2e command for a specific E2E test file.
- * Uses 'sonnet' model for cost efficiency.
- *
- * @param testFilePath - Path to the E2E test file
- * @param logsDir - Directory to write agent logs
- * @param statePath - Optional path to agent's state directory for state tracking
- * @param cwd - Optional working directory for the agent (defaults to process.cwd())
- * @param applicationUrl - Optional application URL for the dev server (e.g. http://localhost:12345)
- */
-export async function runE2ETestAgent(
-  testFilePath: string,
-  logsDir: string,
-  statePath?: string,
-  cwd?: string,
-  applicationUrl?: string
-): Promise<E2ETestAgentResult> {
-  const testName = path.basename(testFilePath, '.md');
-  const outputFile = path.join(logsDir, `e2e-test-agent-${testName}.jsonl`);
-
-  // Build args: test file path, plus applicationUrl if provided
-  const args = applicationUrl ? `${testFilePath}\n${applicationUrl}` : testFilePath;
-
-  // Run /test_e2e command with the test file path as argument
-  const result = await runClaudeAgentWithCommand(
-    '/test_e2e',
-    args,
-    `E2E Test: ${testName}`,
-    outputFile,
-    SLASH_COMMAND_MODEL_MAP['/test_e2e'],
-    undefined,
-    statePath,
-    cwd
-  );
-
-  // Parse the E2E test result from the output
-  const e2eResult = extractJson<E2ETestResult>(result.output);
-
-  // Normalize snake_case test_name to camelCase testName (defensive fallback)
-  if (e2eResult) {
-    const raw = e2eResult as unknown as Record<string, unknown>;
-    if (raw['test_name'] && !raw['testName']) {
-      e2eResult.testName = raw['test_name'] as string;
-    }
-    if (raw['test_path'] && !raw['testPath']) {
-      e2eResult.testPath = raw['test_path'] as string;
-    }
-  }
-
-  const passed = e2eResult?.status === 'passed';
-
-  // Add testPath to the result for resolution context
-  if (e2eResult) {
-    e2eResult.testPath = testFilePath;
-  }
-
-  return {
-    ...result,
-    e2eResult,
-    passed,
   };
 }
 
@@ -245,11 +189,11 @@ export async function runResolveE2ETestAgent(
 }
 
 /**
- * Discovers E2E test files in the e2e-tests directory.
- * Returns an array of paths to markdown test files.
+ * Discovers E2E test spec files in the e2e-tests directory.
+ * Returns an array of paths to Playwright spec files.
  *
  * @param baseDir - Optional base directory (defaults to process.cwd())
- * @returns Array of absolute paths to E2E test files
+ * @returns Array of absolute paths to E2E spec files
  */
 export function discoverE2ETestFiles(baseDir?: string): string[] {
   const e2eTestsDir = path.join(baseDir ?? process.cwd(), 'e2e-tests');
@@ -262,10 +206,130 @@ export function discoverE2ETestFiles(baseDir?: string): string[] {
   try {
     const files = fs.readdirSync(e2eTestsDir);
     return files
-      .filter(file => file.endsWith('.md'))
+      .filter(file => file.endsWith('.spec.ts'))
       .map(file => path.join(e2eTestsDir, file))
       .sort();
   } catch {
     return [];
   }
+}
+
+/**
+ * Playwright JSON reporter spec result shape (subset of fields we need).
+ */
+interface PlaywrightJsonSpec {
+  title: string;
+  ok: boolean;
+  tests: Array<{
+    title: string;
+    ok: boolean;
+    results: Array<{
+      status: string;
+      error?: { message?: string };
+    }>;
+  }>;
+}
+
+interface PlaywrightJsonSuite {
+  title: string;
+  file: string;
+  specs: PlaywrightJsonSpec[];
+  suites?: PlaywrightJsonSuite[];
+}
+
+interface PlaywrightJsonReport {
+  suites: PlaywrightJsonSuite[];
+}
+
+/**
+ * Extracts spec results from a Playwright JSON report suite (handles nested suites).
+ */
+function extractSpecResults(suite: PlaywrightJsonSuite): E2ETestResult[] {
+  const results: E2ETestResult[] = [];
+  const allSpecs = [
+    ...suite.specs,
+    ...(suite.suites ?? []).flatMap(s => s.specs),
+  ];
+
+  const allOk = allSpecs.every(spec => spec.ok);
+  const errors = allSpecs
+    .flatMap(spec => spec.tests)
+    .flatMap(test => test.results)
+    .filter(r => r.status === 'failed')
+    .map(r => r.error?.message)
+    .filter(Boolean);
+
+  results.push({
+    testName: suite.title || suite.file,
+    status: allOk ? 'passed' : 'failed',
+    error: errors.length > 0 ? errors.join('\n') : null,
+    testPath: suite.file,
+  });
+
+  return results;
+}
+
+/**
+ * Runs Playwright E2E tests as a subprocess and parses the JSON results.
+ *
+ * @param cwd - Optional working directory (defaults to process.cwd())
+ * @returns Structured results with pass/fail status per spec file
+ */
+export function runPlaywrightE2ETests(cwd?: string): Promise<PlaywrightE2EResult> {
+  const workDir = cwd ?? process.cwd();
+  const resultsFile = path.join(workDir, 'e2e-results.json');
+
+  return new Promise((resolve) => {
+    const proc = spawn('npx', ['playwright', 'test'], {
+      cwd: workDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (exitCode) => {
+      // Parse JSON results file
+      const e2eResults: E2ETestResult[] = [];
+
+      try {
+        if (fs.existsSync(resultsFile)) {
+          const raw = fs.readFileSync(resultsFile, 'utf-8');
+          const report: PlaywrightJsonReport = JSON.parse(raw);
+
+          for (const suite of report.suites) {
+            e2eResults.push(...extractSpecResults(suite));
+          }
+        }
+      } catch {
+        // If JSON parsing fails, treat all tests as failed
+        e2eResults.push({
+          testName: 'Playwright E2E Tests',
+          status: 'failed',
+          error: `Failed to parse e2e-results.json. stdout: ${stdout.slice(0, 500)}`,
+        });
+      }
+
+      const failedResults = e2eResults.filter(r => r.status === 'failed');
+      const allPassed = exitCode === 0 && failedResults.length === 0;
+
+      resolve({
+        allPassed,
+        results: e2eResults,
+        failedResults,
+        stdout,
+        stderr,
+        exitCode,
+      });
+    });
+  });
 }

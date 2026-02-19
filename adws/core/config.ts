@@ -100,7 +100,6 @@ export const SLASH_COMMAND_MODEL_MAP: Record<SlashCommand, 'opus' | 'sonnet' | '
   '/review': 'opus',
   // Test running (structured, cheap)
   '/test': 'sonnet',
-  '/test_e2e': 'sonnet',
   // Test resolution (complex reasoning)
   '/resolve_failed_test': 'opus',
   '/resolve_failed_e2e_test': 'opus',

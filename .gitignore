@@ -44,5 +44,10 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
+# e2e test artifacts
+/e2e-results/
+e2e-results.json
+/test-results/
+
 // environment
 .env

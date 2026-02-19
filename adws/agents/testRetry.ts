@@ -8,10 +8,10 @@ import { log, AgentStateManager, type ModelUsageMap, mergeModelUsageMaps, emptyM
 import { retryWithResolution, initAgentState, trackCost, type AgentRunResult } from '../core/retryOrchestrator';
 import {
   runTestAgent,
-  runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
   discoverE2ETestFiles,
+  runPlaywrightE2ETests,
   isValidE2ETestResult,
   TestResult,
   E2ETestResult,
@@ -92,32 +92,34 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
   log(`Discovered ${e2eTestFiles.length} E2E test file(s)`, 'info');
   AgentStateManager.appendLog(statePath, `Discovered ${e2eTestFiles.length} E2E test file(s)`);
 
-  const failedE2ETests: Map<string, { result: E2ETestResult; retryCount: number }> = new Map();
+  // Run all E2E tests via Playwright subprocess
+  log('Running Playwright E2E tests...', 'info');
+  AgentStateManager.appendLog(statePath, 'Running Playwright E2E tests');
+  const playwrightResult = await runPlaywrightE2ETests(cwd);
 
-  // Initial run of all E2E tests
-  for (const testFile of e2eTestFiles) {
-    log(`Running E2E test: ${testFile}`, 'info');
-    AgentStateManager.appendLog(statePath, `Running E2E test: ${testFile}`);
-    const e2eResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd, applicationUrl);
-    trackCost(e2eResult as AgentRunResult, costState, statePath);
-
-    if (!e2eResult.passed && e2eResult.e2eResult) {
-      failedE2ETests.set(testFile, { result: e2eResult.e2eResult, retryCount: 0 });
-      log(`E2E test failed: ${testFile}`, 'error');
-      AgentStateManager.appendLog(statePath, `E2E test failed: ${testFile}`);
-    } else if (e2eResult.passed) {
-      log(`E2E test passed: ${testFile}`, 'success');
-      AgentStateManager.appendLog(statePath, `E2E test passed: ${testFile}`);
-    }
+  if (playwrightResult.allPassed) {
+    log('All E2E tests passed!', 'success');
+    AgentStateManager.appendLog(statePath, 'All E2E tests passed');
+    return { passed: true, costUsd: 0, totalRetries, failedTests: [], modelUsage: costState.modelUsage };
   }
 
-  // Retry loop for failed E2E tests
+  // Track failed tests for retry
+  const failedE2ETests: Map<string, { result: E2ETestResult; retryCount: number }> = new Map();
+  for (const failedResult of playwrightResult.failedResults) {
+    const testFile = failedResult.testPath ?? failedResult.testName;
+    failedE2ETests.set(testFile, { result: failedResult, retryCount: 0 });
+    log(`E2E test failed: ${failedResult.testName}`, 'error');
+    AgentStateManager.appendLog(statePath, `E2E test failed: ${failedResult.testName}`);
+  }
+
+  // Retry loop: resolve failures with AI, then re-run Playwright
   while (failedE2ETests.size > 0) {
     const testsToRetry = Array.from(failedE2ETests.entries());
     if (testsToRetry.every(([, { retryCount }]) => retryCount >= maxRetries)) break;
 
     onTestFailed?.(Math.min(...testsToRetry.map(([, { retryCount }]) => retryCount)) + 1, maxRetries);
 
+    // Resolve each failing spec with AI
     for (const [testFile, { result, retryCount }] of testsToRetry) {
       if (retryCount >= maxRetries) {
         log(`E2E test ${testFile} exceeded max retries`, 'error');
@@ -126,7 +128,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       }
 
       if (!isValidE2ETestResult(result)) {
-        const derivedName = path.basename(testFile, '.md');
+        const derivedName = path.basename(testFile, '.spec.ts');
         log(`Warning: testName missing, derived from file path: ${derivedName}`, 'info');
         AgentStateManager.appendLog(statePath, `Warning: testName missing, derived from file path: ${derivedName}`);
         (result as E2ETestResult).testName = derivedName;
@@ -138,20 +140,40 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       const resolveResult = await runResolveE2ETestAgent(result, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd, applicationUrl);
       trackCost(resolveResult as AgentRunResult, costState, statePath);
       totalRetries++;
+    }
 
-      log(`Re-running E2E test: ${testFile}`, 'info');
-      const retryResult = await runE2ETestAgent(testFile, logsDir, initAgentState(statePath, 'test-agent'), cwd, applicationUrl);
-      trackCost(retryResult as AgentRunResult, costState, statePath);
+    // Re-run all Playwright tests after resolution
+    log('Re-running Playwright E2E tests after resolution...', 'info');
+    AgentStateManager.appendLog(statePath, 'Re-running Playwright E2E tests after resolution');
+    const retryPlaywrightResult = await runPlaywrightE2ETests(cwd);
 
-      if (retryResult.passed) {
+    if (retryPlaywrightResult.allPassed) {
+      failedE2ETests.clear();
+      log('All E2E tests now passing!', 'success');
+      AgentStateManager.appendLog(statePath, 'All E2E tests now passing after resolution');
+      break;
+    }
+
+    // Update failed tests map: remove now-passing, update still-failing
+    const stillFailingFiles = new Set(
+      retryPlaywrightResult.failedResults.map(r => r.testPath ?? r.testName)
+    );
+
+    for (const [testFile] of Array.from(failedE2ETests.entries())) {
+      if (!stillFailingFiles.has(testFile)) {
         failedE2ETests.delete(testFile);
         log(`E2E test now passing: ${testFile}`, 'success');
         AgentStateManager.appendLog(statePath, `E2E test now passing: ${testFile}`);
-      } else if (retryResult.e2eResult) {
-        failedE2ETests.set(testFile, { result: retryResult.e2eResult, retryCount: retryCount + 1 });
-        log(`E2E test still failing: ${testFile}`, 'error');
-        AgentStateManager.appendLog(statePath, `E2E test still failing: ${testFile}`);
       }
+    }
+
+    for (const failedResult of retryPlaywrightResult.failedResults) {
+      const testFile = failedResult.testPath ?? failedResult.testName;
+      const existing = failedE2ETests.get(testFile);
+      const newRetryCount = existing ? existing.retryCount + 1 : 0;
+      failedE2ETests.set(testFile, { result: failedResult, retryCount: newRetryCount });
+      log(`E2E test still failing: ${testFile}`, 'error');
+      AgentStateManager.appendLog(statePath, `E2E test still failing: ${testFile}`);
     }
   }
 

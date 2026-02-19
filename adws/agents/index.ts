@@ -31,14 +31,14 @@ export {
 // Test Agent
 export {
   runTestAgent,
-  runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
   discoverE2ETestFiles,
+  runPlaywrightE2ETests,
   type TestResult,
   type E2ETestResult,
   type TestAgentResult,
-  type E2ETestAgentResult,
+  type PlaywrightE2EResult,
 } from './testAgent';
 
 // Git Agent
