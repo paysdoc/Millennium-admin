@@ -112,6 +112,7 @@ vi.mock('../agents', () => ({
   }),
   getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-adw-test123-sdlc_planner-test.md'),
   planFileExists: vi.fn().mockReturnValue(false),
+  readPlanFile: vi.fn().mockReturnValue(null),
   runBuildAgent: vi.fn().mockResolvedValue({
     success: true,
     output: 'Build completed',
@@ -175,7 +176,7 @@ import {
   findWorktreeForIssue,
   inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry, runPullRequestAgent } from '../agents';
+import { runPlanAgent, getPlanFilePath, planFileExists, readPlanFile, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry, runPullRequestAgent } from '../agents';
 import { classifyGitHubIssue } from '../core/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
@@ -442,6 +443,26 @@ describe('executePlanPhase', () => {
     await executePlanPhase(config);
 
     expect(planFileExists).toHaveBeenCalledWith(1, '/mock/worktree');
+  });
+
+  it('sets planOutput from plan file content when file is readable', async () => {
+    vi.mocked(readPlanFile).mockReturnValue('# Plan\n\n## Description\nDetailed plan content');
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(readPlanFile).toHaveBeenCalledWith(1, '/mock/worktree');
+    expect(config.ctx.planOutput).toBe('# Plan\n\n## Description\nDetailed plan content');
+  });
+
+  it('falls back to agent output when plan file cannot be read', async () => {
+    vi.mocked(readPlanFile).mockReturnValue(null);
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(readPlanFile).toHaveBeenCalledWith(1, '/mock/worktree');
+    expect(config.ctx.planOutput).toBe('Plan created');
   });
 
   it('throws when plan agent fails', async () => {

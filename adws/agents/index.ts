@@ -17,6 +17,7 @@ export {
 export {
   getPlanFilePath,
   planFileExists,
+  readPlanFile,
   runPrReviewPlanAgent,
   runPlanAgent,
 } from './planAgent';

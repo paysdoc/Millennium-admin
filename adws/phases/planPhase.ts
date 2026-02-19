@@ -17,6 +17,7 @@ import {
   runPlanAgent,
   getPlanFilePath,
   planFileExists,
+  readPlanFile,
   runCommitAgent,
 } from '../agents';
 import type { WorkflowConfig } from './workflowLifecycle';
@@ -101,7 +102,12 @@ export async function executePlanPhase(config: WorkflowConfig): Promise<{ costUs
     AgentStateManager.writeState(orchestratorStatePath, { planFile: resolvedPlanPath });
     AgentStateManager.appendLog(orchestratorStatePath, `Plan created: ${resolvedPlanPath}`);
 
-    ctx.planOutput = planResult.output;
+    // Read the plan file content for the issue comment summary
+    const planFileContent = readPlanFile(issueNumber, worktreePath);
+    if (!planFileContent) {
+      log('Could not read plan file for summary, using agent output', 'info');
+    }
+    ctx.planOutput = planFileContent || planResult.output;
     postWorkflowComment(issueNumber, 'plan_created', ctx);
     costUsd = planResult.totalCostUsd || 0;
     if (planResult.modelUsage) modelUsage = planResult.modelUsage;

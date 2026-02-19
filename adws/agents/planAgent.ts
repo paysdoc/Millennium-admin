@@ -106,6 +106,20 @@ export function planFileExists(issueNumber: number, worktreePath?: string): bool
 }
 
 /**
+ * Reads the plan file content for an issue.
+ * Returns the file content string on success, or null on any error.
+ */
+export function readPlanFile(issueNumber: number, worktreePath?: string): string | null {
+  const planPath = getPlanFilePath(issueNumber, worktreePath);
+  const fullPath = worktreePath ? path.join(worktreePath, planPath) : planPath;
+  try {
+    return fs.readFileSync(fullPath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Formats PR review comments for inclusion in a prompt.
  */
 function formatPrReviewComments(comments: PRReviewComment[]): string {
