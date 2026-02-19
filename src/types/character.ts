@@ -36,6 +36,13 @@ export type CategoryKey = (typeof CATEGORY_ORDER)[number]
 
 export type CharactersByCategory = Map<CategoryKey, Character[]>
 
+export interface CategoryName {
+  key: CategoryKey
+  name: string
+  created_at: string
+  updated_at: string
+}
+
 /**
  * Convert a database row to the application Character interface.
  * Maps `type` to `category`.

@@ -18,18 +18,24 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:status": "supabase status"
+    "supabase:status": "supabase status",
+    "knex:migrate": "knex migrate:latest --knexfile knexfile.ts",
+    "knex:seed": "knex seed:run --knexfile knexfile.ts",
+    "knex:migrate:make": "knex migrate:make --knexfile knexfile.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",
     "dotenv": "^17.2.3",
+    "knex": "^3.1.0",
     "next": "^14.2.5",
+    "pg": "^8.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/node": "^20.14.10",
+    "@types/pg": "^8.16.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "eslint": "^8.57.0",

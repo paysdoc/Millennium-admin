@@ -3,18 +3,25 @@ import Footer from '@/components/Footer'
 import TableOfContents from '@/components/TableOfContents'
 import CategorySection from '@/components/CategorySection'
 import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
-import { CharactersByCategory } from '@/types/character'
+import { fetchCategoryNames, getCategoryDisplayName } from '@/lib/categoryNames'
+import { CategoryKey, CharactersByCategory } from '@/types/character'
 
 export default async function Home() {
   let groupedCharacters: CharactersByCategory
+  let categoryNames: Map<CategoryKey, string>
   let error: string | null = null
 
   try {
-    const characters = await fetchAllCharacters()
+    const [characters, fetchedCategoryNames] = await Promise.all([
+      fetchAllCharacters(),
+      fetchCategoryNames(),
+    ])
     groupedCharacters = groupCharactersByCategory(characters)
+    categoryNames = fetchedCategoryNames
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load characters'
     groupedCharacters = new Map()
+    categoryNames = new Map()
   }
 
   const categories = Array.from(groupedCharacters.keys())
@@ -37,13 +44,14 @@ export default async function Home() {
             </div>
           ) : (
             <>
-              <TableOfContents categories={categories} />
+              <TableOfContents categories={categories} categoryNames={categoryNames} />
 
               <div className="overview-content">
                 {categories.map((category) => (
                   <CategorySection
                     key={category}
                     category={category}
+                    categoryName={getCategoryDisplayName(category, categoryNames)}
                     characters={groupedCharacters.get(category) || []}
                   />
                 ))}

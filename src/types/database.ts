@@ -7,6 +7,7 @@ export type {
   Character,
   CharacterRow,
   CategoryKey,
+  CategoryName,
   CharactersByCategory,
 } from './character'
 
