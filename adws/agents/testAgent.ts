@@ -26,12 +26,12 @@ export interface TestResult {
  * Matches the JSON output structure defined in .claude/commands/test_e2e.md
  */
 export interface E2ETestResult {
-  test_name: string;
+  testName: string;
   status: 'passed' | 'failed';
   screenshots: string[];
   error: string | null;
   /** The path to the test file (added for resolution context) */
-  test_path?: string;
+  testPath?: string;
 }
 
 /**
@@ -57,11 +57,11 @@ export interface E2ETestAgentResult extends AgentResult {
 }
 
 /**
- * Validates that an E2ETestResult has a valid test_name property.
- * Returns false if test_name is undefined, null, or not a string.
+ * Validates that an E2ETestResult has a valid testName property.
+ * Returns false if testName is undefined, null, or not a string.
  */
-export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { test_name: string } {
-  return result !== null && typeof result.test_name === 'string' && result.test_name.length > 0;
+export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { testName: string } {
+  return result !== null && typeof result.testName === 'string' && result.testName.length > 0;
 }
 
 /**
@@ -136,11 +136,23 @@ export async function runE2ETestAgent(
 
   // Parse the E2E test result from the output
   const e2eResult = extractJson<E2ETestResult>(result.output);
+
+  // Normalize snake_case test_name to camelCase testName (defensive fallback)
+  if (e2eResult) {
+    const raw = e2eResult as unknown as Record<string, unknown>;
+    if (raw['test_name'] && !raw['testName']) {
+      e2eResult.testName = raw['test_name'] as string;
+    }
+    if (raw['test_path'] && !raw['testPath']) {
+      e2eResult.testPath = raw['test_path'] as string;
+    }
+  }
+
   const passed = e2eResult?.status === 'passed';
 
-  // Add test_path to the result for resolution context
+  // Add testPath to the result for resolution context
   if (e2eResult) {
-    e2eResult.test_path = testFilePath;
+    e2eResult.testPath = testFilePath;
   }
 
   return {
@@ -197,17 +209,17 @@ export async function runResolveE2ETestAgent(
   statePath?: string,
   cwd?: string
 ): Promise<AgentResult> {
-  // Handle undefined or invalid test_name gracefully
-  const rawTestName = failedE2ETest.test_name;
-  const testName = typeof rawTestName === 'string' && rawTestName.length > 0
+  // Handle undefined or invalid testName gracefully
+  const rawTestName = failedE2ETest.testName;
+  const safeTestName = typeof rawTestName === 'string' && rawTestName.length > 0
     ? rawTestName.replace(/\s+/g, '-').toLowerCase()
     : 'unknown-test';
-  const outputFile = path.join(logsDir, `resolve-e2e-${testName}.jsonl`);
+  const outputFile = path.join(logsDir, `resolve-e2e-${safeTestName}.jsonl`);
 
   // Format the failed E2E test as JSON for the resolver
   const failureJson = JSON.stringify(failedE2ETest, null, 2);
 
-  // Use fallback display name if test_name is undefined
+  // Use fallback display name if testName is undefined
   const displayName = rawTestName ?? 'unknown';
 
   return runClaudeAgentWithCommand(

@@ -50,3 +50,19 @@ So that I can visually identify characters while reading their details
 - Image src contains the correct Supabase storage URL
 - Layout handles characters without images gracefully
 - 5 screenshots are taken
+
+## Output Format
+```json
+{
+  "testName": "Character Image Display",
+  "status": "passed|failed",
+  "screenshots": [
+    "/path/to/e2e-screenshots/character_image_display/01_home_page.png",
+    "/path/to/e2e-screenshots/character_image_display/02_character_detail.png",
+    "/path/to/e2e-screenshots/character_image_display/03_character_info_section.png",
+    "/path/to/e2e-screenshots/character_image_display/04_full_page_layout.png",
+    "/path/to/e2e-screenshots/character_image_display/05_back_to_overview.png"
+  ],
+  "error": null
+}
+```

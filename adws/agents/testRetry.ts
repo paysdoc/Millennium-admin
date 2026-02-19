@@ -3,6 +3,7 @@
  * Used by both adwTest.tsx and adwPrReview.tsx workflows.
  */
 
+import * as path from 'path';
 import { log, AgentStateManager, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap, persistTokenCounts } from '../core';
 import { retryWithResolution, initAgentState, trackCost, type AgentRunResult } from '../core/retryOrchestrator';
 import {
@@ -123,14 +124,14 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
       }
 
       if (!isValidE2ETestResult(result)) {
-        log(`Skipping E2E test resolution: missing or invalid test_name`, 'error');
-        AgentStateManager.appendLog(statePath, `Skipping E2E test resolution: missing or invalid test_name`);
-        failedE2ETests.set(testFile, { result, retryCount: retryCount + 1 });
-        continue;
+        const derivedName = path.basename(testFile, '.md');
+        log(`Warning: testName missing, derived from file path: ${derivedName}`, 'info');
+        AgentStateManager.appendLog(statePath, `Warning: testName missing, derived from file path: ${derivedName}`);
+        (result as E2ETestResult).testName = derivedName;
       }
 
-      log(`Resolving E2E test: ${result.test_name ?? 'unknown'} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
-      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.test_name ?? 'unknown'}`);
+      log(`Resolving E2E test: ${result.testName} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
+      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.testName}`);
 
       const resolveResult = await runResolveE2ETestAgent(result, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd);
       trackCost(resolveResult as AgentRunResult, costState, statePath);
@@ -153,7 +154,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
   }
 
   const allPassed = failedE2ETests.size === 0;
-  const failedTestNames = Array.from(failedE2ETests.values()).map(({ result }) => result.test_name);
+  const failedTestNames = Array.from(failedE2ETests.values()).map(({ result }) => result.testName);
   const msg = allPassed ? 'All E2E tests passed' : `${failedE2ETests.size} E2E test(s) still failing`;
   log(msg + (allPassed ? '!' : ''), allPassed ? 'success' : 'error');
   AgentStateManager.appendLog(statePath, msg);
