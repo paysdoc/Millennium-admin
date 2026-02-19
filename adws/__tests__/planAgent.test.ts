@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
-import { getPlanFilePath, planFileExists, readPlanFile, formatIssueContextAsArgs } from '../agents/planAgent';
+import { getPlanFilePath, planFileExists, readPlanFile, formatIssueContextAsArgs, runPlanAgent } from '../agents/planAgent';
 import { GitHubIssue, GitHubComment } from '../core';
+import { runClaudeAgentWithCommand } from '../agents/claudeAgent';
 
 vi.mock('fs');
+vi.mock('../agents/claudeAgent', () => ({
+  runClaudeAgentWithCommand: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'Plan created',
+    totalCostUsd: 0.5,
+  }),
+}));
 
 describe('getPlanFilePath', () => {
   beforeEach(() => {
@@ -282,5 +290,64 @@ describe('formatIssueContextAsArgs', () => {
 
     expect(result).toContain('### Comments\nNo comments.');
     expect(result).not.toContain('### Actionable Comment');
+  });
+});
+
+describe('runPlanAgent', () => {
+  const mockIssue: GitHubIssue = {
+    number: 42,
+    title: 'Test issue',
+    body: 'Issue body',
+    state: 'OPEN',
+    author: { login: 'author', isBot: false },
+    assignees: [],
+    labels: [{ id: '1', name: 'bug', color: 'red' }],
+    comments: [],
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2025-01-01T00:00:00Z',
+    url: 'https://github.com/owner/repo/issues/42',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes adwId as the second array argument when provided', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'my-adw-id');
+
+    expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
+      '/bug',
+      expect.arrayContaining([expect.any(String), 'my-adw-id', expect.any(String)]),
+      'Plan',
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    expect(argsArray[1]).toBe('my-adw-id');
+  });
+
+  it('defaults the second array argument to adw-unknown when adwId is omitted', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/feature');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    expect(argsArray[1]).toBe('adw-unknown');
+  });
+
+  it('passes issue JSON as the third array argument', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'test-id');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    const issueJson = JSON.parse(argsArray[2]);
+    expect(issueJson.number).toBe(42);
+    expect(issueJson.title).toBe('Test issue');
+    expect(issueJson.author).toBe('author');
+    expect(issueJson.labels).toEqual(['bug']);
   });
 });

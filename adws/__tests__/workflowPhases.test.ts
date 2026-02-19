@@ -419,7 +419,14 @@ describe('executePlanPhase', () => {
 
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'classified', expect.anything());
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'branch_created', expect.anything());
-    expect(runPlanAgent).toHaveBeenCalled();
+    expect(runPlanAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      '/feature',
+      expect.anything(),
+      '/mock/worktree',
+      'test-adw-id',
+    );
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'plan_created', expect.anything());
     expect(result.costUsd).toBe(0.5);
   });

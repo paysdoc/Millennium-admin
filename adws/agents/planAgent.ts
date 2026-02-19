@@ -188,15 +188,27 @@ export async function runPrReviewPlanAgent(
  * @param issueType - Type of issue (determines which slash command to use)
  * @param statePath - Optional path to agent's state directory for state tracking
  * @param cwd - Optional working directory for the agent (defaults to process.cwd())
+ * @param adwId - Optional ADW workflow ID for plan file naming
  */
 export async function runPlanAgent(
   issue: GitHubIssue,
   logsDir: string,
   issueType: IssueClassSlashCommand = '/feature',
   statePath?: string,
-  cwd?: string
+  cwd?: string,
+  adwId?: string
 ): Promise<AgentResult> {
-  const args = formatIssueContextAsArgs(issue);
+  const issueContext = formatIssueContextAsArgs(issue);
+  const issueJson = JSON.stringify({
+    number: issue.number,
+    title: issue.title,
+    body: issue.body,
+    state: issue.state,
+    author: issue.author.login,
+    labels: issue.labels.map(l => l.name),
+    createdAt: issue.createdAt,
+  });
+  const args = [issueContext, adwId || 'adw-unknown', issueJson];
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
   // Use the issueType directly as the command (e.g., '/feature', '/bug', '/chore', '/pr_review')
