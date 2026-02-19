@@ -19,9 +19,9 @@
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
     "supabase:status": "supabase status",
-    "knex:migrate": "knex migrate:latest --knexfile knexfile.ts",
-    "knex:seed": "knex seed:run --knexfile knexfile.ts",
-    "knex:migrate:make": "knex migrate:make --knexfile knexfile.ts"
+    "knex:migrate": "NODE_OPTIONS='--import tsx' knex migrate:latest --knexfile knexfile.ts",
+    "knex:seed": "NODE_OPTIONS='--import tsx' knex seed:run --knexfile knexfile.ts",
+    "knex:migrate:make": "NODE_OPTIONS='--import tsx' knex migrate:make --knexfile knexfile.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.3",

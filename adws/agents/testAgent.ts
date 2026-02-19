@@ -5,10 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
-import { SLASH_COMMAND_MODEL_MAP } from '../core';
 import { runClaudeAgentWithCommand, AgentResult } from './claudeAgent';
-import { extractJsonArray } from '../core/jsonParser';
 
 /**
  * Individual test result from the /test command.
@@ -23,32 +20,16 @@ export interface TestResult {
 }
 
 /**
- * E2E test result parsed from Playwright JSON reporter output.
+ * E2E test result from the /test_e2e command.
+ * Matches the JSON output structure defined in .claude/commands/test_e2e.md
  */
 export interface E2ETestResult {
-  testName: string;
+  test_name: string;
   status: 'passed' | 'failed';
+  screenshots: string[];
   error: string | null;
-  /** The path to the spec file */
-  testPath?: string;
-}
-
-/**
- * Result from running Playwright E2E tests via subprocess.
- */
-export interface PlaywrightE2EResult {
-  /** Whether all E2E tests passed */
-  allPassed: boolean;
-  /** Individual results per spec file */
-  results: E2ETestResult[];
-  /** Failed spec results */
-  failedResults: E2ETestResult[];
-  /** Raw stdout from the Playwright process */
-  stdout: string;
-  /** Raw stderr from the Playwright process */
-  stderr: string;
-  /** Process exit code */
-  exitCode: number | null;
+  /** The path to the test file (added for resolution context) */
+  test_path?: string;
 }
 
 /**
@@ -64,11 +45,65 @@ export interface TestAgentResult extends AgentResult {
 }
 
 /**
- * Validates that an E2ETestResult has a valid testName property.
- * Returns false if testName is undefined, null, or not a string.
+ * Result from running the /test_e2e command for a single test file.
  */
-export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { testName: string } {
-  return result !== null && typeof result.testName === 'string' && result.testName.length > 0;
+export interface E2ETestAgentResult extends AgentResult {
+  /** Parsed E2E test result from the JSON output */
+  e2eResult: E2ETestResult | null;
+  /** Whether the E2E test passed */
+  passed: boolean;
+}
+
+/**
+ * Parses JSON test results from agent output.
+ * Handles cases where the output contains additional text around the JSON.
+ */
+function parseTestResults(output: string): TestResult[] {
+  try {
+    // Try direct JSON parse first
+    return JSON.parse(output);
+  } catch {
+    // Try to extract JSON array from the output
+    const jsonMatch = output.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+}
+
+/**
+ * Validates that an E2ETestResult has a valid test_name property.
+ * Returns false if test_name is undefined, null, or not a string.
+ */
+export function isValidE2ETestResult(result: E2ETestResult | null): result is E2ETestResult & { test_name: string } {
+  return result !== null && typeof result.test_name === 'string' && result.test_name.length > 0;
+}
+
+/**
+ * Parses E2E test result from agent output.
+ * Handles cases where the output contains additional text around the JSON.
+ */
+function parseE2ETestResult(output: string): E2ETestResult | null {
+  try {
+    // Try direct JSON parse first
+    return JSON.parse(output);
+  } catch {
+    // Try to extract JSON object from the output
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 /**
@@ -92,14 +127,14 @@ export async function runTestAgent(
     '',
     'Test Runner',
     outputFile,
-    SLASH_COMMAND_MODEL_MAP['/test'],
+    'sonnet',
     undefined,
     statePath,
     cwd
   );
 
   // Parse the test results from the output
-  const testResults = extractJsonArray<TestResult>(result.output);
+  const testResults = parseTestResults(result.output);
   const failedTests = testResults.filter(t => !t.passed);
   const allPassed = testResults.length > 0 && failedTests.length === 0;
 
@@ -108,6 +143,52 @@ export async function runTestAgent(
     testResults,
     allPassed,
     failedTests,
+  };
+}
+
+/**
+ * Runs the /test_e2e command for a specific E2E test file.
+ * Uses 'sonnet' model for cost efficiency.
+ *
+ * @param testFilePath - Path to the E2E test file
+ * @param logsDir - Directory to write agent logs
+ * @param statePath - Optional path to agent's state directory for state tracking
+ * @param cwd - Optional working directory for the agent (defaults to process.cwd())
+ */
+export async function runE2ETestAgent(
+  testFilePath: string,
+  logsDir: string,
+  statePath?: string,
+  cwd?: string
+): Promise<E2ETestAgentResult> {
+  const testName = path.basename(testFilePath, '.md');
+  const outputFile = path.join(logsDir, `e2e-test-agent-${testName}.jsonl`);
+
+  // Run /test_e2e command with the test file path as argument
+  const result = await runClaudeAgentWithCommand(
+    '/test_e2e',
+    testFilePath,
+    `E2E Test: ${testName}`,
+    outputFile,
+    'sonnet',
+    undefined,
+    statePath,
+    cwd
+  );
+
+  // Parse the E2E test result from the output
+  const e2eResult = parseE2ETestResult(result.output);
+  const passed = e2eResult?.status === 'passed';
+
+  // Add test_path to the result for resolution context
+  if (e2eResult) {
+    e2eResult.test_path = testFilePath;
+  }
+
+  return {
+    ...result,
+    e2eResult,
+    passed,
   };
 }
 
@@ -136,7 +217,7 @@ export async function runResolveTestAgent(
     failureJson,
     `Resolve: ${failedTest.test_name}`,
     outputFile,
-    SLASH_COMMAND_MODEL_MAP['/resolve_failed_test'],
+    'opus',
     undefined,
     statePath,
     cwd
@@ -151,29 +232,24 @@ export async function runResolveTestAgent(
  * @param logsDir - Directory to write agent logs
  * @param statePath - Optional path to agent's state directory for state tracking
  * @param cwd - Optional working directory for the agent (defaults to process.cwd())
- * @param applicationUrl - Optional application URL for the dev server (e.g. http://localhost:12345)
  */
 export async function runResolveE2ETestAgent(
   failedE2ETest: E2ETestResult,
   logsDir: string,
   statePath?: string,
-  cwd?: string,
-  applicationUrl?: string
+  cwd?: string
 ): Promise<AgentResult> {
-  // Handle undefined or invalid testName gracefully
-  const rawTestName = failedE2ETest.testName;
-  const safeTestName = typeof rawTestName === 'string' && rawTestName.length > 0
+  // Handle undefined or invalid test_name gracefully
+  const rawTestName = failedE2ETest.test_name;
+  const testName = typeof rawTestName === 'string' && rawTestName.length > 0
     ? rawTestName.replace(/\s+/g, '-').toLowerCase()
     : 'unknown-test';
-  const outputFile = path.join(logsDir, `resolve-e2e-${safeTestName}.jsonl`);
+  const outputFile = path.join(logsDir, `resolve-e2e-${testName}.jsonl`);
 
-  // Include applicationUrl in the failure JSON so the resolver knows which URL to use
-  const failurePayload = applicationUrl
-    ? { ...failedE2ETest, applicationUrl }
-    : failedE2ETest;
-  const failureJson = JSON.stringify(failurePayload, null, 2);
+  // Format the failed E2E test as JSON for the resolver
+  const failureJson = JSON.stringify(failedE2ETest, null, 2);
 
-  // Use fallback display name if testName is undefined
+  // Use fallback display name if test_name is undefined
   const displayName = rawTestName ?? 'unknown';
 
   return runClaudeAgentWithCommand(
@@ -181,7 +257,7 @@ export async function runResolveE2ETestAgent(
     failureJson,
     `Resolve E2E: ${displayName}`,
     outputFile,
-    SLASH_COMMAND_MODEL_MAP['/resolve_failed_e2e_test'],
+    'opus',
     undefined,
     statePath,
     cwd
@@ -189,14 +265,14 @@ export async function runResolveE2ETestAgent(
 }
 
 /**
- * Discovers E2E test spec files in the e2e-tests directory.
- * Returns an array of paths to Playwright spec files.
+ * Discovers E2E test files in the e2e-tests directory.
+ * Returns an array of paths to markdown test files.
  *
  * @param baseDir - Optional base directory (defaults to process.cwd())
- * @returns Array of absolute paths to E2E spec files
+ * @returns Array of absolute paths to E2E test files
  */
 export function discoverE2ETestFiles(baseDir?: string): string[] {
-  const e2eTestsDir = path.join(baseDir ?? process.cwd(), 'e2e-tests');
+  const e2eTestsDir = path.join(baseDir ?? process.cwd(), '.claude/commands/e2e');
 
   // Return empty array if directory doesn't exist
   if (!fs.existsSync(e2eTestsDir)) {
@@ -206,130 +282,10 @@ export function discoverE2ETestFiles(baseDir?: string): string[] {
   try {
     const files = fs.readdirSync(e2eTestsDir);
     return files
-      .filter(file => file.endsWith('.spec.ts'))
+      .filter(file => file.endsWith('.md'))
       .map(file => path.join(e2eTestsDir, file))
       .sort();
   } catch {
     return [];
   }
-}
-
-/**
- * Playwright JSON reporter spec result shape (subset of fields we need).
- */
-interface PlaywrightJsonSpec {
-  title: string;
-  ok: boolean;
-  tests: Array<{
-    title: string;
-    ok: boolean;
-    results: Array<{
-      status: string;
-      error?: { message?: string };
-    }>;
-  }>;
-}
-
-interface PlaywrightJsonSuite {
-  title: string;
-  file: string;
-  specs: PlaywrightJsonSpec[];
-  suites?: PlaywrightJsonSuite[];
-}
-
-interface PlaywrightJsonReport {
-  suites: PlaywrightJsonSuite[];
-}
-
-/**
- * Extracts spec results from a Playwright JSON report suite (handles nested suites).
- */
-function extractSpecResults(suite: PlaywrightJsonSuite): E2ETestResult[] {
-  const results: E2ETestResult[] = [];
-  const allSpecs = [
-    ...suite.specs,
-    ...(suite.suites ?? []).flatMap(s => s.specs),
-  ];
-
-  const allOk = allSpecs.every(spec => spec.ok);
-  const errors = allSpecs
-    .flatMap(spec => spec.tests)
-    .flatMap(test => test.results)
-    .filter(r => r.status === 'failed')
-    .map(r => r.error?.message)
-    .filter(Boolean);
-
-  results.push({
-    testName: suite.title || suite.file,
-    status: allOk ? 'passed' : 'failed',
-    error: errors.length > 0 ? errors.join('\n') : null,
-    testPath: suite.file,
-  });
-
-  return results;
-}
-
-/**
- * Runs Playwright E2E tests as a subprocess and parses the JSON results.
- *
- * @param cwd - Optional working directory (defaults to process.cwd())
- * @returns Structured results with pass/fail status per spec file
- */
-export function runPlaywrightE2ETests(cwd?: string): Promise<PlaywrightE2EResult> {
-  const workDir = cwd ?? process.cwd();
-  const resultsFile = path.join(workDir, 'e2e-results.json');
-
-  return new Promise((resolve) => {
-    const proc = spawn('npx', ['playwright', 'test'], {
-      cwd: workDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-
-    proc.on('close', (exitCode) => {
-      // Parse JSON results file
-      const e2eResults: E2ETestResult[] = [];
-
-      try {
-        if (fs.existsSync(resultsFile)) {
-          const raw = fs.readFileSync(resultsFile, 'utf-8');
-          const report: PlaywrightJsonReport = JSON.parse(raw);
-
-          for (const suite of report.suites) {
-            e2eResults.push(...extractSpecResults(suite));
-          }
-        }
-      } catch {
-        // If JSON parsing fails, treat all tests as failed
-        e2eResults.push({
-          testName: 'Playwright E2E Tests',
-          status: 'failed',
-          error: `Failed to parse e2e-results.json. stdout: ${stdout.slice(0, 500)}`,
-        });
-      }
-
-      const failedResults = e2eResults.filter(r => r.status === 'failed');
-      const allPassed = exitCode === 0 && failedResults.length === 0;
-
-      resolve({
-        allPassed,
-        results: e2eResults,
-        failedResults,
-        stdout,
-        stderr,
-        exitCode,
-      });
-    });
-  });
 }

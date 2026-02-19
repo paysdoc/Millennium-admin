@@ -3,19 +3,16 @@
  * Used by both adwTest.tsx and adwPrReview.tsx workflows.
  */
 
-import * as path from 'path';
-import { log, AgentStateManager, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap, persistTokenCounts } from '../core';
-import { retryWithResolution, initAgentState, trackCost, type AgentRunResult } from '../core/retryOrchestrator';
+import { log, AgentStateManager, AgentIdentifier, type ModelUsageMap, mergeModelUsageMaps, emptyModelUsageMap } from '../core';
 import {
   runTestAgent,
+  runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
   discoverE2ETestFiles,
-  runPlaywrightE2ETests,
   isValidE2ETestResult,
   TestResult,
   E2ETestResult,
-  type TestAgentResult,
 } from './testAgent';
 
 export interface TestRetryResult {
@@ -33,93 +30,105 @@ export interface TestRetryOptions {
   onTestFailed?: (attempt: number, maxAttempts: number) => void;
   /** Optional working directory for agent operations (defaults to process.cwd()) */
   cwd?: string;
-  /** Optional application URL for the dev server (e.g. http://localhost:12345) */
-  applicationUrl?: string;
+}
+
+function getAdwId(statePath: string): string {
+  return AgentStateManager.readState(statePath)?.adwId || '';
+}
+
+function initState(statePath: string, agentName: AgentIdentifier): string {
+  return AgentStateManager.initializeState(getAdwId(statePath), agentName, statePath);
 }
 
 export async function runUnitTestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
   const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd } = opts;
+  let retryCount = 0, costUsd = 0, lastFailedTests: TestResult[] = [];
+  let modelUsage = emptyModelUsageMap();
 
-  const result = await retryWithResolution<TestAgentResult, TestResult>({
-    maxRetries,
-    statePath,
-    label: 'unit tests',
-    run: () => runTestAgent(logsDir, initAgentState(statePath, 'test-agent'), cwd),
-    isPassed: (r) => r.allPassed,
-    extractFailures: (r) => r.failedTests,
-    onRetryFailed: onTestFailed,
-    resolveFailures: async (failures) => {
-      let costUsd = 0;
-      let modelUsage = emptyModelUsageMap();
+  while (retryCount < maxRetries) {
+    log(`Running unit tests (attempt ${retryCount + 1}/${maxRetries})...`, 'info');
+    AgentStateManager.appendLog(statePath, `Unit test attempt ${retryCount + 1}/${maxRetries}`);
 
-      for (const failedTest of failures) {
-        log(`Resolving: ${failedTest.test_name}`, 'info');
-        AgentStateManager.appendLog(statePath, `Resolving failed test: ${failedTest.test_name}`);
-        const resolveResult = await runResolveTestAgent(failedTest, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd);
-        costUsd += resolveResult.totalCostUsd || 0;
-        if (resolveResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, resolveResult.modelUsage);
-        persistTokenCounts(statePath, costUsd, modelUsage);
-        const msg = resolveResult.success ? 'Resolution attempted for' : 'Failed to resolve';
-        log(`${msg}: ${failedTest.test_name}`, resolveResult.success ? 'success' : 'error');
-        AgentStateManager.appendLog(statePath, `${msg}: ${failedTest.test_name}`);
-      }
+    const testResult = await runTestAgent(logsDir, initState(statePath, 'test-agent'), cwd);
+    costUsd += testResult.totalCostUsd || 0;
+    if (testResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, testResult.modelUsage);
 
-      return { success: true, totalCostUsd: costUsd, modelUsage };
-    },
-  });
+    if (!testResult.success) {
+      log('Test agent execution failed', 'error');
+      AgentStateManager.appendLog(statePath, 'Test agent execution failed');
+      retryCount++;
+      continue;
+    }
 
-  return {
-    passed: result.passed,
-    costUsd: result.costUsd,
-    totalRetries: result.totalRetries,
-    failedTests: result.failures.map(t => t.test_name),
-    modelUsage: result.modelUsage,
-  };
+    if (testResult.allPassed) {
+      log(`All ${testResult.testResults.length} tests passed!`, 'success');
+      AgentStateManager.appendLog(statePath, `All ${testResult.testResults.length} tests passed`);
+      return { passed: true, costUsd, totalRetries: retryCount, failedTests: [], modelUsage };
+    }
+
+    lastFailedTests = testResult.failedTests;
+    log(`${lastFailedTests.length} test(s) failed, attempting resolution...`, 'info');
+    AgentStateManager.appendLog(statePath, `${lastFailedTests.length} test(s) failed`);
+    onTestFailed?.(retryCount + 1, maxRetries);
+
+    for (const failedTest of lastFailedTests) {
+      log(`Resolving: ${failedTest.test_name}`, 'info');
+      AgentStateManager.appendLog(statePath, `Resolving failed test: ${failedTest.test_name}`);
+      const result = await runResolveTestAgent(failedTest, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
+      costUsd += result.totalCostUsd || 0;
+      if (result.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, result.modelUsage);
+      const msg = result.success ? 'Resolution attempted for' : 'Failed to resolve';
+      log(`${msg}: ${failedTest.test_name}`, result.success ? 'success' : 'error');
+      AgentStateManager.appendLog(statePath, `${msg}: ${failedTest.test_name}`);
+    }
+    retryCount++;
+  }
+
+  log(`Unit tests still failing after ${maxRetries} attempts`, 'error');
+  AgentStateManager.appendLog(statePath, `Unit tests still failing after ${maxRetries} attempts`);
+  return { passed: false, costUsd, totalRetries: retryCount, failedTests: lastFailedTests.map(t => t.test_name), modelUsage };
 }
 
 export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<TestRetryResult> {
-  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd, applicationUrl } = opts;
+  const { logsDir, orchestratorStatePath: statePath, maxRetries, onTestFailed, cwd } = opts;
   const e2eTestFiles = discoverE2ETestFiles(cwd);
-  const costState = { costUsd: 0, modelUsage: emptyModelUsageMap() };
-  let totalRetries = 0;
+  let costUsd = 0, totalRetries = 0;
+  let modelUsage = emptyModelUsageMap();
 
   if (e2eTestFiles.length === 0) {
     log('No E2E test files found in e2e-tests/ directory', 'info');
     AgentStateManager.appendLog(statePath, 'No E2E test files found - skipping E2E tests');
-    return { passed: true, costUsd: 0, totalRetries, failedTests: [], modelUsage: costState.modelUsage };
+    return { passed: true, costUsd, totalRetries, failedTests: [], modelUsage };
   }
 
   log(`Discovered ${e2eTestFiles.length} E2E test file(s)`, 'info');
   AgentStateManager.appendLog(statePath, `Discovered ${e2eTestFiles.length} E2E test file(s)`);
 
-  // Run all E2E tests via Playwright subprocess
-  log('Running Playwright E2E tests...', 'info');
-  AgentStateManager.appendLog(statePath, 'Running Playwright E2E tests');
-  const playwrightResult = await runPlaywrightE2ETests(cwd);
-
-  if (playwrightResult.allPassed) {
-    log('All E2E tests passed!', 'success');
-    AgentStateManager.appendLog(statePath, 'All E2E tests passed');
-    return { passed: true, costUsd: 0, totalRetries, failedTests: [], modelUsage: costState.modelUsage };
-  }
-
-  // Track failed tests for retry
   const failedE2ETests: Map<string, { result: E2ETestResult; retryCount: number }> = new Map();
-  for (const failedResult of playwrightResult.failedResults) {
-    const testFile = failedResult.testPath ?? failedResult.testName;
-    failedE2ETests.set(testFile, { result: failedResult, retryCount: 0 });
-    log(`E2E test failed: ${failedResult.testName}`, 'error');
-    AgentStateManager.appendLog(statePath, `E2E test failed: ${failedResult.testName}`);
+
+  for (const testFile of e2eTestFiles) {
+    log(`Running E2E test: ${testFile}`, 'info');
+    AgentStateManager.appendLog(statePath, `Running E2E test: ${testFile}`);
+    const e2eResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
+    costUsd += e2eResult.totalCostUsd || 0;
+    if (e2eResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, e2eResult.modelUsage);
+
+    if (!e2eResult.passed && e2eResult.e2eResult) {
+      failedE2ETests.set(testFile, { result: e2eResult.e2eResult, retryCount: 0 });
+      log(`E2E test failed: ${testFile}`, 'error');
+      AgentStateManager.appendLog(statePath, `E2E test failed: ${testFile}`);
+    } else if (e2eResult.passed) {
+      log(`E2E test passed: ${testFile}`, 'success');
+      AgentStateManager.appendLog(statePath, `E2E test passed: ${testFile}`);
+    }
   }
 
-  // Retry loop: resolve failures with AI, then re-run Playwright
   while (failedE2ETests.size > 0) {
     const testsToRetry = Array.from(failedE2ETests.entries());
     if (testsToRetry.every(([, { retryCount }]) => retryCount >= maxRetries)) break;
 
     onTestFailed?.(Math.min(...testsToRetry.map(([, { retryCount }]) => retryCount)) + 1, maxRetries);
 
-    // Resolve each failing spec with AI
     for (const [testFile, { result, retryCount }] of testsToRetry) {
       if (retryCount >= maxRetries) {
         log(`E2E test ${testFile} exceeded max retries`, 'error');
@@ -127,60 +136,43 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
         continue;
       }
 
+      // Skip resolution if the result is missing a valid test_name
       if (!isValidE2ETestResult(result)) {
-        const derivedName = path.basename(testFile, '.spec.ts');
-        log(`Warning: testName missing, derived from file path: ${derivedName}`, 'info');
-        AgentStateManager.appendLog(statePath, `Warning: testName missing, derived from file path: ${derivedName}`);
-        (result as E2ETestResult).testName = derivedName;
+        log(`Skipping E2E test resolution: missing or invalid test_name`, 'error');
+        AgentStateManager.appendLog(statePath, `Skipping E2E test resolution: missing or invalid test_name`);
+        failedE2ETests.set(testFile, { result, retryCount: retryCount + 1 });
+        continue;
       }
 
-      log(`Resolving E2E test: ${result.testName} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
-      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.testName}`);
+      log(`Resolving E2E test: ${result.test_name ?? 'unknown'} (attempt ${retryCount + 1}/${maxRetries})`, 'info');
+      AgentStateManager.appendLog(statePath, `Resolving E2E test: ${result.test_name ?? 'unknown'}`);
 
-      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initAgentState(statePath, 'test-resolver-agent'), cwd, applicationUrl);
-      trackCost(resolveResult as AgentRunResult, costState, statePath);
+      const resolveResult = await runResolveE2ETestAgent(result, logsDir, initState(statePath, 'test-resolver-agent'), cwd);
+      costUsd += resolveResult.totalCostUsd || 0;
+      if (resolveResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, resolveResult.modelUsage);
       totalRetries++;
-    }
 
-    // Re-run all Playwright tests after resolution
-    log('Re-running Playwright E2E tests after resolution...', 'info');
-    AgentStateManager.appendLog(statePath, 'Re-running Playwright E2E tests after resolution');
-    const retryPlaywrightResult = await runPlaywrightE2ETests(cwd);
+      log(`Re-running E2E test: ${testFile}`, 'info');
+      const retryResult = await runE2ETestAgent(testFile, logsDir, initState(statePath, 'test-agent'), cwd);
+      costUsd += retryResult.totalCostUsd || 0;
+      if (retryResult.modelUsage) modelUsage = mergeModelUsageMaps(modelUsage, retryResult.modelUsage);
 
-    if (retryPlaywrightResult.allPassed) {
-      failedE2ETests.clear();
-      log('All E2E tests now passing!', 'success');
-      AgentStateManager.appendLog(statePath, 'All E2E tests now passing after resolution');
-      break;
-    }
-
-    // Update failed tests map: remove now-passing, update still-failing
-    const stillFailingFiles = new Set(
-      retryPlaywrightResult.failedResults.map(r => r.testPath ?? r.testName)
-    );
-
-    for (const [testFile] of Array.from(failedE2ETests.entries())) {
-      if (!stillFailingFiles.has(testFile)) {
+      if (retryResult.passed) {
         failedE2ETests.delete(testFile);
         log(`E2E test now passing: ${testFile}`, 'success');
         AgentStateManager.appendLog(statePath, `E2E test now passing: ${testFile}`);
+      } else if (retryResult.e2eResult) {
+        failedE2ETests.set(testFile, { result: retryResult.e2eResult, retryCount: retryCount + 1 });
+        log(`E2E test still failing: ${testFile}`, 'error');
+        AgentStateManager.appendLog(statePath, `E2E test still failing: ${testFile}`);
       }
-    }
-
-    for (const failedResult of retryPlaywrightResult.failedResults) {
-      const testFile = failedResult.testPath ?? failedResult.testName;
-      const existing = failedE2ETests.get(testFile);
-      const newRetryCount = existing ? existing.retryCount + 1 : 0;
-      failedE2ETests.set(testFile, { result: failedResult, retryCount: newRetryCount });
-      log(`E2E test still failing: ${testFile}`, 'error');
-      AgentStateManager.appendLog(statePath, `E2E test still failing: ${testFile}`);
     }
   }
 
   const allPassed = failedE2ETests.size === 0;
-  const failedTestNames = Array.from(failedE2ETests.values()).map(({ result }) => result.testName);
+  const failedTestNames = Array.from(failedE2ETests.values()).map(({ result }) => result.test_name);
   const msg = allPassed ? 'All E2E tests passed' : `${failedE2ETests.size} E2E test(s) still failing`;
   log(msg + (allPassed ? '!' : ''), allPassed ? 'success' : 'error');
   AgentStateManager.appendLog(statePath, msg);
-  return { passed: allPassed, costUsd: costState.costUsd, totalRetries, failedTests: failedTestNames, modelUsage: costState.modelUsage };
+  return { passed: allPassed, costUsd, totalRetries, failedTests: failedTestNames, modelUsage };
 }

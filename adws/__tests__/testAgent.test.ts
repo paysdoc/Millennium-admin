@@ -8,21 +8,17 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock the config module
-vi.mock('../core/config', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../core/config')>();
-  return {
-    ...actual,
-    CLAUDE_CODE_PATH: '/usr/local/bin/claude',
-    AGENTS_STATE_DIR: '/tmp/test-agents',
-  };
-});
+vi.mock('../core/config', () => ({
+  CLAUDE_CODE_PATH: '/usr/local/bin/claude',
+  AGENTS_STATE_DIR: '/tmp/test-agents',
+}));
 
 // Import after mocks are set up
 import { spawn } from 'child_process';
 import {
   discoverE2ETestFiles,
   runTestAgent,
-  runPlaywrightE2ETests,
+  runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
   isValidE2ETestResult,
@@ -35,9 +31,9 @@ const uniqueTestDir = `/tmp/test-e2e-${Buffer.from(__dirname).toString('base64')
 
 describe('testAgent', () => {
   const testLogsDir = `${uniqueTestDir}/test-logs`;
-  // Use a unique temp directory for e2e tests instead of the real .claude/commands/e2e-examples
+  // Use a unique temp directory for e2e tests instead of the real .claude/commands/e2e
   const testBaseDir = `${uniqueTestDir}/mock-project`;
-  const e2eTestsDir = path.join(testBaseDir, 'e2e-tests');
+  const e2eTestsDir = path.join(testBaseDir, '.claude/commands/e2e');
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,31 +63,30 @@ describe('testAgent', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns only spec.ts files from e2e-tests directory', () => {
+    it('returns only markdown files from e2e-tests directory', () => {
       fs.mkdirSync(e2eTestsDir, { recursive: true });
-      fs.writeFileSync(path.join(e2eTestsDir, 'login.spec.ts'), 'test');
-      fs.writeFileSync(path.join(e2eTestsDir, 'signup.spec.ts'), 'test');
+      fs.writeFileSync(path.join(e2eTestsDir, 'test_login.md'), '# Login Test');
+      fs.writeFileSync(path.join(e2eTestsDir, 'test_signup.md'), '# Signup Test');
       fs.writeFileSync(path.join(e2eTestsDir, 'README.txt'), 'Not a test file');
-      fs.writeFileSync(path.join(e2eTestsDir, 'test_old.md'), '# Old test');
 
       const result = discoverE2ETestFiles(testBaseDir);
 
       expect(result).toHaveLength(2);
-      expect(result).toContain(path.join(e2eTestsDir, 'login.spec.ts'));
-      expect(result).toContain(path.join(e2eTestsDir, 'signup.spec.ts'));
+      expect(result).toContain(path.join(e2eTestsDir, 'test_login.md'));
+      expect(result).toContain(path.join(e2eTestsDir, 'test_signup.md'));
     });
 
     it('returns files in sorted order', () => {
       fs.mkdirSync(e2eTestsDir, { recursive: true });
-      fs.writeFileSync(path.join(e2eTestsDir, 'z-test.spec.ts'), 'test');
-      fs.writeFileSync(path.join(e2eTestsDir, 'a-test.spec.ts'), 'test');
-      fs.writeFileSync(path.join(e2eTestsDir, 'm-test.spec.ts'), 'test');
+      fs.writeFileSync(path.join(e2eTestsDir, 'z_test.md'), '# Z Test');
+      fs.writeFileSync(path.join(e2eTestsDir, 'a_test.md'), '# A Test');
+      fs.writeFileSync(path.join(e2eTestsDir, 'm_test.md'), '# M Test');
 
       const result = discoverE2ETestFiles(testBaseDir);
 
-      expect(result[0]).toContain('a-test.spec.ts');
-      expect(result[1]).toContain('m-test.spec.ts');
-      expect(result[2]).toContain('z-test.spec.ts');
+      expect(result[0]).toContain('a_test.md');
+      expect(result[1]).toContain('m_test.md');
+      expect(result[2]).toContain('z_test.md');
     });
   });
 
@@ -144,110 +139,59 @@ describe('testAgent', () => {
     });
   });
 
-  describe('runPlaywrightE2ETests', () => {
-    it('spawns npx playwright test subprocess', async () => {
-      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 0, stdout: 'Running tests...' });
+  describe('runE2ETestAgent', () => {
+    it('uses sonnet model for E2E test execution', async () => {
+      const e2eResult: E2ETestResult = {
+        test_name: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
+      };
+      const mockSpawn = createMockSpawn({ result: JSON.stringify(e2eResult) });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
-      // Create empty results file
-      fs.mkdirSync(testBaseDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(testBaseDir, 'e2e-results.json'),
-        JSON.stringify({ suites: [] })
-      );
-
-      const result = await runPlaywrightE2ETests(testBaseDir);
+      await runE2ETestAgent('/path/to/test_login.md', testLogsDir);
 
       expect(spawn).toHaveBeenCalledWith(
-        'npx',
-        ['playwright', 'test'],
-        expect.objectContaining({ cwd: testBaseDir })
+        '/usr/local/bin/claude',
+        expect.arrayContaining(['--model', 'sonnet']),
+        expect.any(Object)
       );
-      expect(result.exitCode).toBe(0);
     });
 
-    it('parses Playwright JSON output for passing tests', async () => {
-      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 0, stdout: 'All passed' });
-      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
-
-      const playwrightReport = {
-        suites: [
-          {
-            title: 'Characters Overview',
-            file: 'characters-overview.spec.ts',
-            specs: [
-              { title: 'displays header', ok: true, tests: [{ title: 'displays header', ok: true, results: [{ status: 'passed' }] }] },
-            ],
-            suites: [],
-          },
-        ],
+    it('parses E2E test result from JSON output', async () => {
+      const e2eResult: E2ETestResult = {
+        test_name: 'Login Test',
+        status: 'failed',
+        screenshots: ['/path/to/screenshot.png'],
+        error: 'Element not found',
       };
-
-      fs.mkdirSync(testBaseDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(testBaseDir, 'e2e-results.json'),
-        JSON.stringify(playwrightReport)
-      );
-
-      const result = await runPlaywrightE2ETests(testBaseDir);
-
-      expect(result.allPassed).toBe(true);
-      expect(result.results).toHaveLength(1);
-      expect(result.results[0].status).toBe('passed');
-      expect(result.failedResults).toHaveLength(0);
-    });
-
-    it('parses Playwright JSON output for failing tests', async () => {
-      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 1, stdout: 'Failed' });
+      const mockSpawn = createMockSpawn({ result: JSON.stringify(e2eResult) });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
-      const playwrightReport = {
-        suites: [
-          {
-            title: 'Characters Overview',
-            file: 'characters-overview.spec.ts',
-            specs: [
-              {
-                title: 'displays header',
-                ok: false,
-                tests: [{
-                  title: 'displays header',
-                  ok: false,
-                  results: [{ status: 'failed', error: { message: 'Timeout waiting for element' } }],
-                }],
-              },
-            ],
-            suites: [],
-          },
-        ],
+      const result = await runE2ETestAgent('/path/to/test_login.md', testLogsDir);
+
+      expect(result.e2eResult).not.toBeNull();
+      expect(result.e2eResult?.test_name).toBe('Login Test');
+      expect(result.e2eResult?.status).toBe('failed');
+      expect(result.passed).toBe(false);
+    });
+
+    it('adds test_path to the result', async () => {
+      const e2eResult: E2ETestResult = {
+        test_name: 'Login Test',
+        status: 'passed',
+        screenshots: [],
+        error: null,
       };
-
-      fs.mkdirSync(testBaseDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(testBaseDir, 'e2e-results.json'),
-        JSON.stringify(playwrightReport)
-      );
-
-      const result = await runPlaywrightE2ETests(testBaseDir);
-
-      expect(result.allPassed).toBe(false);
-      expect(result.failedResults).toHaveLength(1);
-      expect(result.failedResults[0].testName).toBe('Characters Overview');
-      expect(result.failedResults[0].error).toContain('Timeout waiting for element');
-    });
-
-    it('handles missing results file gracefully', async () => {
-      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 1, stdout: 'Error' });
+      const mockSpawn = createMockSpawn({ result: JSON.stringify(e2eResult) });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
-      fs.mkdirSync(testBaseDir, { recursive: true });
+      const testPath = '/path/to/test_login.md';
+      const result = await runE2ETestAgent(testPath, testLogsDir);
 
-      const result = await runPlaywrightE2ETests(testBaseDir);
-
-      expect(result.allPassed).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.e2eResult?.test_path).toBe(testPath);
     });
-
   });
 
   describe('runResolveTestAgent', () => {
@@ -302,10 +246,11 @@ describe('testAgent', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        testName: 'Login Test',
+        test_name: 'Login Test',
         status: 'failed',
+        screenshots: [],
         error: 'Element not found',
-        testPath: '/path/to/login.spec.ts',
+        test_path: '/path/to/test_login.md',
       };
 
       await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
@@ -322,10 +267,11 @@ describe('testAgent', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        testName: 'Login Test',
+        test_name: 'Login Test',
         status: 'failed',
+        screenshots: ['/path/to/screenshot.png'],
         error: 'Element not found',
-        testPath: '/path/to/login.spec.ts',
+        test_path: '/path/to/test_login.md',
       };
 
       await runResolveE2ETestAgent(failedE2ETest, testLogsDir);
@@ -339,16 +285,17 @@ describe('testAgent', () => {
       expect(prompt).toContain('Login Test');
     });
 
-    it('handles undefined testName without throwing', async () => {
+    it('handles undefined test_name without throwing', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
-      // Create a test result with undefined testName (simulating API error parsing)
+      // Create a test result with undefined test_name (simulating API error parsing)
       const failedE2ETest = {
-        testName: undefined,
+        test_name: undefined,
         status: 'failed',
+        screenshots: [],
         error: 'API returned error instead of JSON',
-        testPath: '/path/to/login.spec.ts',
+        test_path: '/path/to/test_login.md',
       } as unknown as E2ETestResult;
 
       // Should not throw TypeError
@@ -358,13 +305,14 @@ describe('testAgent', () => {
       expect(result.success).toBe(true);
     });
 
-    it('uses fallback filename when testName is undefined', async () => {
+    it('uses fallback filename when test_name is undefined', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest = {
-        testName: undefined,
+        test_name: undefined,
         status: 'failed',
+        screenshots: [],
         error: 'API returned error',
       } as unknown as E2ETestResult;
 
@@ -374,13 +322,14 @@ describe('testAgent', () => {
       expect(spawn).toHaveBeenCalled();
     });
 
-    it('still passes original undefined testName in JSON payload', async () => {
+    it('still passes original undefined test_name in JSON payload', async () => {
       const mockSpawn = createMockSpawn({ result: 'Attempted to fix the E2E issue' });
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest = {
-        testName: undefined,
+        test_name: undefined,
         status: 'failed',
+        screenshots: [],
         error: 'API returned error',
       } as unknown as E2ETestResult;
 
@@ -395,33 +344,14 @@ describe('testAgent', () => {
       // The undefined should be serialized in JSON (undefined becomes omitted or null)
       expect(prompt).toContain('API returned error');
     });
-
-    it('includes applicationUrl in failure JSON when provided', async () => {
-      const mockSpawn = createMockSpawn({ result: 'Fixed the E2E issue' });
-      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
-
-      const failedE2ETest: E2ETestResult = {
-        testName: 'Login Test',
-        status: 'failed',
-        error: 'Element not found',
-        testPath: '/path/to/login.spec.ts',
-      };
-
-      await runResolveE2ETestAgent(failedE2ETest, testLogsDir, undefined, undefined, 'http://localhost:45678');
-
-      const calls = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      const lastCall = calls[calls.length - 1];
-      const args = lastCall[1] as string[];
-      const prompt = args[args.length - 1];
-      expect(prompt).toContain('http://localhost:45678');
-    });
   });
 
   describe('isValidE2ETestResult', () => {
-    it('returns true for valid E2ETestResult with testName', () => {
+    it('returns true for valid E2ETestResult with test_name', () => {
       const result: E2ETestResult = {
-        testName: 'Login Test',
+        test_name: 'Login Test',
         status: 'passed',
+        screenshots: [],
         error: null,
       };
       expect(isValidE2ETestResult(result)).toBe(true);
@@ -431,38 +361,32 @@ describe('testAgent', () => {
       expect(isValidE2ETestResult(null)).toBe(false);
     });
 
-    it('returns false when testName is undefined', () => {
+    it('returns false when test_name is undefined', () => {
       const result = {
-        testName: undefined,
+        test_name: undefined,
         status: 'failed',
+        screenshots: [],
         error: 'Some error',
       } as unknown as E2ETestResult;
       expect(isValidE2ETestResult(result)).toBe(false);
     });
 
-    it('returns false when testName is empty string', () => {
+    it('returns false when test_name is empty string', () => {
       const result: E2ETestResult = {
-        testName: '',
+        test_name: '',
         status: 'failed',
+        screenshots: [],
         error: 'Some error',
       };
       expect(isValidE2ETestResult(result)).toBe(false);
     });
 
-    it('returns false when testName is not a string', () => {
+    it('returns false when test_name is not a string', () => {
       const result = {
-        testName: 123,
+        test_name: 123,
         status: 'failed',
+        screenshots: [],
         error: 'Some error',
-      } as unknown as E2ETestResult;
-      expect(isValidE2ETestResult(result)).toBe(false);
-    });
-
-    it('returns false when only snake_case test_name is present (no testName)', () => {
-      const result = {
-        test_name: 'Login Test',
-        status: 'passed',
-        error: null,
       } as unknown as E2ETestResult;
       expect(isValidE2ETestResult(result)).toBe(false);
     });
@@ -509,44 +433,6 @@ function createMockSpawn(options: { result: string; exitCode?: number }) {
         write: vi.fn(),
         end: vi.fn(),
       },
-      on: vi.fn((event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(exitCode), 20);
-        }
-      }),
-    };
-
-    return mockProcess;
-  };
-}
-
-/**
- * Creates a mock implementation of child_process.spawn that simulates
- * the Playwright test runner subprocess.
- */
-function createPlaywrightMockSpawn(options: { exitCode?: number; stdout?: string; stderr?: string }) {
-  return () => {
-    const { exitCode = 0, stdout = '', stderr = '' } = options;
-
-    const mockStdout = {
-      on: vi.fn((event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data' && stdout) {
-          setTimeout(() => callback(Buffer.from(stdout)), 10);
-        }
-      }),
-    };
-
-    const mockStderr = {
-      on: vi.fn((event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data' && stderr) {
-          setTimeout(() => callback(Buffer.from(stderr)), 10);
-        }
-      }),
-    };
-
-    const mockProcess = {
-      stdout: mockStdout,
-      stderr: mockStderr,
       on: vi.fn((event: string, callback: (code: number) => void) => {
         if (event === 'close') {
           setTimeout(() => callback(exitCode), 20);
