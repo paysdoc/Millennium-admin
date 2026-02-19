@@ -22,6 +22,7 @@ vi.mock('../core/config', () => ({
 
 vi.mock('../github/gitOperations', () => ({
   getDefaultBranch: vi.fn(() => 'main'),
+  deleteLocalBranch: vi.fn(() => true),
 }));
 
 import { execSync } from 'child_process';
@@ -32,6 +33,7 @@ import {
   listWorktrees,
   createWorktree,
   createWorktreeForNewBranch,
+  killProcessesInDirectory,
   removeWorktree,
   removeWorktreesForIssue,
   getWorktreeForBranch,
@@ -43,6 +45,7 @@ import {
   copyEnvToWorktree,
   findWorktreeForIssue,
 } from '../github/worktreeOperations';
+import { deleteLocalBranch } from '../github/gitOperations';
 
 describe('getWorktreePath', () => {
   const worktreeListOutput = `worktree /mock/project
@@ -1554,5 +1557,214 @@ branch refs/heads/feature/issue-42-add-login-v2
       worktreePath: '/mock/project/.worktrees/feature-issue-42-add-login',
       branchName: 'feature/issue-42-add-login',
     });
+  });
+});
+
+describe('killProcessesInDirectory', () => {
+  const originalKill = process.kill;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.kill = vi.fn() as typeof process.kill;
+  });
+
+  afterEach(() => {
+    process.kill = originalKill;
+  });
+
+  it('handles no running processes (lsof returns empty)', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('lsof')) {
+        return '\n';
+      }
+      return '';
+    });
+
+    killProcessesInDirectory('/mock/worktree');
+
+    expect(process.kill).not.toHaveBeenCalled();
+  });
+
+  it('successfully kills processes found by lsof', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('lsof')) {
+        return '12345\n67890\n';
+      }
+      return '';
+    });
+    // After SIGTERM, processes exit (kill with 0 throws)
+    vi.mocked(process.kill).mockImplementation((pid, signal) => {
+      if (signal === 0) {
+        throw new Error('ESRCH');
+      }
+      return true;
+    });
+
+    killProcessesInDirectory('/mock/worktree');
+
+    expect(process.kill).toHaveBeenCalledWith(12345, 'SIGTERM');
+    expect(process.kill).toHaveBeenCalledWith(67890, 'SIGTERM');
+  });
+
+  it('sends SIGKILL to processes that survive SIGTERM', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('lsof')) {
+        return '12345\n';
+      }
+      return '';
+    });
+    // Process survives SIGTERM (kill with 0 succeeds = still alive)
+    vi.mocked(process.kill).mockImplementation(() => true);
+
+    killProcessesInDirectory('/mock/worktree');
+
+    expect(process.kill).toHaveBeenCalledWith(12345, 'SIGTERM');
+    expect(process.kill).toHaveBeenCalledWith(12345, 0);
+    expect(process.kill).toHaveBeenCalledWith(12345, 'SIGKILL');
+  });
+
+  it('handles lsof command not being available', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('lsof: command not found');
+    });
+
+    // Should not throw
+    killProcessesInDirectory('/mock/worktree');
+
+    expect(process.kill).not.toHaveBeenCalled();
+  });
+
+  it('handles processes that have already exited during SIGTERM', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('lsof')) {
+        return '12345\n';
+      }
+      return '';
+    });
+    // SIGTERM throws (process already gone), kill(0) also throws
+    vi.mocked(process.kill).mockImplementation(() => {
+      throw new Error('ESRCH');
+    });
+
+    // Should not throw
+    killProcessesInDirectory('/mock/worktree');
+  });
+
+  it('filters out current process PID', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('lsof')) {
+        return `${process.pid}\n12345\n`;
+      }
+      return '';
+    });
+    vi.mocked(process.kill).mockImplementation((pid, signal) => {
+      if (signal === 0) {
+        throw new Error('ESRCH');
+      }
+      return true;
+    });
+
+    killProcessesInDirectory('/mock/worktree');
+
+    // Should NOT have killed the current process
+    expect(process.kill).not.toHaveBeenCalledWith(process.pid, 'SIGTERM');
+    // Should have killed the other process
+    expect(process.kill).toHaveBeenCalledWith(12345, 'SIGTERM');
+  });
+});
+
+describe('removeWorktree with process killing and branch deletion', () => {
+  const mainRepoWorktreeList = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls deleteLocalBranch after successful removal', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('lsof')) {
+        throw new Error('no processes');
+      }
+      return '';
+    });
+
+    const result = removeWorktree('feature/issue-51');
+
+    expect(result).toBe(true);
+    expect(deleteLocalBranch).toHaveBeenCalledWith('feature/issue-51');
+  });
+
+  it('calls deleteLocalBranch after fallback fs.rmSync removal', () => {
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return mainRepoWorktreeList;
+      }
+      if (cmdStr.includes('git worktree remove')) {
+        throw new Error('failed');
+      }
+      if (cmdStr.includes('lsof')) {
+        throw new Error('no processes');
+      }
+      return '';
+    });
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.rmSync).mockReturnValue(undefined);
+
+    const result = removeWorktree('orphaned-branch');
+
+    expect(result).toBe(true);
+    expect(deleteLocalBranch).toHaveBeenCalledWith('orphaned-branch');
+  });
+});
+
+describe('removeWorktreesForIssue with process killing and branch deletion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('deletes local branches for removed worktrees', () => {
+    const worktreeListOutput = `worktree /mock/project
+HEAD abc123
+branch refs/heads/main
+
+worktree /mock/project/.worktrees/feature-issue-42-add-login
+HEAD def456
+branch refs/heads/feature/issue-42-add-login
+
+worktree /mock/project/.worktrees/feature-issue-99-other
+HEAD jkl012
+branch refs/heads/feature/issue-99-other
+
+`;
+    vi.mocked(execSync).mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes('git worktree list')) {
+        return worktreeListOutput;
+      }
+      if (cmdStr.includes('lsof')) {
+        throw new Error('no processes');
+      }
+      return '';
+    });
+
+    const result = removeWorktreesForIssue(42);
+
+    expect(result).toBe(1);
+    expect(deleteLocalBranch).toHaveBeenCalledWith('feature/issue-42-add-login');
+    expect(deleteLocalBranch).not.toHaveBeenCalledWith('feature/issue-99-other');
   });
 });

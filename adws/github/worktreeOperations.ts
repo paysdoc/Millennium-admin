@@ -326,6 +326,7 @@ export {
 
 // Re-export cleanup functions
 export {
+  killProcessesInDirectory,
   removeWorktree,
   removeWorktreesForIssue,
 } from './worktreeCleanup';

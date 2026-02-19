@@ -9,6 +9,7 @@
 import { log, PullRequestWebhookPayload } from '../core';
 import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
 import { removeWorktree } from '../github/worktreeOperations';
+import { deleteRemoteBranch } from '../github/gitOperations';
 
 /**
  * Extracts issue number from PR body using the "Implements #N" pattern.
@@ -56,6 +57,12 @@ export async function handlePullRequestEvent(payload: PullRequestWebhookPayload)
       }
     } catch (error) {
       log(`Failed to clean up worktree for branch ${headBranch}: ${error}`, 'error');
+    }
+
+    try {
+      deleteRemoteBranch(headBranch);
+    } catch (error) {
+      log(`Failed to delete remote branch ${headBranch}: ${error}`, 'error');
     }
   }
 

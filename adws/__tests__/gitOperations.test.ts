@@ -9,7 +9,13 @@ vi.mock('../core/utils', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { getDefaultBranch, checkoutDefaultBranch } from '../github/gitOperations';
+import { log } from '../core/utils';
+import {
+  getDefaultBranch,
+  checkoutDefaultBranch,
+  deleteLocalBranch,
+  deleteRemoteBranch,
+} from '../github/gitOperations';
 
 describe('getDefaultBranch', () => {
   beforeEach(() => {
@@ -137,5 +143,111 @@ describe('checkoutDefaultBranch', () => {
     });
 
     expect(() => checkoutDefaultBranch()).toThrow('Failed to get default branch');
+  });
+});
+
+describe('deleteLocalBranch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('successfully deletes a local branch', () => {
+    vi.mocked(execSync).mockReturnValue('');
+
+    const result = deleteLocalBranch('feature/issue-42-add-login');
+
+    expect(result).toBe(true);
+    expect(execSync).toHaveBeenCalledWith(
+      'git branch -D "feature/issue-42-add-login"',
+      { stdio: 'pipe' }
+    );
+  });
+
+  it('returns false when branch does not exist', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error("error: branch 'nonexistent' not found.");
+    });
+
+    const result = deleteLocalBranch('nonexistent');
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false and warns for protected branch main', () => {
+    const result = deleteLocalBranch('main');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Refusing to delete protected branch'),
+      'info'
+    );
+  });
+
+  it('returns false and warns for protected branch master', () => {
+    const result = deleteLocalBranch('master');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('returns false and warns for protected branch develop', () => {
+    const result = deleteLocalBranch('develop');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteRemoteBranch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('successfully deletes a remote branch', () => {
+    vi.mocked(execSync).mockReturnValue('');
+
+    const result = deleteRemoteBranch('feature/issue-42-add-login');
+
+    expect(result).toBe(true);
+    expect(execSync).toHaveBeenCalledWith(
+      'git push origin --delete "feature/issue-42-add-login"',
+      { stdio: 'pipe' }
+    );
+  });
+
+  it('returns false when remote branch does not exist', () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('error: unable to delete: remote ref does not exist');
+    });
+
+    const result = deleteRemoteBranch('nonexistent');
+
+    expect(result).toBe(false);
+  });
+
+  it('returns false and warns for protected branch main', () => {
+    const result = deleteRemoteBranch('main');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Refusing to delete protected remote branch'),
+      'info'
+    );
+  });
+
+  it('returns false and warns for protected branch master', () => {
+    const result = deleteRemoteBranch('master');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
+  });
+
+  it('returns false and warns for protected branch develop', () => {
+    const result = deleteRemoteBranch('develop');
+
+    expect(result).toBe(false);
+    expect(execSync).not.toHaveBeenCalled();
   });
 });
