@@ -192,6 +192,7 @@ export function ensureWorktree(branchName: string, baseBranch?: string): string 
     return existingPath;
   }
 
+  log(`Worktree for branch '${branchName}' does not exist, creating new worktree...`, 'info');
   const worktreePath = createWorktree(branchName, baseBranch);
   copyEnvToWorktree(worktreePath);
   return worktreePath;
