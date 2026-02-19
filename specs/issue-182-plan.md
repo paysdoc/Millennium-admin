@@ -1,13 +1,11 @@
-# PR-Review: Commit uncommitted files in PR #185
+# PR-Review: Move misplaced PNG screenshots and verify committed files
 
 ## PR-Review Description
-The reviewer (paysdoc) flagged that two modified files have not been committed to the branch:
+The reviewer (paysdoc) raised two comments on PR #185:
 
-1. **`adws/__tests__/tokenLimitRecovery.test.ts`** — Contains a one-line addition of `applicationUrl: 'http://localhost:3000'` to the `createWorkflowConfig()` test helper. This change is directly related to the PR's work: the `WorkflowConfig` interface now includes `applicationUrl`, so the test mock must provide it to remain type-correct and accurate.
+1. **"Why have tokenLimitRecover.test.ts and route.ts not been checked in?"** — This comment was addressed in a prior revision. `adws/__tests__/tokenLimitRecovery.test.ts` was committed in `7f91f54` with the required `applicationUrl` field added to the mock config. `src/app/api/characters/[id]/route.ts` had unrelated `revalidatePath` changes that were reverted since they don't belong to issue #182. The git diff against `main` confirms `route.ts` has no outstanding changes. **No further action required for this comment.**
 
-2. **`src/app/api/characters/[id]/route.ts`** — Contains two additions: an `import { revalidatePath } from 'next/cache'` statement and a `revalidatePath('/characters/${id}')` call after updating a character. This change is **unrelated** to issue #182 (dedicated app instance per worktree). It appears to be a stale modification in the worktree that was never committed or reverted. The file's git history shows it was last touched in issue #62 (character editing).
-
-The review asks: "Why have tokenLimitRecover.test.ts and route.ts not been checked in?" Both uncommitted changes must be addressed — commit what belongs, revert what doesn't.
+2. **"png's should live in the relevant subdirectory of character_edit, not in the project root"** — Eight PNG files were committed to the project root in commit `0589627` instead of the correct `e2e-screenshots/character_edit/` subdirectory. These screenshots are artifacts from the `test_character_edit` e2e test and the test file (`e2e-tests/test_character_edit.md`) already references them under `e2e-screenshots/character_edit/`. The files must be moved to the correct directory and the extra unreferenced file (`04_apply_cancel_visible.png`) must be removed.
 
 ## Summary of Original Implementation Plan
 The original plan is at `specs/issue-182-adw-unknown-sdlc_planner-dedicated-app-instance-per-worktree.md`. It specifies:
@@ -16,44 +14,79 @@ The original plan is at `specs/issue-182-adw-unknown-sdlc_planner-dedicated-app-
 - Add `applicationUrl` to `WorkflowConfig` and thread it through all agents, phases, and slash commands
 - Update slash commands (`prepare_app.md`, `test_e2e.md`, `start.md`, `review.md`, `resolve_failed_e2e_test.md`) to accept dynamic ports
 - Update e2e test files to use `applicationUrl` instead of hardcoded `localhost:3000`
-- Update existing tests (`testAgent.test.ts`, `reviewAgent.test.ts`, `reviewRetry.test.ts`) and add a new `portAllocator.test.ts`
+- Update existing tests and add a new `portAllocator.test.ts`
 - Validate with `npm run lint`, `npm run build`, `npm test`
-
-The plan did not explicitly list `tokenLimitRecovery.test.ts` in its relevant files, but the change is a direct consequence of modifying the `WorkflowConfig` interface (Step 3 of the plan).
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `adws/__tests__/tokenLimitRecovery.test.ts` — Contains an uncommitted one-line change adding `applicationUrl: 'http://localhost:3000'` to the mock `WorkflowConfig`. This is a required change since `WorkflowConfig` now includes `applicationUrl`, and the test helper must match the interface.
-- `src/app/api/characters/[id]/route.ts` — Contains an uncommitted change adding `revalidatePath` import and call. This is unrelated to issue #182 and should be reverted to keep the branch clean.
+- `01_home_page.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/01_home_page.png`. Referenced in `e2e-tests/test_character_edit.md` line 71.
+- `02_character_detail.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/02_character_detail.png`. Referenced in `e2e-tests/test_character_edit.md` line 72.
+- `03_field_editing.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/03_field_editing.png`. Referenced in `e2e-tests/test_character_edit.md` line 73.
+- `04_cancel_edit.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/04_cancel_edit.png`. Referenced in `e2e-tests/test_character_edit.md` line 74.
+- `04_apply_cancel_visible.png` (project root) — Unreferenced screenshot with no matching entry in any e2e test file. Should be deleted.
+- `05_apply_edit.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/05_apply_edit.png`. Referenced in `e2e-tests/test_character_edit.md` line 75.
+- `06_after_refresh.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/06_after_refresh.png`. Referenced in `e2e-tests/test_character_edit.md` line 76.
+- `07_restored_state.png` (project root) — Misplaced screenshot, should be at `e2e-screenshots/character_edit/07_restored_state.png`. Referenced in `e2e-tests/test_character_edit.md` line 77.
+- `e2e-screenshots/character_edit/` — Target directory where the screenshots belong. Already contains older screenshots from a previous test run.
+- `e2e-tests/test_character_edit.md` — E2e test spec that references the expected screenshot paths under `e2e-screenshots/character_edit/`.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Revert unrelated changes in `src/app/api/characters/[id]/route.ts`
+### Step 1: Move referenced PNG files from project root to `e2e-screenshots/character_edit/`
 
-- Run `git checkout -- "src/app/api/characters/[id]/route.ts"` to discard the uncommitted `revalidatePath` changes
-- This change is unrelated to issue #182 (dedicated app instance per worktree) and should not be part of this PR
-- If this change is needed, it should be implemented in a separate issue/branch
+- Move the following 7 files from the project root to `e2e-screenshots/character_edit/`, overwriting any existing files with the same name:
+  - `git mv -f 01_home_page.png e2e-screenshots/character_edit/01_home_page.png`
+  - `git mv -f 02_character_detail.png e2e-screenshots/character_edit/02_character_detail.png`
+  - `git mv -f 03_field_editing.png e2e-screenshots/character_edit/03_field_editing.png`
+  - `git mv -f 04_cancel_edit.png e2e-screenshots/character_edit/04_cancel_edit.png`
+  - `git mv -f 05_apply_edit.png e2e-screenshots/character_edit/05_apply_edit.png`
+  - `git mv -f 06_after_refresh.png e2e-screenshots/character_edit/06_after_refresh.png`
+  - `git mv -f 07_restored_state.png e2e-screenshots/character_edit/07_restored_state.png`
 
-### Step 2: Stage and commit the tokenLimitRecovery test fix
+### Step 2: Remove the unreferenced `04_apply_cancel_visible.png`
 
-- Stage the file: `git add adws/__tests__/tokenLimitRecovery.test.ts`
-- Commit with a clear message explaining this adds the missing `applicationUrl` field to the test mock config, which is required after the `WorkflowConfig` interface was updated in this PR
-- Commit message: `fix: add applicationUrl to tokenLimitRecovery test mock config`
+- Delete `04_apply_cancel_visible.png` from the project root since it is not referenced by any e2e test file:
+  - `git rm 04_apply_cancel_visible.png`
 
-### Step 3: Run validation commands
+### Step 3: Clean up stale screenshots in `e2e-screenshots/character_edit/`
 
-- Run `npm run lint`, `npm run build`, and `npm test` to confirm zero regressions after the commit and revert
+- After moving the new screenshots in, remove any old screenshots that no longer match the expected filenames in `e2e-tests/test_character_edit.md`. The test expects exactly these 7 files:
+  - `01_home_page.png`
+  - `02_character_detail.png`
+  - `03_field_editing.png`
+  - `04_cancel_edit.png`
+  - `05_apply_edit.png`
+  - `06_after_refresh.png`
+  - `07_restored_state.png`
+- Remove stale files that don't match (the old screenshots from a previous run):
+  - `git rm e2e-screenshots/character_edit/01_home_page_overview.png`
+  - `git rm e2e-screenshots/character_edit/02_character_detail_page.png`
+  - `git rm e2e-screenshots/character_edit/03_field_editing_mode.png`
+  - `git rm e2e-screenshots/character_edit/04_apply_cancel_buttons.png`
+  - `git rm e2e-screenshots/character_edit/05_after_cancel.png`
+  - `git rm e2e-screenshots/character_edit/06_after_apply_error.png`
+
+### Step 4: Verify no PNG files remain in the project root
+
+- Run `ls *.png` in the project root and confirm no PNG files exist
+- Run `ls e2e-screenshots/character_edit/` and confirm only the 7 expected files exist
+
+### Step 5: Run validation commands
+
+- Run `npm run lint`, `npm run build`, and `npm test` to validate zero regressions
 
 ## Validation Commands
 Execute every command to validate the review is complete with zero regressions.
 
+- `ls *.png 2>/dev/null | wc -l` - Verify zero PNG files remain in project root (expect 0)
+- `ls e2e-screenshots/character_edit/` - Verify correct screenshots are in place
 - `npm run lint` - Run linter to check for code quality issues
 - `npm run build` - Build the application to verify no build errors
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `tokenLimitRecovery.test.ts` change is a single line addition (`applicationUrl: 'http://localhost:3000'`) inside the `createWorkflowConfig()` helper. Without it, the test would fail to satisfy the `WorkflowConfig` type since `applicationUrl` is now a required field.
-- The `route.ts` change (adding `revalidatePath`) is a legitimate improvement to the character update API but belongs in a separate issue/PR. Reverting it here keeps the branch focused on issue #182.
-- After committing and reverting, push the branch so the PR reflects the changes.
+- The first review comment (missing `tokenLimitRecovery.test.ts` and `route.ts`) was already resolved in prior commits (`7f91f54` committed the test fix, `route.ts` changes were reverted). No further action is needed.
+- The `e2e-screenshots/character_edit/` directory currently contains 6 old screenshots with different naming conventions (e.g., `01_home_page_overview.png` vs `01_home_page.png`). Step 3 cleans these up since they are from a previous test run and the current test spec references the new names.
+- `04_apply_cancel_visible.png` has no reference in any test file and appears to be an intermediate screenshot that was captured but not included in the test spec. It should be deleted to avoid clutter.
