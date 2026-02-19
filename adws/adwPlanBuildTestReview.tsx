@@ -2,7 +2,7 @@
 /**
  * ADW Plan, Build, Test & Review - Plan+Build+Test+PR+Review Orchestrator
  *
- * Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id]
+ * Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id] [--issue-type <type>]
  *
  * Workflow:
  * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
@@ -21,7 +21,7 @@
  * - MAX_REVIEW_RETRY_ATTEMPTS: Maximum retry attempts for review-patch loop (default: 3)
  */
 
-import { mergeModelUsageMaps, persistTokenCounts } from './core';
+import { type IssueClassSlashCommand, mergeModelUsageMaps, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -37,9 +37,13 @@ import {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id]');
+  console.error('Usage: npx tsx adws/adwPlanBuildTestReview.tsx <github-issueNumber> [adw-id] [--issue-type <type>]');
   console.error('');
   console.error('This orchestrator runs the complete Plan+Build+Test+PR+Review workflow.');
+  console.error('');
+  console.error('Options:');
+  console.error('  --issue-type <type>  Pre-classified issue type (skips classification step)');
+  console.error('                       Valid values: /feature, /bug, /chore, /pr_review');
   console.error('');
   console.error('Environment Requirements:');
   console.error('  ANTHROPIC_API_KEY           - Anthropic API key');
@@ -53,9 +57,28 @@ function printUsageAndExit(): never {
 /**
  * Parses and validates command line arguments.
  */
-function parseArguments(args: string[]): { issueNumber: number; adwId: string | null } {
+function parseArguments(args: string[]): {
+  issueNumber: number;
+  adwId: string | null;
+  providedIssueType: IssueClassSlashCommand | null;
+} {
   if (args.length < 1) {
     printUsageAndExit();
+  }
+
+  // Parse --issue-type option
+  let providedIssueType: IssueClassSlashCommand | null = null;
+  const issueTypeIndex = args.indexOf('--issue-type');
+  if (issueTypeIndex !== -1 && args[issueTypeIndex + 1]) {
+    const typeValue = args[issueTypeIndex + 1];
+    const validTypes: IssueClassSlashCommand[] = ['/feature', '/bug', '/chore', '/pr_review'];
+    if (validTypes.includes(typeValue as IssueClassSlashCommand)) {
+      providedIssueType = typeValue as IssueClassSlashCommand;
+    } else {
+      console.error(`Invalid issue type: ${typeValue}. Valid values: ${validTypes.join(', ')}`);
+      process.exit(1);
+    }
+    args.splice(issueTypeIndex, 2);
   }
 
   const issueNumber = parseInt(args[0], 10);
@@ -66,7 +89,7 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string | 
 
   const adwId = args[1] || null;
 
-  return { issueNumber, adwId };
+  return { issueNumber, adwId, providedIssueType };
 }
 
 /**
@@ -74,9 +97,11 @@ function parseArguments(args: string[]): { issueNumber: number; adwId: string | 
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const { issueNumber, adwId } = parseArguments(args);
+  const { issueNumber, adwId, providedIssueType } = parseArguments(args);
 
-  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-review-orchestrator');
+  const config = await initializeWorkflow(issueNumber, adwId, 'plan-build-test-review-orchestrator', {
+    issueType: providedIssueType || undefined,
+  });
 
   let totalCostUsd = 0;
   let totalModelUsage = {};
