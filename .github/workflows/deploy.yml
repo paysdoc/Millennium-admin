@@ -49,7 +49,12 @@ jobs:
       - name: Run Knex migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run knex:migrate
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured"
+          fi
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -111,7 +116,12 @@ jobs:
       - name: Run Knex migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run knex:migrate
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured"
+          fi
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
@@ -151,7 +161,12 @@ jobs:
       - name: Run Knex migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run knex:migrate
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured"
+          fi
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
