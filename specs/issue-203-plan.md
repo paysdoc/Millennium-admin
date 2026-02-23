@@ -1,94 +1,69 @@
-# PR-Review: Fix Vercel project linking and staging variable assignment in CI workflows
+# PR-Review: Add diagnostic logging for Supabase credential debugging in sync workflow
 
 ## PR-Review Description
-The PR reviewer reports that deployment to Vercel fails when the PR branch triggers CI. The error occurs in the `vercel pull --yes --environment=preview` step of the deploy workflow:
+The PR reviewer reports two issues with the Vercel-as-single-source implementation:
 
-```
-Retrieving project…
-Error: Could not retrieve Project Settings. To link your Project, remove the `.vercel` directory and deploy again.
-```
+1. **Vercel project linking failure** — The `vercel pull` step in CI fails with `"Could not retrieve Project Settings. To link your Project, remove the .vercel directory and deploy again."` This was caused by the missing `.vercel/project.json` file in CI environments. **Already fixed** in commit `5309a84` by adding a "Link Vercel project" step that creates `.vercel/project.json` from the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` env vars in both `deploy.yml` and `sync-supabase.yml`.
 
-The root cause is that the Vercel CLI cannot resolve the project from `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` environment variables alone — it requires a `.vercel/project.json` file to link the project. The `.vercel` directory is in `.gitignore` (line 33) so it's never present in CI after checkout.
+2. **Incorrect API key** — After the linking fix, the sync script runs but all table syncs and bucket syncs fail with `"Invalid API key"`. The reviewer requests diagnostic logging: log the last 4 characters of each Supabase credential (or `"null"` if empty) when syncing tables and buckets. This will reveal whether the env vars pulled from Vercel are correct, empty, or misnamed.
 
-This affects:
-1. **`deploy.yml`** — The existing `vercel pull` step fails, blocking CI for all PRs (including this one).
-2. **`sync-supabase.yml`** — The new `vercel env pull` step would face the same linking issue at runtime.
-
-Additionally, there is a **variable assignment bug** in `sync-supabase.yml` lines 50-53: the `export` statements on lines 50-51 overwrite `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` with production values *before* lines 52-53 read them for the staging variables, causing `SUPABASE_URL_STAGING` and `SUPABASE_SERVICE_KEY_STAGING` to incorrectly receive production values instead of preview values.
+The root cause of the "Invalid API key" error is unknown — it could be that `vercel env pull` outputs variable names that don't match what the sync script expects (e.g., `NEXT_PUBLIC_SUPABASE_URL` vs `SUPABASE_URL`), that values are empty, or that there's a formatting issue in the pulled `.env` file. The diagnostic logging will identify the exact problem.
 
 ## Summary of Original Implementation Plan
 The original plan (`specs/issue-203-adw-use-vercel-as-single-59sdjo-sdlc_planner-vercel-single-source-supabase.md`) eliminates duplication of Supabase credentials between Vercel UI and GitHub Secrets by:
 1. Modifying `sync-supabase.yml` to use `vercel env pull` instead of 6 GitHub Secrets
-2. Cleaning up `.env.sample` (removing unused `SUPABASE_KEY_STAGING` comment)
-3. Adding "Secrets Management" subsection to `README.md`
-4. Running validation commands (lint, build, test)
+2. Adding a "Link Vercel project" step to create `.vercel/project.json` in CI
+3. Sourcing the pulled `.env` files and exporting the 4 required env vars for the sync script
+4. Cleaning up `.env.sample` (removing unused `SUPABASE_KEY_STAGING` comment)
+5. Adding "Secrets Management" subsection to `README.md`
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- `.github/workflows/sync-supabase.yml` — Contains the `vercel env pull` step that needs project linking, and the variable assignment bug in the "Run sync script" step (lines 50-53).
-- `.github/workflows/deploy.yml` — Contains the `vercel pull` steps that are failing in CI. Needs the same project linking fix applied to all three jobs (`deploy-preview`, `deploy-staging`, `deploy-production`).
+- `.github/workflows/sync-supabase.yml` — The sync workflow. The "Run sync script" step needs diagnostic `echo` statements after exporting env vars and before running `npm run sync:data`, to log the last 4 chars of each credential to the CI log.
+- `scripts/sync-supabase.ts` — The sync script. The `getEnvironment()` function (lines 151-175) validates and returns the 4 env vars. Needs diagnostic logging of the last 4 chars of each env var after validation, so the Node.js process confirms what values it actually received.
 - `guidelines/coding_guidelines.md` — Coding guidelines to follow during implementation.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Add Vercel project linking step to `sync-supabase.yml`
+### Step 1: Add diagnostic logging to `.github/workflows/sync-supabase.yml`
 
-Add a new step after "Install Vercel CLI" and before "Pull Vercel environment variables" that creates the `.vercel/project.json` file from the environment variables already set at the workflow level:
+In the "Run sync script" step, add `echo` statements **after** the `export` lines and **before** `npm run sync:data` to log the last 4 characters of each credential (or `"null"` if the variable is empty).
 
-- Insert the following step at line 33 (after the "Install Vercel CLI" step):
-  ```yaml
-      - name: Link Vercel project
-        run: |
-          mkdir -p .vercel
-          echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
+- Insert the following lines between the last `export` statement and `npm run sync:data` in the "Run sync script" step (after line 60, before line 62):
+  ```bash
+  # Log last 4 chars of each credential for debugging ("null" if empty)
+  echo "SUPABASE_URL tail: $([ -n "$SUPABASE_URL" ] && printf '%s' "${SUPABASE_URL: -4}" || printf 'null')"
+  echo "SUPABASE_SERVICE_KEY tail: $([ -n "$SUPABASE_SERVICE_KEY" ] && printf '%s' "${SUPABASE_SERVICE_KEY: -4}" || printf 'null')"
+  echo "SUPABASE_URL_STAGING tail: $([ -n "$SUPABASE_URL_STAGING" ] && printf '%s' "${SUPABASE_URL_STAGING: -4}" || printf 'null')"
+  echo "SUPABASE_SERVICE_KEY_STAGING tail: $([ -n "$SUPABASE_SERVICE_KEY_STAGING" ] && printf '%s' "${SUPABASE_SERVICE_KEY_STAGING: -4}" || printf 'null')"
   ```
 
-### Step 2: Fix the variable assignment bug in `sync-supabase.yml`
+### Step 2: Add diagnostic logging to `scripts/sync-supabase.ts`
 
-The current "Run sync script" step has a bug where staging variables receive production values. After sourcing `.env.preview`, the preview values of `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` must be captured into separate variables *before* overwriting them with production values.
+Add a `maskSecret` helper and credential logging inside the `getEnvironment()` function, right after the missing-variable validation check and before the `return` statement. This confirms what the Node.js process actually received from the shell environment.
 
-- Replace the current "Run sync script" step (lines 39-55) with:
-  ```yaml
-      - name: Run sync script
-        run: |
-          # Source production env and capture Supabase credentials
-          set -a && source .env.production && set +a
-          PROD_URL="${SUPABASE_URL}"
-          PROD_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
-
-          # Source preview env and capture preview credentials
-          set -a && source .env.preview && set +a
-          PREVIEW_URL="${SUPABASE_URL}"
-          PREVIEW_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
-
-          # Export with correct names for sync script
-          export SUPABASE_URL="${PROD_URL}"
-          export SUPABASE_SERVICE_KEY="${PROD_SERVICE_KEY}"
-          export SUPABASE_URL_STAGING="${PREVIEW_URL}"
-          export SUPABASE_SERVICE_KEY_STAGING="${PREVIEW_SERVICE_KEY}"
-
-          npm run sync:data
+- Add the following `maskSecret` helper function before the `getEnvironment` function (before line 151):
+  ```typescript
+  /**
+   * Returns the last 4 characters of a secret for safe CI log output.
+   * Returns "null" when the value is undefined or empty.
+   */
+  const maskSecret = (value: string | undefined): string =>
+    value ? `...${value.slice(-4)}` : 'null'
   ```
 
-### Step 3: Add Vercel project linking step to `deploy.yml`
+- Add the following logging lines inside `getEnvironment()`, after the validation check (after line 167, before the `return` on line 169):
+  ```typescript
+  console.log('Credential check (last 4 chars):')
+  console.log(`  SUPABASE_URL: ${maskSecret(productionUrl)}`)
+  console.log(`  SUPABASE_SERVICE_KEY: ${maskSecret(productionKey)}`)
+  console.log(`  SUPABASE_URL_STAGING: ${maskSecret(stagingUrl)}`)
+  console.log(`  SUPABASE_SERVICE_KEY_STAGING: ${maskSecret(stagingKey)}`)
+  ```
 
-The deploy workflow has the same project linking issue. Add the `.vercel/project.json` creation step to all three jobs, after "Install Vercel CLI" and before "Pull Vercel Environment Information":
-
-- **`deploy-preview` job** (after line 47 "Install Vercel CLI"): Add the linking step before "Pull Vercel Environment Information" (line 49).
-- **`deploy-staging` job** (after line 101 "Install Vercel CLI"): Add the linking step before "Pull Vercel Environment Information" (line 104).
-- **`deploy-production` job** (after line 133 "Install Vercel CLI"): Add the linking step before "Pull Vercel Environment Information" (line 136).
-
-The step to add in each job:
-```yaml
-      - name: Link Vercel project
-        run: |
-          mkdir -p .vercel
-          echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
-```
-
-### Step 4: Run validation commands
+### Step 3: Run validation commands
 
 - Run `npm run lint` to verify no linting errors.
 - Run `npm run build` to verify the application builds successfully.
@@ -102,6 +77,8 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- The `.vercel/project.json` approach is the standard fix for Vercel CLI project linking in CI/CD environments. It creates the minimal project configuration that the CLI needs to resolve the project, using the `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` env vars that are already set at the workflow level.
-- The variable assignment bug (Step 2) is a logic error from the original implementation: bash evaluates `${SUPABASE_URL}` on lines 52-53 using the values set by the `export` statements on lines 50-51 (production values), not the values from the sourced `.env.preview` file. Capturing preview values into `PREVIEW_URL` and `PREVIEW_SERVICE_KEY` before overwriting fixes this.
-- The deploy workflow fix (Step 3) is necessary to unblock CI for this PR, even though `deploy.yml` is not in the original PR scope. Without it, the PR cannot pass CI checks.
+- The Vercel project linking issue (review comment 1) was already resolved in commit `5309a84`. No further changes needed for that issue.
+- The diagnostic logging only exposes the last 4 characters of each credential. This is safe for CI logs — it reveals enough to verify correctness without exposing the full secret.
+- The `maskSecret` helper is used 4 times in `getEnvironment()`, making a small function preferable to repeating the ternary inline.
+- Once the workflow is re-run and the logs are inspected, the root cause of "Invalid API key" should be immediately apparent: either the values are `"null"` (meaning the env var names in Vercel don't match), or the last 4 chars don't match the expected keys (meaning the wrong values are configured in Vercel).
+- If the env var names in Vercel turn out to be different (e.g., `NEXT_PUBLIC_SUPABASE_URL`), a follow-up change will be needed to either rename the Vercel env vars or add mapping logic in the workflow.

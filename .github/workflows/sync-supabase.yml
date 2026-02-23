@@ -59,6 +59,12 @@ jobs:
           export SUPABASE_URL_STAGING="${PREVIEW_URL}"
           export SUPABASE_SERVICE_KEY_STAGING="${PREVIEW_SERVICE_KEY}"
 
+          # Log last 4 chars of each credential for debugging ("null" if empty)
+          echo "SUPABASE_URL tail: $([ -n "$SUPABASE_URL" ] && printf '%s' "${SUPABASE_URL: -4}" || printf 'null')"
+          echo "SUPABASE_SERVICE_KEY tail: $([ -n "$SUPABASE_SERVICE_KEY" ] && printf '%s' "${SUPABASE_SERVICE_KEY: -4}" || printf 'null')"
+          echo "SUPABASE_URL_STAGING tail: $([ -n "$SUPABASE_URL_STAGING" ] && printf '%s' "${SUPABASE_URL_STAGING: -4}" || printf 'null')"
+          echo "SUPABASE_SERVICE_KEY_STAGING tail: $([ -n "$SUPABASE_SERVICE_KEY_STAGING" ] && printf '%s' "${SUPABASE_SERVICE_KEY_STAGING: -4}" || printf 'null')"
+
           npm run sync:data
 
       - name: Create issue on failure
