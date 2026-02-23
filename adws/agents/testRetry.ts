@@ -95,7 +95,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
   // Run all E2E tests via Playwright subprocess
   log('Running Playwright E2E tests...', 'info');
   AgentStateManager.appendLog(statePath, 'Running Playwright E2E tests');
-  const playwrightResult = await runPlaywrightE2ETests(cwd);
+  const playwrightResult = await runPlaywrightE2ETests(cwd, applicationUrl);
 
   if (playwrightResult.allPassed) {
     log('All E2E tests passed!', 'success');
@@ -145,7 +145,7 @@ export async function runE2ETestsWithRetry(opts: TestRetryOptions): Promise<Test
     // Re-run all Playwright tests after resolution
     log('Re-running Playwright E2E tests after resolution...', 'info');
     AgentStateManager.appendLog(statePath, 'Re-running Playwright E2E tests after resolution');
-    const retryPlaywrightResult = await runPlaywrightE2ETests(cwd);
+    const retryPlaywrightResult = await runPlaywrightE2ETests(cwd, applicationUrl);
 
     if (retryPlaywrightResult.allPassed) {
       failedE2ETests.clear();
