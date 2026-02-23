@@ -198,7 +198,12 @@ export async function runPlanAgent(
   cwd?: string,
   adwId?: string
 ): Promise<AgentResult> {
-  const issueContext = formatIssueContextAsArgs(issue);
+  const humanComments = issue.comments.filter(c => !isAdwComment(c.body));
+
+  const latestActionableContent = [...issue.comments]
+    .reverse()
+    .reduce<string | null>((found, c) => found ?? extractActionableContent(c.body), null);
+
   const issueJson = JSON.stringify({
     number: issue.number,
     title: issue.title,
@@ -207,8 +212,14 @@ export async function runPlanAgent(
     author: issue.author.login,
     labels: issue.labels.map(l => l.name),
     createdAt: issue.createdAt,
+    comments: humanComments.map(c => ({
+      author: c.author.login,
+      createdAt: c.createdAt,
+      body: c.body,
+    })),
+    actionableComment: latestActionableContent,
   });
-  const args = [issueContext, adwId || 'adw-unknown', issueJson];
+  const args = [String(issue.number), adwId || 'adw-unknown', issueJson];
   const outputFile = path.join(logsDir, 'plan-agent.jsonl');
 
   // Use the issueType directly as the command (e.g., '/feature', '/bug', '/chore', '/pr_review')
