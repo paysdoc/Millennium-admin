@@ -7,6 +7,10 @@ on:
   # Manual trigger for on-demand syncs
   workflow_dispatch:
 
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
 jobs:
   sync:
     name: Sync Production to Staging
@@ -24,15 +28,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment variables
+        run: |
+          vercel env pull .env.production --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel env pull .env.preview --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Run sync script
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SUPABASE_URL_STAGING: ${{ secrets.SUPABASE_URL_STAGING }}
-          SUPABASE_KEY_STAGING: ${{ secrets.SUPABASE_KEY_STAGING }}
-          SUPABASE_SERVICE_KEY_STAGING: ${{ secrets.SUPABASE_SERVICE_KEY_STAGING }}
-        run: npm run sync:data
+        run: |
+          # Source production env and capture Supabase credentials
+          set -a && source .env.production && set +a
+          PROD_URL="${SUPABASE_URL}"
+          PROD_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
+
+          # Source preview env (overwrites same-named vars with staging values)
+          set -a && source .env.preview && set +a
+
+          # Export with correct names for sync script
+          export SUPABASE_URL="${PROD_URL}"
+          export SUPABASE_SERVICE_KEY="${PROD_SERVICE_KEY}"
+          export SUPABASE_URL_STAGING="${SUPABASE_URL}"
+          export SUPABASE_SERVICE_KEY_STAGING="${SUPABASE_SERVICE_KEY}"
+
+          npm run sync:data
 
       - name: Create issue on failure
         if: failure()
