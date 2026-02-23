@@ -31,6 +31,11 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
+
       - name: Pull Vercel environment variables
         run: |
           vercel env pull .env.production --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -43,14 +48,16 @@ jobs:
           PROD_URL="${SUPABASE_URL}"
           PROD_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
 
-          # Source preview env (overwrites same-named vars with staging values)
+          # Source preview env and capture preview credentials
           set -a && source .env.preview && set +a
+          PREVIEW_URL="${SUPABASE_URL}"
+          PREVIEW_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
 
           # Export with correct names for sync script
           export SUPABASE_URL="${PROD_URL}"
           export SUPABASE_SERVICE_KEY="${PROD_SERVICE_KEY}"
-          export SUPABASE_URL_STAGING="${SUPABASE_URL}"
-          export SUPABASE_SERVICE_KEY_STAGING="${SUPABASE_SERVICE_KEY}"
+          export SUPABASE_URL_STAGING="${PREVIEW_URL}"
+          export SUPABASE_SERVICE_KEY_STAGING="${PREVIEW_SERVICE_KEY}"
 
           npm run sync:data
 
