@@ -273,15 +273,21 @@ function extractSpecResults(suite: PlaywrightJsonSuite): E2ETestResult[] {
  * Runs Playwright E2E tests as a subprocess and parses the JSON results.
  *
  * @param cwd - Optional working directory (defaults to process.cwd())
+ * @param applicationUrl - Optional application URL to set as E2E_BASE_URL env var (e.g. http://localhost:12345)
  * @returns Structured results with pass/fail status per spec file
  */
-export function runPlaywrightE2ETests(cwd?: string): Promise<PlaywrightE2EResult> {
+export function runPlaywrightE2ETests(cwd?: string, applicationUrl?: string): Promise<PlaywrightE2EResult> {
   const workDir = cwd ?? process.cwd();
   const resultsFile = path.join(workDir, 'e2e-results.json');
 
   return new Promise((resolve) => {
+    const env = applicationUrl
+      ? { ...process.env, E2E_BASE_URL: applicationUrl }
+      : process.env;
+
     const proc = spawn('npx', ['playwright', 'test'], {
       cwd: workDir,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
     });

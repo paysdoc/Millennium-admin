@@ -248,6 +248,45 @@ describe('testAgent', () => {
       expect(result.exitCode).toBe(1);
     });
 
+    it('sets E2E_BASE_URL in subprocess env when applicationUrl is provided', async () => {
+      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 0, stdout: 'Running tests...' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      fs.mkdirSync(testBaseDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testBaseDir, 'e2e-results.json'),
+        JSON.stringify({ suites: [] })
+      );
+
+      await runPlaywrightE2ETests(testBaseDir, 'http://localhost:34567');
+
+      expect(spawn).toHaveBeenCalledWith(
+        'npx',
+        ['playwright', 'test'],
+        expect.objectContaining({
+          cwd: testBaseDir,
+          env: expect.objectContaining({ E2E_BASE_URL: 'http://localhost:34567' }),
+        })
+      );
+    });
+
+    it('does not override E2E_BASE_URL when applicationUrl is not provided', async () => {
+      const mockSpawn = createPlaywrightMockSpawn({ exitCode: 0, stdout: 'Running tests...' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      fs.mkdirSync(testBaseDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(testBaseDir, 'e2e-results.json'),
+        JSON.stringify({ suites: [] })
+      );
+
+      await runPlaywrightE2ETests(testBaseDir);
+
+      const spawnCall = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      const spawnOptions = spawnCall[2] as { env: NodeJS.ProcessEnv };
+      expect(spawnOptions.env).toBe(process.env);
+    });
+
   });
 
   describe('runResolveTestAgent', () => {
