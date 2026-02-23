@@ -302,7 +302,26 @@ describe('runPlanAgent', () => {
     author: { login: 'author', isBot: false },
     assignees: [],
     labels: [{ id: '1', name: 'bug', color: 'red' }],
-    comments: [],
+    comments: [
+      {
+        id: 'comment-1',
+        author: { login: 'alice', isBot: false },
+        body: 'Please fix this soon',
+        createdAt: '2025-01-02T00:00:00Z',
+      },
+      {
+        id: 'comment-2',
+        author: { login: 'bot', isBot: true },
+        body: '## :rocket: ADW Workflow Started\n\n**ADW ID:** `adw-123`',
+        createdAt: '2025-01-03T00:00:00Z',
+      },
+      {
+        id: 'comment-3',
+        author: { login: 'bob', isBot: false },
+        body: '## Take action\n\nUpdate the tests too',
+        createdAt: '2025-01-04T00:00:00Z',
+      },
+    ],
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
     url: 'https://github.com/owner/repo/issues/42',
@@ -312,12 +331,20 @@ describe('runPlanAgent', () => {
     vi.clearAllMocks();
   });
 
+  it('passes issue number as the first array argument', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'my-adw-id');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    expect(argsArray[0]).toBe('42');
+  });
+
   it('passes adwId as the second array argument when provided', async () => {
     await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'my-adw-id');
 
     expect(runClaudeAgentWithCommand).toHaveBeenCalledWith(
       '/bug',
-      expect.arrayContaining([expect.any(String), 'my-adw-id', expect.any(String)]),
+      expect.arrayContaining(['42', 'my-adw-id', expect.any(String)]),
       'Plan',
       expect.any(String),
       expect.any(String),
@@ -349,5 +376,57 @@ describe('runPlanAgent', () => {
     expect(issueJson.title).toBe('Test issue');
     expect(issueJson.author).toBe('author');
     expect(issueJson.labels).toEqual(['bug']);
+  });
+
+  it('includes filtered human comments in issueJson', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'test-id');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    const issueJson = JSON.parse(argsArray[2]);
+
+    expect(issueJson.comments).toHaveLength(2);
+    expect(issueJson.comments[0]).toEqual({
+      author: 'alice',
+      createdAt: '2025-01-02T00:00:00Z',
+      body: 'Please fix this soon',
+    });
+    expect(issueJson.comments[1]).toEqual({
+      author: 'bob',
+      createdAt: '2025-01-04T00:00:00Z',
+      body: '## Take action\n\nUpdate the tests too',
+    });
+  });
+
+  it('includes actionableComment in issueJson when present', async () => {
+    await runPlanAgent(mockIssue, '/tmp/logs', '/bug', undefined, undefined, 'test-id');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    const issueJson = JSON.parse(argsArray[2]);
+
+    expect(issueJson.actionableComment).toBe('Update the tests too');
+  });
+
+  it('sets actionableComment to null when no actionable comment exists', async () => {
+    const issueWithoutActionable: GitHubIssue = {
+      ...mockIssue,
+      comments: [
+        {
+          id: 'comment-1',
+          author: { login: 'alice', isBot: false },
+          body: 'Just a regular comment',
+          createdAt: '2025-01-02T00:00:00Z',
+        },
+      ],
+    };
+
+    await runPlanAgent(issueWithoutActionable, '/tmp/logs', '/bug', undefined, undefined, 'test-id');
+
+    const callArgs = vi.mocked(runClaudeAgentWithCommand).mock.calls[0];
+    const argsArray = callArgs[1] as string[];
+    const issueJson = JSON.parse(argsArray[2]);
+
+    expect(issueJson.actionableComment).toBeNull();
   });
 });
