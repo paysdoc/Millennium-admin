@@ -59,14 +59,14 @@ jobs:
         with:
           version: latest
 
-      - name: Prefer IPv4 for database connections
-        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
+      - name: Disable IPv6 for database connections
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
 
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
-          npx supabase db push --db-url "$SUPABASE_DB_URL"
+          supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
@@ -132,14 +132,14 @@ jobs:
         with:
           version: latest
 
-      - name: Prefer IPv4 for database connections
-        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
+      - name: Disable IPv6 for database connections
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
 
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
-          npx supabase db push --db-url "$SUPABASE_DB_URL"
+          supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
@@ -183,14 +183,14 @@ jobs:
         with:
           version: latest
 
-      - name: Prefer IPv4 for database connections
-        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
+      - name: Disable IPv6 for database connections
+        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
 
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
-          npx supabase db push --db-url "$SUPABASE_DB_URL"
+          supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
