@@ -59,6 +59,9 @@ jobs:
         with:
           version: latest
 
+      - name: Prefer IPv4 for database connections
+        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
+
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
@@ -129,6 +132,9 @@ jobs:
         with:
           version: latest
 
+      - name: Prefer IPv4 for database connections
+        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
+
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
@@ -176,6 +182,9 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
+
+      - name: Prefer IPv4 for database connections
+        run: echo 'precedence ::ffff:0:0/96 100' | sudo tee -a /etc/gai.conf
 
       - name: Push Supabase Migrations
         run: |
