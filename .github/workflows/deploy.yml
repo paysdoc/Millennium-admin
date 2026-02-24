@@ -59,13 +59,13 @@ jobs:
         with:
           version: latest
 
-      - name: Disable IPv6 for database connections
-        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
+          DB_HOST=$(echo "$SUPABASE_DB_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+          DB_IPV4=$(dig +short A "$DB_HOST" | head -1)
+          echo "$DB_IPV4 $DB_HOST" | sudo tee -a /etc/hosts
           supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
@@ -132,13 +132,13 @@ jobs:
         with:
           version: latest
 
-      - name: Disable IPv6 for database connections
-        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
+          DB_HOST=$(echo "$SUPABASE_DB_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+          DB_IPV4=$(dig +short A "$DB_HOST" | head -1)
+          echo "$DB_IPV4 $DB_HOST" | sudo tee -a /etc/hosts
           supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
@@ -183,13 +183,13 @@ jobs:
         with:
           version: latest
 
-      - name: Disable IPv6 for database connections
-        run: sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
-
       - name: Push Supabase Migrations
         run: |
           vercel env pull .env.vercel --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
           set -a && source .env.vercel && set +a
+          DB_HOST=$(echo "$SUPABASE_DB_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+          DB_IPV4=$(dig +short A "$DB_HOST" | head -1)
+          echo "$DB_IPV4 $DB_HOST" | sudo tee -a /etc/hosts
           supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Build Project Artifacts
