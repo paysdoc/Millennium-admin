@@ -46,16 +46,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Knex migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -n "$DATABASE_URL" ]; then
-            npm run knex:migrate
-          else
-            echo "Skipping Knex migrations: DATABASE_URL not configured"
-          fi
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -64,8 +54,17 @@ jobs:
           mkdir -p .vercel
           echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
 
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Pull Vercel Environment Variables
+        run: vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Knex migrations
+        run: |
+          set -a && source .env.vercel && set +a
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+          fi
 
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
@@ -118,16 +117,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Knex migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -n "$DATABASE_URL" ]; then
-            npm run knex:migrate
-          else
-            echo "Skipping Knex migrations: DATABASE_URL not configured"
-          fi
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -136,8 +125,17 @@ jobs:
           mkdir -p .vercel
           echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
 
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Pull Vercel Environment Variables
+        run: vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Knex migrations
+        run: |
+          set -a && source .env.vercel && set +a
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+          fi
 
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
@@ -168,16 +166,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Knex migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -n "$DATABASE_URL" ]; then
-            npm run knex:migrate
-          else
-            echo "Skipping Knex migrations: DATABASE_URL not configured"
-          fi
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
@@ -186,8 +174,17 @@ jobs:
           mkdir -p .vercel
           echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
 
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Pull Vercel Environment Variables
+        run: vercel env pull .env.vercel --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Knex migrations
+        run: |
+          set -a && source .env.vercel && set +a
+          if [ -n "$DATABASE_URL" ]; then
+            npm run knex:migrate
+          else
+            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+          fi
 
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
