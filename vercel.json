@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx knex migrate:latest --knexfile knexfile.js && npm run build",
+  "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install",
