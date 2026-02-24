@@ -6,6 +6,7 @@
 import {
   log,
   shouldExecuteStage,
+  hasUncommittedChanges,
   type ModelUsageMap,
   emptyModelUsageMap,
 } from '../core';
@@ -14,6 +15,7 @@ import {
 } from '../github';
 import {
   getPlanFilePath,
+  runCommitAgent,
   runPullRequestAgent,
 } from '../agents';
 import type { WorkflowConfig } from './workflowLifecycle';
@@ -22,10 +24,17 @@ import type { WorkflowConfig } from './workflowLifecycle';
  * Executes the PR phase: create pull request via the /pull_request skill.
  */
 export async function executePRPhase(config: WorkflowConfig): Promise<{ costUsd: number; modelUsage: ModelUsageMap }> {
-  const { recoveryState, issueNumber, issue, ctx, worktreePath, logsDir, adwId, branchName } = config;
+  const { recoveryState, issueNumber, issue, issueType, ctx, worktreePath, logsDir, adwId, branchName } = config;
 
   let costUsd = 0;
   let modelUsage = emptyModelUsageMap();
+
+  // Safety net: commit any uncommitted changes before PR creation
+  if (hasUncommittedChanges(worktreePath)) {
+    log('Uncommitted changes detected, committing before PR creation...', 'info');
+    await runCommitAgent('pre-pr-commit', issueType, JSON.stringify(issue), logsDir, undefined, worktreePath);
+    log('Pre-PR commit completed', 'success');
+  }
 
   if (shouldExecuteStage('pr_created', recoveryState)) {
     postWorkflowComment(issueNumber, 'pr_creating', ctx);

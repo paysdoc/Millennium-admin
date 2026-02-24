@@ -105,6 +105,42 @@ describe('cwd propagation', () => {
         })
       );
     });
+
+    it('individually quotes each element when args is a string array', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/command', ['arg1', 'arg2', 'arg3'], 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/command 'arg1' 'arg2' 'arg3'");
+    });
+
+    it('escapes single quotes within array elements', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/command', ["it's a test", 'normal'], 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/command 'it'\\''s a test' 'normal'");
+    });
+
+    it('produces correct prompt format with a single string arg', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/test', 'my argument', 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/test 'my argument'");
+    });
   });
 
   describe('runTestAgent', () => {

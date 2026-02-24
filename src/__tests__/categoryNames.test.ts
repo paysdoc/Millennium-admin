@@ -5,7 +5,7 @@ import type { CategoryKey } from '../types/character'
 const mockSelect = vi.fn()
 const mockFrom = vi.fn(() => ({ select: mockSelect }))
 vi.mock('../lib/supabase', () => ({
-  getSupabaseClient: () => ({ from: mockFrom }),
+  getSupabaseServiceClient: () => ({ from: mockFrom }),
 }))
 
 describe('fetchCategoryNames', () => {

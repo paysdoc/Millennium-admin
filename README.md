@@ -289,4 +289,15 @@ If you need to rollback a production deployment:
 - Check variable names match exactly (case-sensitive)
 - Ensure `NEXT_PUBLIC_` prefix is used for client-side variables
 
+### Secrets Management
+
+Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments.
+
+**GitHub Secrets** only stores Vercel access credentials:
+- `VERCEL_TOKEN` — API token for Vercel CLI
+- `VERCEL_ORG_ID` — Vercel organization ID
+- `VERCEL_PROJECT_ID` — Vercel project ID
+
+Both the deploy workflow and the sync workflow use `vercel env pull` to fetch environment variables at runtime, eliminating credential duplication.
+
 

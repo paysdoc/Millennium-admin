@@ -146,6 +146,13 @@ export const anonymizeRecord = (
 }
 
 /**
+ * Returns the last 4 characters of a secret for safe CI log output.
+ * Returns "null" when the value is undefined or empty.
+ */
+const maskSecret = (value: string | undefined): string =>
+  value ? `...${value.slice(-4)}` : 'null'
+
+/**
  * Validates and returns environment configuration.
  */
 const getEnvironment = (): SyncEnvironment => {
@@ -165,6 +172,12 @@ const getEnvironment = (): SyncEnvironment => {
       `Missing required environment variables: ${missing.join(', ')}`
     )
   }
+
+  console.log('Credential check (last 4 chars):')
+  console.log(`  SUPABASE_URL: ${maskSecret(productionUrl)}`)
+  console.log(`  SUPABASE_SERVICE_KEY: ${maskSecret(productionKey)}`)
+  console.log(`  SUPABASE_URL_STAGING: ${maskSecret(stagingUrl)}`)
+  console.log(`  SUPABASE_SERVICE_KEY_STAGING: ${maskSecret(stagingKey)}`)
 
   return {
     productionUrl: productionUrl!,
