@@ -7,6 +7,10 @@ on:
   # Manual trigger for on-demand syncs
   workflow_dispatch:
 
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
 jobs:
   sync:
     name: Sync Production to Staging
@@ -24,15 +28,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
+
+      - name: Pull Vercel environment variables
+        run: |
+          vercel env pull .env.production --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel env pull .env.preview --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Run sync script
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SUPABASE_URL_STAGING: ${{ secrets.SUPABASE_URL_STAGING }}
-          SUPABASE_KEY_STAGING: ${{ secrets.SUPABASE_KEY_STAGING }}
-          SUPABASE_SERVICE_KEY_STAGING: ${{ secrets.SUPABASE_SERVICE_KEY_STAGING }}
-        run: npm run sync:data
+        run: |
+          # Source production env and capture Supabase credentials
+          set -a && source .env.production && set +a
+          PROD_URL="${SUPABASE_URL}"
+          PROD_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
+
+          # Source preview env and capture preview credentials
+          set -a && source .env.preview && set +a
+          PREVIEW_URL="${SUPABASE_URL}"
+          PREVIEW_SERVICE_KEY="${SUPABASE_SERVICE_KEY}"
+
+          # Export with correct names for sync script
+          export SUPABASE_URL="${PROD_URL}"
+          export SUPABASE_SERVICE_KEY="${PROD_SERVICE_KEY}"
+          export SUPABASE_URL_STAGING="${PREVIEW_URL}"
+          export SUPABASE_SERVICE_KEY_STAGING="${PREVIEW_SERVICE_KEY}"
+
+          # Log last 4 chars of each credential for debugging ("null" if empty)
+          echo "SUPABASE_URL tail: $([ -n "$SUPABASE_URL" ] && printf '%s' "${SUPABASE_URL: -4}" || printf 'null')"
+          echo "SUPABASE_SERVICE_KEY tail: $([ -n "$SUPABASE_SERVICE_KEY" ] && printf '%s' "${SUPABASE_SERVICE_KEY: -4}" || printf 'null')"
+          echo "SUPABASE_URL_STAGING tail: $([ -n "$SUPABASE_URL_STAGING" ] && printf '%s' "${SUPABASE_URL_STAGING: -4}" || printf 'null')"
+          echo "SUPABASE_SERVICE_KEY_STAGING tail: $([ -n "$SUPABASE_SERVICE_KEY_STAGING" ] && printf '%s' "${SUPABASE_SERVICE_KEY_STAGING: -4}" || printf 'null')"
+
+          npm run sync:data
 
       - name: Create issue on failure
         if: failure()

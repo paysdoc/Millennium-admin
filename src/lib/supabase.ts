@@ -41,7 +41,11 @@ export function getSupabaseClient(): SupabaseClient {
     throw new Error(`Missing Supabase environment variables (${missing.join(', ')})`)
   }
 
-  supabaseClient = createClient(supabaseUrl, supabaseKey)
+  supabaseClient = createClient(supabaseUrl, supabaseKey, {
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+    },
+  })
   return supabaseClient
 }
 

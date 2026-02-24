@@ -1,4 +1,4 @@
-import { getSupabaseClient, getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
+import { getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
 import { handleDatabaseError } from './errors'
 import {
@@ -15,7 +15,7 @@ import {
  * Maps database rows to the application Character interface.
  */
 export async function fetchAllCharacters(): Promise<Character[]> {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseServiceClient()
 
   try {
     const { data, error } = await supabase
@@ -48,7 +48,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
  * Returns null if the character is not found.
  */
 export async function fetchCharacterById(id: string): Promise<Character | null> {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseServiceClient()
 
   try {
     const { data, error } = await supabase
