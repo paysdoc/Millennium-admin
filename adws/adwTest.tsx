@@ -21,11 +21,14 @@
 
 import {
   log,
+  setLogAdwId,
   generateAdwId,
   ensureLogsDirectory,
   AgentStateManager,
   AgentState,
   MAX_TEST_RETRY_ATTEMPTS,
+  mergeModelUsageMaps,
+  persistTokenCounts,
 } from './core';
 import { runUnitTestsWithRetry, runE2ETestsWithRetry } from './agents';
 
@@ -60,6 +63,7 @@ function parseArguments(args: string[]): { adwId: string; cwd: string | null } {
   }
 
   const adwId = args[0] || generateAdwId();
+  setLogAdwId(adwId);
   return { adwId, cwd };
 }
 
@@ -121,6 +125,7 @@ async function main(): Promise<void> {
   try {
     let totalCostUsd = 0;
     let totalRetries = 0;
+    let totalModelUsage = {};
 
     log('Phase 1: Unit Tests', 'info');
     AgentStateManager.appendLog(orchestratorStatePath, 'Starting Phase 1: Unit Tests');
@@ -132,6 +137,8 @@ async function main(): Promise<void> {
     });
     totalCostUsd += unitTestsResult.costUsd;
     totalRetries += unitTestsResult.totalRetries;
+    totalModelUsage = mergeModelUsageMaps(totalModelUsage, unitTestsResult.modelUsage);
+    persistTokenCounts(orchestratorStatePath, totalCostUsd, totalModelUsage);
 
     let e2eTestsPassed = true;
     if (unitTestsResult.passed) {
@@ -145,6 +152,8 @@ async function main(): Promise<void> {
       });
       totalCostUsd += e2eTestsResult.costUsd;
       totalRetries += e2eTestsResult.totalRetries;
+      totalModelUsage = mergeModelUsageMaps(totalModelUsage, e2eTestsResult.modelUsage);
+      persistTokenCounts(orchestratorStatePath, totalCostUsd, totalModelUsage);
       e2eTestsPassed = e2eTestsResult.passed;
     } else {
       log('Skipping E2E tests due to unit test failures', 'info');

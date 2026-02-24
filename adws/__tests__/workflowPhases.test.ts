@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   initializeWorkflow,
   executePlanPhase,
   executeBuildPhase,
+  executeTestPhase,
   executePRPhase,
+  executeReviewPhase,
   completeWorkflow,
   handleWorkflowError,
   initializePRReviewWorkflow,
@@ -18,30 +21,39 @@ import {
 } from '../workflowPhases';
 import { RecoveryState, GitHubIssue, PRDetails, PRReviewComment } from '../core/dataTypes';
 import { WorkflowContext, PRReviewWorkflowContext } from '../github/workflowComments';
+import { extractBranchNameFromComment } from '../github/workflowCommentsBase';
 
 vi.mock('fs');
 
-vi.mock('../core', () => ({
-  log: vi.fn(),
-  ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
-  commitPrefixMap: {
-    '/feature': 'feat:',
-    '/bug': 'fix:',
-    '/chore': 'chore:',
-    '/pr_review': 'review:',
-  },
-  AgentStateManager: {
-    writeState: vi.fn(),
-    appendLog: vi.fn(),
-    initializeState: vi.fn().mockReturnValue('/mock/state/path'),
-    createExecutionState: vi.fn().mockReturnValue({ status: 'running', startedAt: '2024-01-01' }),
-    completeExecution: vi.fn().mockReturnValue({ status: 'completed', startedAt: '2024-01-01' }),
-  },
-  shouldExecuteStage: vi.fn().mockReturnValue(true),
-  hasUncommittedChanges: vi.fn().mockReturnValue(false),
-  getNextStage: vi.fn().mockReturnValue('classified'),
-  MAX_TEST_RETRY_ATTEMPTS: 5,
-}));
+vi.mock('../core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core')>();
+  return {
+    ...actual,
+    log: vi.fn(),
+    ensureLogsDirectory: vi.fn().mockReturnValue('/mock/logs'),
+    generateAdwId: vi.fn().mockReturnValue('test-issue-abc123'),
+    commitPrefixMap: {
+      '/feature': 'feat:',
+      '/bug': 'fix:',
+      '/chore': 'chore:',
+      '/pr_review': 'review:',
+    },
+    AgentStateManager: {
+      writeState: vi.fn(),
+      appendLog: vi.fn(),
+      initializeState: vi.fn().mockReturnValue('/mock/state/path'),
+      createExecutionState: vi.fn().mockReturnValue({ status: 'running', startedAt: '2024-01-01' }),
+      completeExecution: vi.fn().mockReturnValue({ status: 'completed', startedAt: '2024-01-01' }),
+    },
+    shouldExecuteStage: vi.fn().mockReturnValue(true),
+    hasUncommittedChanges: vi.fn().mockReturnValue(false),
+    getNextStage: vi.fn().mockReturnValue('classified'),
+    MAX_TEST_RETRY_ATTEMPTS: 5,
+    MAX_REVIEW_RETRY_ATTEMPTS: 3,
+    MAX_TOKEN_CONTINUATIONS: 3,
+    allocateRandomPort: vi.fn().mockResolvedValue(12345),
+  };
+});
 
 vi.mock('../github', () => ({
   fetchGitHubIssue: vi.fn().mockResolvedValue({
@@ -73,8 +85,6 @@ vi.mock('../github', () => ({
   ]),
   postWorkflowComment: vi.fn(),
   postPRWorkflowComment: vi.fn(),
-  createFeatureBranch: vi.fn().mockReturnValue('feature/issue-1-test'),
-  commitChanges: vi.fn(),
   pushBranch: vi.fn(),
   createPullRequest: vi.fn().mockReturnValue('https://github.com/test/pr/1'),
   detectRecoveryState: vi.fn().mockReturnValue({
@@ -86,12 +96,12 @@ vi.mock('../github', () => ({
     canResume: false,
   }),
   getDefaultBranch: vi.fn().mockReturnValue('main'),
-  generateBranchName: vi.fn().mockReturnValue('feature/issue-1-test'),
+  checkoutDefaultBranch: vi.fn().mockReturnValue('main'),
   ensureWorktree: vi.fn().mockReturnValue('/mock/worktree'),
   getWorktreeForBranch: vi.fn().mockReturnValue(null),
-  checkoutDefaultBranch: vi.fn(),
   mergeLatestFromDefaultBranch: vi.fn(),
   copyEnvToWorktree: vi.fn(),
+  findWorktreeForIssue: vi.fn().mockReturnValue(null),
   inferIssueTypeFromBranch: vi.fn().mockReturnValue('/feature'),
 }));
 
@@ -101,8 +111,9 @@ vi.mock('../agents', () => ({
     output: 'Plan created',
     totalCostUsd: 0.5,
   }),
-  getPlanFilePath: vi.fn().mockReturnValue('/mock/plan.md'),
+  getPlanFilePath: vi.fn().mockReturnValue('specs/issue-1-adw-test123-sdlc_planner-test.md'),
   planFileExists: vi.fn().mockReturnValue(false),
+  readPlanFile: vi.fn().mockReturnValue(null),
   runBuildAgent: vi.fn().mockResolvedValue({
     success: true,
     output: 'Build completed',
@@ -118,11 +129,29 @@ vi.mock('../agents', () => ({
     output: 'PR Review Build completed',
     totalCostUsd: 0.8,
   }),
+  runGenerateBranchNameAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'feature/issue-1-test',
+    branchName: 'feature/issue-1-test',
+  }),
+  runCommitAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'plan-orchestrator: feat: add implementation plan',
+    commitMessage: 'plan-orchestrator: feat: add implementation plan',
+  }),
   runUnitTestsWithRetry: vi.fn(),
   runE2ETestsWithRetry: vi.fn(),
+  runReviewWithRetry: vi.fn(),
+  runPullRequestAgent: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'https://github.com/test/pr/1',
+    prUrl: 'https://github.com/test/pr/1',
+    totalCostUsd: 0.1,
+    modelUsage: {},
+  }),
 }));
 
-vi.mock('../triggers/issueClassifier', () => ({
+vi.mock('../core/issueClassifier', () => ({
   classifyGitHubIssue: vi.fn().mockResolvedValue({
     issueType: '/feature',
     success: true,
@@ -130,26 +159,26 @@ vi.mock('../triggers/issueClassifier', () => ({
 }));
 
 // Import mocked modules for assertions
-import { shouldExecuteStage, hasUncommittedChanges, getNextStage, AgentStateManager } from '../core';
+import { shouldExecuteStage, hasUncommittedChanges, getNextStage, AgentStateManager, generateAdwId } from '../core';
 import {
   fetchGitHubIssue,
   fetchPRDetails,
   getUnaddressedComments,
   postWorkflowComment,
   postPRWorkflowComment,
-  createFeatureBranch,
-  commitChanges,
   pushBranch,
   createPullRequest,
   detectRecoveryState,
-  getWorktreeForBranch,
-  ensureWorktree,
   checkoutDefaultBranch,
+  ensureWorktree,
+  getWorktreeForBranch,
   mergeLatestFromDefaultBranch,
+  copyEnvToWorktree,
+  findWorktreeForIssue,
   inferIssueTypeFromBranch,
 } from '../github';
-import { runPlanAgent, getPlanFilePath, planFileExists, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runUnitTestsWithRetry, runE2ETestsWithRetry } from '../agents';
-import { classifyGitHubIssue } from '../triggers/issueClassifier';
+import { runPlanAgent, getPlanFilePath, planFileExists, readPlanFile, runBuildAgent, runPrReviewPlanAgent, runPrReviewBuildAgent, runGenerateBranchNameAgent, runCommitAgent, runUnitTestsWithRetry, runE2ETestsWithRetry, runReviewWithRetry, runPullRequestAgent } from '../agents';
+import { classifyGitHubIssue } from '../core/issueClassifier';
 
 function createRecoveryState(overrides: Partial<RecoveryState> = {}): RecoveryState {
   return {
@@ -193,6 +222,8 @@ function createWorkflowConfig(overrides: Partial<WorkflowConfig> = {}): Workflow
     orchestratorName: 'plan-orchestrator',
     recoveryState: createRecoveryState(),
     ctx: { issueNumber: 1, adwId: 'test-adw-id' } as WorkflowContext,
+    branchName: 'feature/issue-1-test',
+    applicationUrl: 'http://localhost:12345',
     ...overrides,
   };
 }
@@ -202,23 +233,27 @@ describe('initializeWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('calls checkoutDefaultBranch before ensureWorktree when worktree does not exist', async () => {
+  it('uses branch name agent, checkoutDefaultBranch, and ensureWorktree with baseBranch when no cwd provided', async () => {
     vi.mocked(getWorktreeForBranch).mockReturnValue(null);
-
     const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
     expect(checkoutDefaultBranch).toHaveBeenCalled();
     expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-1-test', 'main');
     expect(config.worktreePath).toBe('/mock/worktree');
+    expect(config.branchName).toBe('feature/issue-1-test');
   });
 
-  it('merges latest from default branch when worktree already exists', async () => {
+  it('reuses existing worktree and merges latest when worktree already exists', async () => {
     vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
-
     const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
 
-    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(getWorktreeForBranch).toHaveBeenCalledWith('feature/issue-1-test');
     expect(mergeLatestFromDefaultBranch).toHaveBeenCalledWith('main', '/existing/worktree');
+    expect(copyEnvToWorktree).toHaveBeenCalledWith('/existing/worktree');
+    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
     expect(config.worktreePath).toBe('/existing/worktree');
   });
 
@@ -280,6 +315,94 @@ describe('initializeWorkflow', () => {
 
     expect(hasUncommittedChanges).toHaveBeenCalled();
   });
+
+  it('generates ADW ID from issue title when adwId is null', async () => {
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(detectRecoveryState).toHaveBeenCalled();
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(config.adwId).toBe('test-issue-abc123');
+
+    // Verify detectRecoveryState was called before generateAdwId
+    const recoveryCallOrder = vi.mocked(detectRecoveryState).mock.invocationCallOrder[0];
+    const generateCallOrder = vi.mocked(generateAdwId).mock.invocationCallOrder[0];
+    expect(recoveryCallOrder).toBeLessThan(generateCallOrder);
+  });
+
+  it('reuses recovered ADW ID and branch name when recovery state has them', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState({
+      canResume: true,
+      lastCompletedStage: 'branch_created',
+      adwId: 'adw-recovered-id',
+      branchName: 'bug-issue-1-adw-recovered-id-fix-login',
+    }));
+    vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).not.toHaveBeenCalled();
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(config.adwId).toBe('adw-recovered-id');
+    expect(config.branchName).toBe('bug-issue-1-adw-recovered-id-fix-login');
+  });
+
+  it('generates new ADW ID and branch when no recovery state exists', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState());
+    vi.mocked(getWorktreeForBranch).mockReturnValue(null);
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(config.adwId).toBe('test-issue-abc123');
+    expect(config.branchName).toBe('feature/issue-1-test');
+  });
+
+  it('uses recovered branch name but generates new ADW ID when only branch is recovered', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState({
+      canResume: true,
+      lastCompletedStage: 'branch_created',
+      branchName: 'bug-issue-1-adw-old-id-fix-login',
+    }));
+    vi.mocked(getWorktreeForBranch).mockReturnValue('/existing/worktree');
+
+    const config = await initializeWorkflow(1, null, 'plan-orchestrator');
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test issue');
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(config.branchName).toBe('bug-issue-1-adw-old-id-fix-login');
+  });
+
+  it('reuses existing worktree found by issue pattern and skips branch name generation', async () => {
+    vi.mocked(findWorktreeForIssue).mockReturnValue({
+      worktreePath: '/existing/issue-worktree',
+      branchName: 'feature/issue-1-original-name',
+    });
+
+    const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
+
+    expect(runGenerateBranchNameAgent).not.toHaveBeenCalled();
+    expect(getWorktreeForBranch).not.toHaveBeenCalled();
+    expect(ensureWorktree).not.toHaveBeenCalled();
+    expect(checkoutDefaultBranch).not.toHaveBeenCalled();
+    expect(mergeLatestFromDefaultBranch).toHaveBeenCalledWith('main', '/existing/issue-worktree');
+    expect(copyEnvToWorktree).toHaveBeenCalledWith('/existing/issue-worktree');
+    expect(config.worktreePath).toBe('/existing/issue-worktree');
+    expect(config.branchName).toBe('feature/issue-1-original-name');
+  });
+
+  it('falls back to branch name generation when findWorktreeForIssue returns null', async () => {
+    vi.mocked(detectRecoveryState).mockReturnValue(createRecoveryState());
+    vi.mocked(findWorktreeForIssue).mockReturnValue(null);
+    vi.mocked(getWorktreeForBranch).mockReturnValue(null);
+
+    const config = await initializeWorkflow(1, 'test-id', 'plan-orchestrator');
+
+    expect(findWorktreeForIssue).toHaveBeenCalledWith('/feature', 1);
+    expect(runGenerateBranchNameAgent).toHaveBeenCalled();
+    expect(ensureWorktree).toHaveBeenCalled();
+    expect(config.branchName).toBe('feature/issue-1-test');
+  });
 });
 
 describe('executePlanPhase', () => {
@@ -295,9 +418,15 @@ describe('executePlanPhase', () => {
     const result = await executePlanPhase(config);
 
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'classified', expect.anything());
-    expect(createFeatureBranch).toHaveBeenCalled();
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'branch_created', expect.anything());
-    expect(runPlanAgent).toHaveBeenCalled();
+    expect(runPlanAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      '/feature',
+      expect.anything(),
+      '/mock/worktree',
+      'test-adw-id',
+    );
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'plan_created', expect.anything());
     expect(result.costUsd).toBe(0.5);
   });
@@ -315,6 +444,34 @@ describe('executePlanPhase', () => {
 
     expect(runPlanAgent).not.toHaveBeenCalled();
     expect(result.costUsd).toBe(0);
+  });
+
+  it('passes worktreePath to planFileExists', async () => {
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(planFileExists).toHaveBeenCalledWith(1, '/mock/worktree');
+  });
+
+  it('sets planOutput from plan file content when file is readable', async () => {
+    vi.mocked(readPlanFile).mockReturnValue('# Plan\n\n## Description\nDetailed plan content');
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(readPlanFile).toHaveBeenCalledWith(1, '/mock/worktree');
+    expect(config.ctx.planOutput).toBe('# Plan\n\n## Description\nDetailed plan content');
+  });
+
+  it('falls back to agent output when plan file cannot be read', async () => {
+    vi.mocked(readPlanFile).mockReturnValue(null);
+    const config = createWorkflowConfig();
+
+    await executePlanPhase(config);
+
+    expect(readPlanFile).toHaveBeenCalledWith(1, '/mock/worktree');
+    expect(config.ctx.planOutput).toBe('Plan created');
   });
 
   it('throws when plan agent fails', async () => {
@@ -341,7 +498,10 @@ describe('executeBuildPhase', () => {
 
     const result = await executeBuildPhase(config);
 
-    expect(fs.readFileSync).toHaveBeenCalledWith('/mock/plan.md', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/mock/worktree', 'specs/issue-1-adw-test123-sdlc_planner-test.md'),
+      'utf-8'
+    );
     expect(runBuildAgent).toHaveBeenCalled();
     expect(result.costUsd).toBe(1.0);
   });
@@ -355,6 +515,21 @@ describe('executeBuildPhase', () => {
     await expect(executeBuildPhase(config)).rejects.toThrow('Cannot read plan file');
   });
 
+  it('passes worktreePath as cwd to runBuildAgent', async () => {
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeBuildPhase(config);
+
+    expect(runBuildAgent).toHaveBeenCalledWith(
+      config.issue,
+      '/mock/logs',
+      '# Plan content',
+      expect.any(Function),
+      '/mock/state/path',
+      '/custom/worktree'
+    );
+  });
+
   it('throws when build agent fails', async () => {
     vi.mocked(runBuildAgent).mockResolvedValue({
       success: false,
@@ -365,6 +540,82 @@ describe('executeBuildPhase', () => {
 
     await expect(executeBuildPhase(config)).rejects.toThrow('Build Agent failed');
   });
+
+  it('handles token limit recovery and continues with a new agent', async () => {
+    vi.mocked(runBuildAgent)
+      .mockResolvedValueOnce({
+        success: true,
+        output: 'Partial work done',
+        tokenLimitExceeded: true,
+        totalCostUsd: 0.5,
+        tokenUsage: {
+          totalInputTokens: 100000,
+          totalOutputTokens: 60000,
+          totalCacheCreationTokens: 20000,
+          totalTokens: 180000,
+          maxTokens: 200000,
+          thresholdPercent: 0.9,
+        },
+        modelUsage: {},
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        output: 'Build completed',
+        totalCostUsd: 0.3,
+        modelUsage: {},
+      });
+    const config = createWorkflowConfig();
+
+    const result = await executeBuildPhase(config);
+
+    expect(runBuildAgent).toHaveBeenCalledTimes(2);
+    expect(result.costUsd).toBeCloseTo(0.8);
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'token_limit_recovery', expect.anything());
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'implemented', expect.anything());
+  });
+});
+
+describe('executeTestPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes worktreePath as cwd to runUnitTestsWithRetry', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeTestPhase(config);
+
+    expect(runUnitTestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/custom/worktree',
+    }));
+  });
+
+  it('passes worktreePath as cwd to runE2ETestsWithRetry', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    const config = createWorkflowConfig({ worktreePath: '/custom/worktree' });
+
+    await executeTestPhase(config);
+
+    expect(runE2ETestsWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/custom/worktree',
+    }));
+  });
+
+  it('returns test results and accumulated cost', async () => {
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 1, costUsd: 0.5, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 2, costUsd: 0.3, modelUsage: {} });
+    const config = createWorkflowConfig();
+
+    const result = await executeTestPhase(config);
+
+    expect(result.unitTestsPassed).toBe(true);
+    expect(result.e2eTestsPassed).toBe(true);
+    expect(result.costUsd).toBeCloseTo(0.8);
+    expect(result.totalRetries).toBe(3);
+  });
 });
 
 describe('executePRPhase', () => {
@@ -372,26 +623,87 @@ describe('executePRPhase', () => {
     vi.clearAllMocks();
   });
 
-  it('creates PR when stage should execute', () => {
+  it('creates PR when stage should execute', async () => {
     vi.mocked(shouldExecuteStage).mockReturnValue(true);
     const config = createWorkflowConfig();
 
-    executePRPhase(config);
+    const result = await executePRPhase(config);
 
-    expect(createPullRequest).toHaveBeenCalledWith(
-      config.issue, '', '', 'main', '/mock/worktree'
+    expect(runPullRequestAgent).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      config.adwId,
+      config.logsDir,
+      undefined,
+      config.worktreePath,
     );
     expect(config.ctx.prUrl).toBe('https://github.com/test/pr/1');
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'pr_created', expect.anything());
+    expect(result.costUsd).toBeCloseTo(0.1);
   });
 
-  it('skips PR when already completed', () => {
+  it('skips PR when already completed', async () => {
     vi.mocked(shouldExecuteStage).mockReturnValue(false);
     const config = createWorkflowConfig();
 
-    executePRPhase(config);
+    const result = await executePRPhase(config);
 
-    expect(createPullRequest).not.toHaveBeenCalled();
+    expect(runPullRequestAgent).not.toHaveBeenCalled();
+    expect(result.costUsd).toBe(0);
+  });
+
+  it('commits uncommitted changes before creating PR', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(true);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(true);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(hasUncommittedChanges).toHaveBeenCalledWith('/mock/worktree');
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pre-pr-commit',
+      '/feature',
+      JSON.stringify(config.issue),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree',
+    );
+
+    // Verify commit happens before PR creation
+    const commitOrder = vi.mocked(runCommitAgent).mock.invocationCallOrder[0];
+    const prOrder = vi.mocked(runPullRequestAgent).mock.invocationCallOrder[0];
+    expect(commitOrder).toBeLessThan(prOrder);
+  });
+
+  it('skips commit when no uncommitted changes', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(true);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(false);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(hasUncommittedChanges).toHaveBeenCalledWith('/mock/worktree');
+    expect(runCommitAgent).not.toHaveBeenCalled();
+    expect(runPullRequestAgent).toHaveBeenCalled();
+  });
+
+  it('commits before PR even when PR stage is skipped', async () => {
+    vi.mocked(shouldExecuteStage).mockReturnValue(false);
+    vi.mocked(hasUncommittedChanges).mockReturnValue(true);
+    const config = createWorkflowConfig();
+
+    await executePRPhase(config);
+
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pre-pr-commit',
+      '/feature',
+      JSON.stringify(config.issue),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree',
+    );
+    expect(runPullRequestAgent).not.toHaveBeenCalled();
   });
 });
 
@@ -400,10 +712,10 @@ describe('completeWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('writes completion state with metadata and posts completed comment', () => {
+  it('writes completion state with metadata and posts completed comment', async () => {
     const config = createWorkflowConfig();
 
-    completeWorkflow(config, 1.5);
+    await completeWorkflow(config, 1.5);
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),
@@ -416,10 +728,10 @@ describe('completeWorkflow', () => {
     expect(postWorkflowComment).toHaveBeenCalledWith(1, 'completed', config.ctx);
   });
 
-  it('includes additional metadata when provided', () => {
+  it('includes additional metadata when provided', async () => {
     const config = createWorkflowConfig();
 
-    completeWorkflow(config, 2.0, { unitTestsPassed: true });
+    await completeWorkflow(config, 2.0, { unitTestsPassed: true });
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),
@@ -487,6 +799,7 @@ function createPRReviewWorkflowConfig(overrides: Partial<PRReviewWorkflowConfig>
     worktreePath: '/mock/worktree',
     logsDir: '/mock/logs',
     orchestratorStatePath: '/mock/state/path',
+    applicationUrl: 'http://localhost:12345',
     ctx: {
       issueNumber: 10,
       adwId: 'test-adw-id',
@@ -505,10 +818,10 @@ describe('initializePRReviewWorkflow', () => {
     vi.mocked(getUnaddressedComments).mockReturnValue(createMockPRReviewComments());
   });
 
-  it('fetches PR details and returns config', () => {
+  it('fetches PR details and returns config', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
-    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+    const config = await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(fetchPRDetails).toHaveBeenCalledWith(42);
     expect(config.prNumber).toBe(42);
@@ -518,48 +831,48 @@ describe('initializePRReviewWorkflow', () => {
     mockExit.mockRestore();
   });
 
-  it('exits when PR is closed', () => {
+  it('exits when PR is closed', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'CLOSED' }));
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('exits when PR is merged', () => {
+  it('exits when PR is merged', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(fetchPRDetails).mockReturnValue(createMockPRDetails({ state: 'MERGED' }));
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('exits when no unaddressed comments', () => {
+  it('exits when no unaddressed comments', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     vi.mocked(getUnaddressedComments).mockReturnValue([]);
 
-    initializePRReviewWorkflow(42, 'test-adw-id');
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(mockExit).toHaveBeenCalledWith(0);
 
     mockExit.mockRestore();
   });
 
-  it('sets up worktree via ensureWorktree with head branch', () => {
-    const config = initializePRReviewWorkflow(42, 'test-adw-id');
+  it('sets up worktree via ensureWorktree with head branch', async () => {
+    const config = await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(ensureWorktree).toHaveBeenCalledWith('feature/issue-10-test');
     expect(config.worktreePath).toBe('/mock/worktree');
   });
 
-  it('initializes orchestrator state with correct metadata', () => {
-    initializePRReviewWorkflow(42, 'test-adw-id');
+  it('initializes orchestrator state with correct metadata', async () => {
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(AgentStateManager.initializeState).toHaveBeenCalledWith('test-adw-id', 'pr-review-orchestrator');
     expect(AgentStateManager.writeState).toHaveBeenCalledWith(
@@ -571,13 +884,20 @@ describe('initializePRReviewWorkflow', () => {
     );
   });
 
-  it('posts pr_review_starting comment', () => {
-    initializePRReviewWorkflow(42, 'test-adw-id');
+  it('posts pr_review_starting comment', async () => {
+    await initializePRReviewWorkflow(42, 'test-adw-id');
 
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_starting', expect.objectContaining({
       prNumber: 42,
       reviewComments: 1,
     }));
+  });
+
+  it('generates ADW ID from PR title when adwId is null', async () => {
+    const config = await initializePRReviewWorkflow(42, null);
+
+    expect(generateAdwId).toHaveBeenCalledWith('Test PR');
+    expect(config.adwId).toBe('test-issue-abc123');
   });
 });
 
@@ -597,7 +917,10 @@ describe('executePRReviewPlanPhase', () => {
 
     const result = await executePRReviewPlanPhase(config);
 
-    expect(fs.readFileSync).toHaveBeenCalledWith('/mock/plan.md', 'utf-8');
+    expect(fs.readFileSync).toHaveBeenCalledWith(
+      path.join('/mock/worktree', 'specs/issue-1-adw-test123-sdlc_planner-test.md'),
+      'utf-8'
+    );
     expect(runPrReviewPlanAgent).toHaveBeenCalledWith(
       config.prDetails,
       config.unaddressedComments,
@@ -719,8 +1042,8 @@ describe('executePRReviewTestPhase', () => {
   });
 
   it('calls both unit and E2E test retry functions', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -736,8 +1059,8 @@ describe('executePRReviewTestPhase', () => {
   });
 
   it('posts test_passed comment on success', async () => {
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -749,9 +1072,9 @@ describe('executePRReviewTestPhase', () => {
     let capturedCallback: ((attempt: number, maxAttempts: number) => void) | undefined;
     vi.mocked(runUnitTestsWithRetry).mockImplementation(async (opts) => {
       capturedCallback = opts.onTestFailed;
-      return { passed: true, failedTests: [], totalRetries: 0, costUsd: 0 };
+      return { passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} };
     });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -765,7 +1088,7 @@ describe('executePRReviewTestPhase', () => {
 
   it('exits with code 1 on unit test max retry failure', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['test1.ts'], totalRetries: 5, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['test1.ts'], totalRetries: 5, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -778,8 +1101,8 @@ describe('executePRReviewTestPhase', () => {
 
   it('exits with code 1 on E2E test max retry failure', async () => {
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0 });
-    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['e2e-test1.ts'], totalRetries: 5, costUsd: 0 });
+    vi.mocked(runUnitTestsWithRetry).mockResolvedValue({ passed: true, failedTests: [], totalRetries: 0, costUsd: 0, modelUsage: {} });
+    vi.mocked(runE2ETestsWithRetry).mockResolvedValue({ passed: false, failedTests: ['e2e-test1.ts'], totalRetries: 5, costUsd: 0, modelUsage: {} });
     const config = createPRReviewWorkflowConfig();
 
     await executePRReviewTestPhase(config);
@@ -796,39 +1119,37 @@ describe('completePRReviewWorkflow', () => {
     vi.clearAllMocks();
   });
 
-  it('commits with correct prefix from inferIssueTypeFromBranch', () => {
+  it('calls runCommitAgent with inferred issue type', async () => {
     vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/feature');
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(inferIssueTypeFromBranch).toHaveBeenCalledWith('feature/issue-10-test');
-    expect(commitChanges).toHaveBeenCalledWith('feat: address PR review comments for #10', '/mock/worktree');
+    expect(runCommitAgent).toHaveBeenCalledWith(
+      'pr-review-orchestrator',
+      '/feature',
+      expect.any(String),
+      '/mock/logs',
+      undefined,
+      '/mock/worktree'
+    );
   });
 
-  it('builds commit message without issue number when missing', () => {
-    vi.mocked(inferIssueTypeFromBranch).mockReturnValue('/chore');
-    const config = createPRReviewWorkflowConfig({ issueNumber: 0 });
-
-    completePRReviewWorkflow(config);
-
-    expect(commitChanges).toHaveBeenCalledWith('chore: address PR review comments', '/mock/worktree');
-  });
-
-  it('pushes branch and posts completion comments', () => {
+  it('pushes branch and posts completion comments', async () => {
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(pushBranch).toHaveBeenCalledWith('feature/issue-10-test', '/mock/worktree');
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_pushed', expect.anything());
     expect(postPRWorkflowComment).toHaveBeenCalledWith(42, 'pr_review_completed', expect.anything());
   });
 
-  it('writes successful execution state', () => {
+  it('writes successful execution state', async () => {
     const config = createPRReviewWorkflowConfig();
 
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
 
     expect(AgentStateManager.writeState).toHaveBeenCalledWith('/mock/state/path', {
       execution: expect.objectContaining({ status: 'completed' }),
@@ -861,5 +1182,132 @@ describe('handlePRReviewWorkflowError', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
 
     mockExit.mockRestore();
+  });
+});
+
+// ============================================================================
+// extractBranchNameFromComment Tests
+// ============================================================================
+
+describe('extractBranchNameFromComment', () => {
+  it('extracts feat-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `feat-issue-123-adw-abc123-add-user-auth`';
+    expect(extractBranchNameFromComment(comment)).toBe('feat-issue-123-adw-abc123-add-user-auth');
+  });
+
+  it('extracts bug-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `bug-issue-456-adw-xyz789-fix-login-error`';
+    expect(extractBranchNameFromComment(comment)).toBe('bug-issue-456-adw-xyz789-fix-login-error');
+  });
+
+  it('extracts chore-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `chore-issue-789-adw-def456-update-deps`';
+    expect(extractBranchNameFromComment(comment)).toBe('chore-issue-789-adw-def456-update-deps');
+  });
+
+  it('extracts test-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `test-issue-323-adw-ghi789-fix-failing-tests`';
+    expect(extractBranchNameFromComment(comment)).toBe('test-issue-323-adw-ghi789-fix-failing-tests');
+  });
+
+  it('extracts review-prefixed branch name from comment body', () => {
+    const comment = 'Branch: `review-issue-100-adw-jkl012-address-comments`';
+    expect(extractBranchNameFromComment(comment)).toBe('review-issue-100-adw-jkl012-address-comments');
+  });
+
+  it('returns null for non-matching patterns', () => {
+    expect(extractBranchNameFromComment('No branch here')).toBeNull();
+    expect(extractBranchNameFromComment('`feature/issue-123-old-format`')).toBeNull();
+    expect(extractBranchNameFromComment('`bugfix/issue-456-old-format`')).toBeNull();
+  });
+});
+
+// ============================================================================
+// executeReviewPhase Tests
+// ============================================================================
+
+describe('executeReviewPhase', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls runReviewWithRetry with correct config', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 1.5,
+      totalRetries: 0,
+      blockerIssues: [],
+      modelUsage: {},
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(runReviewWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      adwId: 'test-adw-id',
+      specFile: 'specs/issue-1-adw-test123-sdlc_planner-test.md',
+      logsDir: '/mock/logs',
+      maxRetries: expect.any(Number),
+      branchName: 'feature/issue-1-test',
+      issueType: '/feature',
+      cwd: '/mock/worktree',
+    }));
+    expect(result.reviewPassed).toBe(true);
+    expect(result.costUsd).toBe(1.5);
+  });
+
+  it('posts review_running and review_passed comments on success', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 1.0,
+      totalRetries: 0,
+      blockerIssues: [],
+      modelUsage: {},
+    });
+    const config = createWorkflowConfig();
+
+    await executeReviewPhase(config);
+
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_running', expect.anything());
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_passed', expect.anything());
+  });
+
+  it('posts review_failed comment when review fails', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: false,
+      costUsd: 3.0,
+      totalRetries: 3,
+      blockerIssues: [{
+        reviewIssueNumber: 1,
+        screenshotPath: '/img/issue.png',
+        issueDescription: 'Button broken',
+        issueResolution: 'Fix button',
+        issueSeverity: 'blocker',
+      }],
+      modelUsage: {},
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(result.reviewPassed).toBe(false);
+    expect(postWorkflowComment).toHaveBeenCalledWith(1, 'review_failed', expect.anything());
+  });
+
+  it('returns cost and pass/fail status', async () => {
+    vi.mocked(runReviewWithRetry).mockResolvedValue({
+      passed: true,
+      costUsd: 2.5,
+      totalRetries: 1,
+      blockerIssues: [],
+      modelUsage: {},
+    });
+    const config = createWorkflowConfig();
+
+    const result = await executeReviewPhase(config);
+
+    expect(result.costUsd).toBe(2.5);
+    expect(result.reviewPassed).toBe(true);
+    expect(result.totalRetries).toBe(1);
   });
 });

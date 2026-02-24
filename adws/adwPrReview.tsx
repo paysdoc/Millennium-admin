@@ -16,7 +16,6 @@
  * - CLAUDE_CODE_PATH: Path to Claude CLI (default: /usr/local/bin/claude)
  */
 
-import { generateAdwId } from './core';
 import {
   initializePRReviewWorkflow,
   executePRReviewPlanPhase,
@@ -40,14 +39,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const adwId = generateAdwId();
-  const config = initializePRReviewWorkflow(prNumber, adwId);
+  const config = await initializePRReviewWorkflow(prNumber, null);
 
   try {
     const { planOutput } = await executePRReviewPlanPhase(config);
     await executePRReviewBuildPhase(config, planOutput);
     await executePRReviewTestPhase(config);
-    completePRReviewWorkflow(config);
+    await completePRReviewWorkflow(config);
   } catch (error) {
     handlePRReviewWorkflowError(config, error);
   }

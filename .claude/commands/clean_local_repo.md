@@ -11,7 +11,7 @@ description: Remove all branches except develop and main
 
 ## Run
 - (`git branch`)
-- <for each branch except main and develop (`git branch -D <branch_name>`) >
+- <for each branch except main and develop (`git branch -D <branchName>`) >
 
 ## Report
 - Output the work you've just done in a concise bullet point list.

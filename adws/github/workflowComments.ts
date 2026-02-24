@@ -6,7 +6,14 @@
 // Base utilities and parsing
 export {
   STAGE_ORDER,
+  ADW_SIGNATURE,
+  ADW_SIGNATURE_PATTERN,
   truncateText,
+  isAdwComment,
+  ACTIONABLE_COMMENT_PATTERN,
+  isActionableComment,
+  extractActionableContent,
+  isAdwRunningForIssue,
   parseWorkflowStageFromComment,
   extractAdwIdFromComment,
   extractBranchNameFromComment,

@@ -1,8 +1,3 @@
----
-name: install
-description: Install dependencies and prime the project for development
---- 
-
 # Install & Prime
 
 ## Read

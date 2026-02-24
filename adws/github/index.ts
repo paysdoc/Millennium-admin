@@ -12,6 +12,8 @@ export {
   commentOnPR,
   fetchPRList,
   commentOnIssue,
+  fetchIssueCommentsRest,
+  deleteIssueComment,
   type RepoInfo,
 } from './githubApi';
 
@@ -28,6 +30,8 @@ export {
   checkoutDefaultBranch,
   inferIssueTypeFromBranch,
   mergeLatestFromDefaultBranch,
+  deleteLocalBranch,
+  deleteRemoteBranch,
 } from './gitOperations';
 
 // Pull Request Creator
@@ -40,7 +44,9 @@ export {
   listWorktrees,
   createWorktree,
   createWorktreeForNewBranch,
+  killProcessesInDirectory,
   removeWorktree,
+  removeWorktreesForIssue,
   getWorktreeForBranch,
   ensureWorktree,
   getMainRepoPath,
@@ -48,7 +54,9 @@ export {
   freeBranchFromMainRepo,
   getWorktreesDir,
   copyEnvToWorktree,
+  findWorktreeForIssue,
   type BranchCheckoutStatus,
+  type WorktreeForIssueResult,
 } from './worktreeOperations';
 
 // PR Comment Detector
@@ -61,6 +69,13 @@ export {
 // Workflow Comments
 export {
   STAGE_ORDER,
+  ADW_SIGNATURE,
+  ADW_SIGNATURE_PATTERN,
+  truncateText,
+  isAdwComment,
+  ACTIONABLE_COMMENT_PATTERN,
+  isActionableComment,
+  isAdwRunningForIssue,
   parseWorkflowStageFromComment,
   extractAdwIdFromComment,
   extractBranchNameFromComment,

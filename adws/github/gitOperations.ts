@@ -65,9 +65,9 @@ export function createFeatureBranch(
 
     if (existingBranches.includes(branchName)) {
       log(`Branch ${branchName} already exists, checking out...`, 'info');
-      execSync(`git checkout ${branchName}`, { stdio: 'pipe', cwd });
+      execSync(`git checkout "${branchName}"`, { stdio: 'pipe', cwd });
     } else {
-      execSync(`git checkout -b ${branchName}`, { stdio: 'pipe', cwd });
+      execSync(`git checkout -b "${branchName}"`, { stdio: 'pipe', cwd });
       log(`Created branch: ${branchName}`, 'success');
     }
 
@@ -82,8 +82,8 @@ export function createFeatureBranch(
  */
 export function checkoutBranch(branchName: string): void {
   try {
-    execSync(`git checkout ${branchName}`, { stdio: 'pipe' });
-    execSync(`git pull origin ${branchName}`, { stdio: 'pipe' });
+    execSync(`git checkout "${branchName}"`, { stdio: 'pipe' });
+    execSync(`git pull origin "${branchName}"`, { stdio: 'pipe' });
     log(`Checked out and pulled latest for branch: ${branchName}`, 'success');
   } catch (error) {
     throw new Error(`Failed to checkout branch ${branchName}: ${error}`);
@@ -121,7 +121,7 @@ export function commitChanges(message: string, cwd?: string): boolean {
  * @param cwd - Optional working directory to run the command in
  */
 export function pushBranch(branchName: string, cwd?: string): void {
-  execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd });
+  execSync(`git push -u origin "${branchName}"`, { stdio: 'pipe', cwd });
   log(`Pushed branch to origin`, 'success');
 }
 
@@ -185,14 +185,14 @@ export function checkoutDefaultBranch(): string {
   log(`Default branch is: ${defaultBranch}`, 'info');
 
   try {
-    execSync(`git checkout ${defaultBranch}`, { stdio: 'pipe' });
+    execSync(`git checkout "${defaultBranch}"`, { stdio: 'pipe' });
     log(`Checked out branch: ${defaultBranch}`, 'success');
   } catch (error) {
     throw new Error(`Failed to checkout default branch '${defaultBranch}': ${error}`);
   }
 
   try {
-    execSync(`git pull origin ${defaultBranch}`, { stdio: 'pipe' });
+    execSync(`git pull origin "${defaultBranch}"`, { stdio: 'pipe' });
     log(`Pulled latest changes from origin/${defaultBranch}`, 'success');
   } catch (error) {
     throw new Error(`Failed to pull latest changes for '${defaultBranch}': ${error}`);
@@ -210,10 +210,61 @@ export function checkoutDefaultBranch(): string {
  * @param defaultBranch - The default branch name to merge from (e.g., 'main')
  * @param cwd - The working directory to run the commands in
  */
+/**
+ * Protected branches that must never be deleted.
+ */
+const PROTECTED_BRANCHES = ['main', 'master', 'develop'];
+
+/**
+ * Deletes a local git branch using force deletion.
+ * Refuses to delete protected branches (main, master, develop).
+ *
+ * @param branchName - The branch to delete
+ * @returns True if successfully deleted, false otherwise
+ */
+export function deleteLocalBranch(branchName: string): boolean {
+  if (PROTECTED_BRANCHES.includes(branchName)) {
+    log(`Refusing to delete protected branch '${branchName}'`, 'info');
+    return false;
+  }
+
+  try {
+    execSync(`git branch -D "${branchName}"`, { stdio: 'pipe' });
+    log(`Deleted local branch '${branchName}'`, 'success');
+    return true;
+  } catch (error) {
+    log(`Failed to delete local branch '${branchName}': ${error}`, 'info');
+    return false;
+  }
+}
+
+/**
+ * Deletes a remote git branch on origin.
+ * Refuses to delete protected branches (main, master, develop).
+ *
+ * @param branchName - The branch to delete from origin
+ * @returns True if successfully deleted, false otherwise
+ */
+export function deleteRemoteBranch(branchName: string): boolean {
+  if (PROTECTED_BRANCHES.includes(branchName)) {
+    log(`Refusing to delete protected remote branch '${branchName}'`, 'info');
+    return false;
+  }
+
+  try {
+    execSync(`git push origin --delete "${branchName}"`, { stdio: 'pipe' });
+    log(`Deleted remote branch '${branchName}'`, 'success');
+    return true;
+  } catch (error) {
+    log(`Failed to delete remote branch '${branchName}': ${error}`, 'info');
+    return false;
+  }
+}
+
 export function mergeLatestFromDefaultBranch(defaultBranch: string, cwd: string): void {
   log(`Fetching origin/${defaultBranch} in ${cwd}...`, 'info');
   try {
-    execSync(`git fetch origin ${defaultBranch}`, { stdio: 'pipe', cwd });
+    execSync(`git fetch origin "${defaultBranch}"`, { stdio: 'pipe', cwd });
   } catch (error) {
     log(`Warning: Failed to fetch origin/${defaultBranch}: ${error}`, 'info');
     return;
@@ -221,7 +272,7 @@ export function mergeLatestFromDefaultBranch(defaultBranch: string, cwd: string)
 
   log(`Merging origin/${defaultBranch} into current branch...`, 'info');
   try {
-    execSync(`git merge origin/${defaultBranch} --no-edit`, { stdio: 'pipe', cwd });
+    execSync(`git merge "origin/${defaultBranch}" --no-edit`, { stdio: 'pipe', cwd });
     log(`Merged latest changes from origin/${defaultBranch}`, 'success');
   } catch (error) {
     log(`Warning: Failed to merge origin/${defaultBranch}: ${error}`, 'info');

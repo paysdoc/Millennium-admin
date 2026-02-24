@@ -36,6 +36,7 @@ export {
   type PRListItem,
   type PRReviewWorkflowStage,
   type RecoveryState,
+  type IssueCommentSummary,
   // Orchestrator shared utilities
   shouldExecuteStage,
   hasUncommittedChanges,
@@ -56,6 +57,15 @@ export {
   runPlanAgent,
   runPrReviewBuildAgent,
   runBuildAgent,
+  runReviewAgent,
+  runPatchAgent,
+  formatPatchArgs,
+  runReviewWithRetry,
+  type ReviewIssue,
+  type ReviewResult,
+  type ReviewAgentResult,
+  type ReviewRetryResult,
+  type ReviewRetryOptions,
 } from './agents';
 
 // GitHub module - GitHub API and git operations
@@ -68,6 +78,8 @@ export {
   commentOnPR,
   fetchPRList,
   commentOnIssue,
+  fetchIssueCommentsRest,
+  deleteIssueComment,
   type RepoInfo,
   getCurrentBranch,
   generateFeatureBranchName,
@@ -105,6 +117,7 @@ export {
   executeBuildPhase,
   executeTestPhase,
   executePRPhase,
+  executeReviewPhase,
   executePRReviewPlanPhase,
   executePRReviewBuildPhase,
   executePRReviewTestPhase,

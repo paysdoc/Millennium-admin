@@ -2,7 +2,8 @@
  * Base utilities and parsing functions for workflow comments.
  */
 
-import { WorkflowStage, RecoveryState, GitHubComment } from '../core';
+import { WorkflowStage, RecoveryState, GitHubComment, AgentStateManager } from '../core';
+import { fetchGitHubIssue } from './githubApi';
 
 /** Stage order for determining recovery resume point. */
 export const STAGE_ORDER: WorkflowStage[] = [
@@ -12,7 +13,7 @@ export const STAGE_ORDER: WorkflowStage[] = [
   'branch_created',
   'plan_building',
   'plan_created',
-  'plan_file_created',
+  'planFile_created',
   'plan_committing',
   'implementing',
   'build_progress',
@@ -31,7 +32,7 @@ const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
   ':seedling: Branch Created': 'branch_created',
   ':pencil: Building Implementation Plan': 'plan_building',
   ':white_check_mark: Implementation Plan Created': 'plan_created',
-  ':page_facing_up: Plan File Created': 'plan_file_created',
+  ':page_facing_up: Plan File Created': 'planFile_created',
   ':floppy_disk: Committing Plan': 'plan_committing',
   ':hammer_and_wrench: Implementing Solution': 'implementing',
   ':white_check_mark: Implementation Complete': 'implemented',
@@ -40,7 +41,40 @@ const STAGE_HEADER_MAP: Record<string, WorkflowStage> = {
   ':link: Pull Request Created': 'pr_created',
   ':tada: ADW Workflow Completed': 'completed',
   ':x: ADW Workflow Error': 'error',
+  ':warning: Token Limit Recovery': 'token_limit_recovery',
 };
+
+/** ADW comment heading pattern: `## :emoji_name: Title` */
+const ADW_COMMENT_PATTERN = /^## :[a-z_]+: /m;
+
+/** Machine-readable footer appended to all ADW workflow comments. */
+export const ADW_SIGNATURE = '\n\n---\n_Posted by ADW (AI Developer Workflow) automation_ <!-- adw-bot -->';
+
+/** Pattern matching the HTML comment marker in the ADW signature footer. */
+export const ADW_SIGNATURE_PATTERN = /<!-- adw-bot -->/;
+
+/** Returns true if the comment body contains an ADW workflow heading pattern or the ADW signature marker. */
+export function isAdwComment(commentBody: string): boolean {
+  return ADW_COMMENT_PATTERN.test(commentBody) || ADW_SIGNATURE_PATTERN.test(commentBody);
+}
+
+/** Pattern matching the `## Take action` heading that signals an explicit human directive. */
+export const ACTIONABLE_COMMENT_PATTERN = /^## Take action$/mi;
+
+/** Returns true if the comment body contains the explicit `## Take action` directive heading. */
+export function isActionableComment(commentBody: string): boolean {
+  return ACTIONABLE_COMMENT_PATTERN.test(commentBody);
+}
+
+/** Extracts the content following the `## Take action` heading. Returns null if no heading or empty content. */
+export function extractActionableContent(commentBody: string): string | null {
+  const match = commentBody.match(ACTIONABLE_COMMENT_PATTERN);
+  if (!match) return null;
+
+  const headingEnd = (match.index ?? 0) + match[0].length;
+  const content = commentBody.slice(headingEnd).trim();
+  return content.length > 0 ? content : null;
+}
 
 /** Truncates text to a maximum length with ellipsis. */
 export function truncateText(text: string, maxLength: number): string {
@@ -55,15 +89,15 @@ export function parseWorkflowStageFromComment(commentBody: string): WorkflowStag
   return STAGE_HEADER_MAP[headerMatch[1]] || null;
 }
 
-/** Extracts the ADW ID from a comment body. Pattern: `adw-{timestamp}-{random}` */
+/** Extracts the ADW ID from a comment body. Matches both old format `adw-{timestamp}-{random}` and new format `adw-{slug}-{random}`. */
 export function extractAdwIdFromComment(commentBody: string): string | null {
-  const match = commentBody.match(/`(adw-\d+-[a-z0-9]+)`/);
+  const match = commentBody.match(/`(adw-[a-z0-9][a-z0-9-]*[a-z0-9])`/);
   return match ? match[1] : null;
 }
 
 /** Extracts the branch name from a comment body. */
 export function extractBranchNameFromComment(commentBody: string): string | null {
-  const match = commentBody.match(/`((feature|bugfix|chore|review)\/issue-\d+[a-z0-9-]*)`/);
+  const match = commentBody.match(/`((feat|bug|chore|review|test)-issue-\d+[a-z0-9-]*)`/);
   return match ? match[1] : null;
 }
 
@@ -77,6 +111,31 @@ export function extractPrUrlFromComment(commentBody: string): string | null {
 export function extractPlanPathFromComment(commentBody: string): string | null {
   const match = commentBody.match(/`(specs\/issue-\d+-plan\.md)`/);
   return match ? match[1] : null;
+}
+
+const TERMINAL_STAGES: ReadonlyArray<WorkflowStage> = ['completed', 'error'];
+
+/** Returns true if an ADW workflow is currently active (not completed or errored) for the given issue. */
+export async function isAdwRunningForIssue(issueNumber: number): Promise<boolean> {
+  const issue = await fetchGitHubIssue(issueNumber);
+
+  const stageComments = issue.comments
+    .map((c) => ({ stage: parseWorkflowStageFromComment(c.body), createdAt: c.createdAt, body: c.body }))
+    .filter((entry): entry is { stage: WorkflowStage; createdAt: string; body: string } => entry.stage !== null);
+
+  if (stageComments.length === 0) return false;
+
+  const sorted = [...stageComments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  if (TERMINAL_STAGES.includes(sorted[0].stage)) return false;
+
+  // Latest stage is non-terminal — verify the agent process is actually alive
+  const adwId = extractAdwIdFromComment(sorted[0].body);
+  if (!adwId) return true; // Cannot verify without ADW ID; conservatively assume running
+
+  return AgentStateManager.isAgentProcessRunning(adwId);
 }
 
 /** Detects recovery state from GitHub comments. */

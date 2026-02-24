@@ -29,4 +29,28 @@ describe('Next.js Application', () => {
       expect(typeof SettingsPage).toBe('function')
     })
   })
+
+  describe('Editable Character Components', () => {
+    it('EditableCharacterDetails component can be imported', async () => {
+      const { default: EditableCharacterDetails } = await import(
+        '../components/EditableCharacterDetails'
+      )
+      expect(EditableCharacterDetails).toBeDefined()
+      expect(typeof EditableCharacterDetails).toBe('function')
+    })
+
+    it('EditableField component can be imported', async () => {
+      const { default: EditableField } = await import('../components/EditableField')
+      expect(EditableField).toBeDefined()
+      expect(typeof EditableField).toBe('function')
+    })
+  })
+
+  describe('API Routes', () => {
+    it('Character update API route handler exists', async () => {
+      const { PATCH } = await import('../app/api/characters/[id]/route')
+      expect(PATCH).toBeDefined()
+      expect(typeof PATCH).toBe('function')
+    })
+  })
 })

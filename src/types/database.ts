@@ -13,3 +13,11 @@ export type {
 export { CATEGORY_ORDER, mapCharacterRowToCharacter } from './character'
 
 export type { Connection } from './connection'
+
+export type {
+  CategoryName,
+  CategoryNameRow,
+  CategoryNameMap,
+} from './categoryName'
+
+export { mapCategoryNameRowToCategoryName } from './categoryName'

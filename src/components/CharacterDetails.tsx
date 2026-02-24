@@ -4,9 +4,10 @@ import { getSupabaseStorageUrl } from '@/lib/supabase'
 
 interface CharacterDetailsProps {
   character: Character
+  categoryName?: string
 }
 
-export default function CharacterDetails({ character }: CharacterDetailsProps) {
+export default function CharacterDetails({ character, categoryName }: CharacterDetailsProps) {
   const imageUrl = getSupabaseStorageUrl(character.image_link)
 
   return (
@@ -51,7 +52,7 @@ export default function CharacterDetails({ character }: CharacterDetailsProps) {
 
         <div className="infobox-row">
           <span className="infobox-label">Category</span>
-          <span className="infobox-value">{character.category}</span>
+          <span className="infobox-value">{categoryName ?? character.category}</span>
         </div>
 
         {character.link && (

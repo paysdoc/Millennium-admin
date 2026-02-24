@@ -26,6 +26,55 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Local Supabase Setup
+
+The project supports a fully local Supabase environment (Postgres + Storage) via the Supabase CLI. This lets you develop and test without depending on the hosted Supabase project.
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/) must be installed and running.
+
+### Start local Supabase
+
+```bash
+npm run supabase:start
+```
+
+This starts a local Postgres database, Storage API, and other Supabase services in Docker containers.
+
+### Get connection credentials
+
+```bash
+npm run supabase:status
+```
+
+Copy the `API URL`, `anon key`, and `service_role key` from the output into your `.env` file:
+
+```env
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_KEY=<anon key>
+SUPABASE_SERVICE_KEY=<service_role key>
+```
+
+### Reset the database
+
+To apply all migrations and seed data (including the `character_images` storage bucket):
+
+```bash
+npm run supabase:reset
+```
+
+### Stop local Supabase
+
+```bash
+npm run supabase:stop
+```
+
+### Notes
+
+- The Supabase Studio UI is available at [http://127.0.0.1:54323](http://127.0.0.1:54323) for visual database management.
+- Switching back to production requires updating `.env` with the hosted Supabase credentials — no code changes needed.
+
 ## Project Structure
 
 - `src/` - Application source code
@@ -33,22 +82,31 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
     - `layout.tsx` - Root layout component
     - `page.tsx` - Home page (character overview)
     - `globals.css` - Global styles
-    - `pages/` - Pages management
+    - `api/` - API routes (`characters/[id]/route.ts`)
+    - `characters/` - Character detail pages
     - `users/` - Users management
     - `settings/` - Settings page
   - `components/` - Reusable React components
-    - `CategorySection.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
+    - `CategorySection.tsx`, `CharacterDetails.tsx`, `CharacterImage.tsx`, `ConnectionsTable.tsx`, `EditableCharacterDetails.tsx`, `EditableField.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
   - `lib/` - Utility libraries
-    - `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
+    - `categories.ts`, `characters.ts`, `connections.ts`, `errors.ts`, `schema.ts`, `supabase.ts`
   - `types/` - TypeScript type definitions
-    - `character.ts`, `connection.ts`, `database.ts`
+    - `categoryName.ts`, `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
-  - `agents/` - Agent implementations (build, plan, test, claude)
-  - `core/` - Core utilities (state, config, data types)
+  - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
+  - `core/` - Core utilities (state, config, data types, orchestrator, issue classifier)
   - `github/` - Git/GitHub operations (git, worktree, PR, comments)
-  - `triggers/` - Workflow triggers (webhook, cron, issue classifier)
+  - `triggers/` - Workflow triggers (webhook, cron)
   - `__tests__/` - ADWS unit tests
+  - `phases/` - Workflow phase implementations (plan, build, test, PR, review, document)
+  - Workflow orchestrators: `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPatch.tsx`, `adwDocument.tsx`, `adwPrReview.tsx`, `adwPlanBuild.tsx`, `adwPlanBuildTest.tsx`, `adwPlanBuildReview.tsx`, `adwPlanBuildTestReview.tsx`, `adwPlanBuildDocument.tsx`, `adwSdlc.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
+  - `adwBuildHelpers.ts`, `workflowPhases.ts` - Shared helpers and phase definitions
+- `scripts/` - Utility scripts (Supabase sync, config sync)
+- `supabase/` - Local Supabase configuration
+  - `config.toml` - Supabase CLI config
+  - `migrations/` - Supabase CLI migrations
+  - `seed.sql` - Seed data
 - `e2e-tests/` - End-to-end test specifications
 - `e2e-screenshots/` - E2E test screenshots
 - `guidelines/` - Coding guidelines
@@ -231,5 +289,16 @@ If you need to rollback a production deployment:
 - Verify variables are set for the correct environment (Preview/Production)
 - Check variable names match exactly (case-sensitive)
 - Ensure `NEXT_PUBLIC_` prefix is used for client-side variables
+
+### Secrets Management
+
+Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments. `SUPABASE_DB_URL` is also configured in Vercel and used by the deploy workflow to push Supabase database migrations via `supabase db push` before each deployment.
+
+**GitHub Secrets** only stores Vercel access credentials:
+- `VERCEL_TOKEN` — API token for Vercel CLI
+- `VERCEL_ORG_ID` — Vercel organization ID
+- `VERCEL_PROJECT_ID` — Vercel project ID
+
+Both the deploy workflow and the sync workflow use `vercel env pull` to fetch environment variables at runtime, eliminating credential duplication.
 
 

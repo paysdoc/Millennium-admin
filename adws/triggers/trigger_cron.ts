@@ -7,8 +7,8 @@
 
 import { execSync, spawn } from 'child_process';
 import { log } from '../core';
-import { getRepoInfo, fetchPRList, hasUnaddressedComments } from '../github';
-import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
+import { getRepoInfo, fetchPRList, hasUnaddressedComments, isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
+import { classifyIssueForTrigger, getWorkflowScript } from '../core/issueClassifier';
 
 const POLL_INTERVAL_MS = 20_000;
 const PR_POLL_INTERVAL_MS = 60_000;
@@ -37,32 +37,49 @@ function fetchOpenIssues(): RawIssue[] {
 
 function isQualifyingIssue(issue: RawIssue): boolean {
   if (issue.comments.length === 0) {
+    log(`Issue #${issue.number}: no comments, qualifies`);
     return true;
   }
+
   const latestComment = issue.comments[issue.comments.length - 1];
-  return /adw/i.test(latestComment.body);
+
+  if (isActionableComment(latestComment.body)) {
+    log(`Issue #${issue.number}: latest comment contains "## Take action" directive, qualifies`);
+    return true;
+  }
+
+  log(`Issue #${issue.number}: latest comment does not contain "## Take action" directive (${truncateText(latestComment.body, 100)}), does not qualify`);
+  return false;
 }
 
 async function checkAndTrigger(): Promise<void> {
   log('Polling for new issues...');
   const issues = fetchOpenIssues();
+  log(`Fetched ${issues.length} open issue(s)`);
   const qualifying = issues.filter(
     (issue) => isQualifyingIssue(issue) && !processedIssues.has(issue.number)
   );
+  log(`Found ${qualifying.length} qualifying issue(s) out of ${issues.length} open`);
 
   for (const issue of qualifying) {
+    const running = await isAdwRunningForIssue(issue.number);
+    if (running) {
+      log(`ADW workflow already running for issue #${issue.number}, deferring`);
+      continue;
+    }
+
     processedIssues.add(issue.number);
 
-    // Classify the issue to determine which workflow to spawn
     const classification = await classifyIssueForTrigger(issue.number);
-    const workflowScript = getWorkflowScript(classification.issueType);
+    const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
 
     log(
       `Triggering ADW workflow for issue #${issue.number} (${classification.issueType} -> ${workflowScript})`,
       'success'
     );
 
-    const child = spawn('npx', ['tsx', workflowScript, String(issue.number)], {
+    const adwIdArgs = classification.adwId ? [classification.adwId] : [];
+    const child = spawn('npx', ['tsx', workflowScript, String(issue.number), ...adwIdArgs, '--issue-type', classification.issueType], {
       detached: true,
       stdio: 'ignore',
     });

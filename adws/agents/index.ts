@@ -7,6 +7,7 @@
 export {
   runClaudeAgent,
   runClaudeAgentWithCommand,
+  computeTotalTokens,
   type AgentResult,
   type ProgressInfo,
   type ProgressCallback,
@@ -16,6 +17,7 @@ export {
 export {
   getPlanFilePath,
   planFileExists,
+  readPlanFile,
   runPrReviewPlanAgent,
   runPlanAgent,
 } from './planAgent';
@@ -29,15 +31,21 @@ export {
 // Test Agent
 export {
   runTestAgent,
-  runE2ETestAgent,
   runResolveTestAgent,
   runResolveE2ETestAgent,
   discoverE2ETestFiles,
+  runPlaywrightE2ETests,
   type TestResult,
   type E2ETestResult,
   type TestAgentResult,
-  type E2ETestAgentResult,
+  type PlaywrightE2EResult,
 } from './testAgent';
+
+// Git Agent
+export {
+  runGenerateBranchNameAgent,
+  runCommitAgent,
+} from './gitAgent';
 
 // Test Retry (shared test retry logic)
 export {
@@ -46,4 +54,39 @@ export {
   type TestRetryResult,
   type TestRetryOptions,
 } from './testRetry';
+
+// Review Agent
+export {
+  runReviewAgent,
+  type ReviewIssue,
+  type ReviewResult,
+  type ReviewAgentResult,
+} from './reviewAgent';
+
+// Patch Agent
+export {
+  runPatchAgent,
+  formatPatchArgs,
+} from './patchAgent';
+
+// Review Retry (review-patch retry loop)
+export {
+  runReviewWithRetry,
+  type ReviewRetryResult,
+  type ReviewRetryOptions,
+} from './reviewRetry';
+
+// PR Agent
+export {
+  runPullRequestAgent,
+  formatPullRequestArgs,
+  extractPrUrlFromOutput,
+} from './prAgent';
+
+// Document Agent
+export {
+  runDocumentAgent,
+  formatDocumentArgs,
+  extractDocPathFromOutput,
+} from './documentAgent';
 

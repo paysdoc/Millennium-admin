@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     // Exclude worktrees from test discovery to avoid running duplicate tests
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/e2e-tests/**'],
   },
   resolve: {
     alias: {

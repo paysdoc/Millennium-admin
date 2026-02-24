@@ -7,15 +7,19 @@ vi.mock('child_process', () => ({
 }));
 
 // Mock the config module
-vi.mock('../core/config', () => ({
-  CLAUDE_CODE_PATH: '/usr/local/bin/claude',
-  AGENTS_STATE_DIR: '/tmp/test-agents',
-}));
+vi.mock('../core/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/config')>();
+  return {
+    ...actual,
+    CLAUDE_CODE_PATH: '/usr/local/bin/claude',
+    AGENTS_STATE_DIR: '/tmp/test-agents',
+  };
+});
 
 // Import after mocks are set up
 import { spawn } from 'child_process';
 import { runClaudeAgent, runClaudeAgentWithCommand } from '../agents/claudeAgent';
-import { runTestAgent, runE2ETestAgent, runResolveTestAgent, runResolveE2ETestAgent } from '../agents/testAgent';
+import { runTestAgent, runResolveTestAgent, runResolveE2ETestAgent } from '../agents/testAgent';
 import { TestResult, E2ETestResult } from '../agents/testAgent';
 
 // Generate a unique test directory
@@ -101,6 +105,42 @@ describe('cwd propagation', () => {
         })
       );
     });
+
+    it('individually quotes each element when args is a string array', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/command', ['arg1', 'arg2', 'arg3'], 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/command 'arg1' 'arg2' 'arg3'");
+    });
+
+    it('escapes single quotes within array elements', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/command', ["it's a test", 'normal'], 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/command 'it'\\''s a test' 'normal'");
+    });
+
+    it('produces correct prompt format with a single string arg', async () => {
+      const mockSpawn = createMockSpawn({ result: 'Success' });
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
+
+      await runClaudeAgentWithCommand('/test', 'my argument', 'Test Agent', `${testLogsDir}/test.jsonl`);
+
+      const spawnCall = vi.mocked(spawn).mock.calls[0];
+      const cliArgs = spawnCall[1] as string[];
+      const prompt = cliArgs[cliArgs.length - 1];
+      expect(prompt).toBe("/test 'my argument'");
+    });
   });
 
   describe('runTestAgent', () => {
@@ -112,29 +152,6 @@ describe('cwd propagation', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       await runTestAgent(testLogsDir, undefined, customCwd);
-
-      expect(spawn).toHaveBeenCalledWith(
-        '/usr/local/bin/claude',
-        expect.any(Array),
-        expect.objectContaining({
-          cwd: customCwd,
-        })
-      );
-    });
-  });
-
-  describe('runE2ETestAgent', () => {
-    it('passes cwd to spawn when provided', async () => {
-      const e2eResult: E2ETestResult = {
-        test_name: 'Login Test',
-        status: 'passed',
-        screenshots: [],
-        error: null,
-      };
-      const mockSpawn = createMockSpawn({ result: JSON.stringify(e2eResult) });
-      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
-
-      await runE2ETestAgent('/path/to/test.md', testLogsDir, undefined, customCwd);
 
       expect(spawn).toHaveBeenCalledWith(
         '/usr/local/bin/claude',
@@ -177,9 +194,8 @@ describe('cwd propagation', () => {
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(mockSpawn);
 
       const failedE2ETest: E2ETestResult = {
-        test_name: 'Login Test',
+        testName: 'Login Test',
         status: 'failed',
-        screenshots: [],
         error: 'Element not found',
       };
 

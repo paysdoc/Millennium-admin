@@ -9,13 +9,23 @@
  */
 
 import * as http from 'http';
-import * as fs from 'fs';
-import * as path from 'path';
 import { spawn } from 'child_process';
 import { log, PullRequestWebhookPayload } from '../core';
-import { closeIssue, formatIssueClosureComment } from '../github/githubApi';
-import { removeWorktree } from '../github/worktreeOperations';
-import { classifyIssueForTrigger, getWorkflowScript } from './issueClassifier';
+import { isActionableComment, isAdwRunningForIssue, truncateText } from '../github';
+import { removeWorktreesForIssue } from '../github/worktreeOperations';
+import { classifyIssueForTrigger, getWorkflowScript } from '../core/issueClassifier';
+import { handlePullRequestEvent } from './webhookHandlers';
+import {
+  checkEnvironmentVariables,
+  checkGitRepository,
+  checkClaudeCodeCLI,
+  checkGitHubCLI,
+  checkDirectoryStructure,
+  type CheckResult,
+} from '../healthCheckChecks';
+
+// Re-export for any external consumers
+export { handlePullRequestEvent, extractIssueNumberFromPRBody } from './webhookHandlers';
 
 const port = parseInt(process.env.PORT || '8001', 10);
 
@@ -38,6 +48,14 @@ function jsonResponse(
   res.end(JSON.stringify(body));
 }
 
+interface HealthCheckResult {
+  success: boolean;
+  timestamp: string;
+  checks: Record<string, CheckResult>;
+  warnings: string[];
+  errors: string[];
+}
+
 function spawnDetached(command: string, args: string[]): void {
   log(`Spawning: ${command} ${args.join(' ')}`);
   const child = spawn(command, args, {
@@ -47,80 +65,38 @@ function spawnDetached(command: string, args: string[]): void {
   child.unref();
 }
 
-/**
- * Extracts issue number from PR body using the "Implements #N" pattern.
- * Returns null if no issue link is found.
- */
-function extractIssueNumberFromPRBody(body: string | null): number | null {
-  if (!body) {
-    return null;
-  }
-  const match = body.match(/Implements #(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-}
-
-/**
- * Handles pull_request webhook events.
- * When a PR is closed (merged or not), closes the linked issue.
- */
-async function handlePullRequestEvent(payload: PullRequestWebhookPayload): Promise<{ status: string; issue?: number }> {
-  const { action, pull_request, repository } = payload;
-
-  log(`Received pull_request event: action=${action}, PR=#${pull_request.number}, repo=${repository.full_name}`);
-
-  // Only handle closed PRs
-  if (action !== 'closed') {
-    log(`Ignored pull_request action: ${action}`);
-    return { status: 'ignored' };
-  }
-
-  const prNumber = pull_request.number;
-  const prUrl = pull_request.html_url;
-  const wasMerged = pull_request.merged;
-  const prBody = pull_request.body;
-  const headBranch = pull_request.head?.ref;
-
-  log(`PR #${prNumber} was ${wasMerged ? 'merged' : 'closed without merging'}`);
-
-  // Clean up worktree for the PR branch
-  if (headBranch) {
-    try {
-      const removed = removeWorktree(headBranch);
-      if (removed) {
-        log(`Cleaned up worktree for branch: ${headBranch}`, 'success');
-      } else {
-        log(`No worktree found for branch: ${headBranch}`, 'info');
-      }
-    } catch (error) {
-      log(`Failed to clean up worktree for branch ${headBranch}: ${error}`, 'error');
-    }
-  }
-
-  // Extract issue number from PR body
-  const issueNumber = extractIssueNumberFromPRBody(prBody);
-  if (issueNumber === null) {
-    log(`No issue link found in PR #${prNumber} body (no "Implements #N" pattern)`);
-    return { status: 'ignored' };
-  }
-
-  log(`Found linked issue #${issueNumber} in PR #${prNumber}`);
-
-  // Create closure comment
-  const comment = formatIssueClosureComment(prNumber, prUrl, wasMerged);
-
-  // Close the issue
-  const closed = await closeIssue(issueNumber, comment);
-
-  if (closed) {
-    log(`Successfully closed issue #${issueNumber} after PR #${prNumber} was ${wasMerged ? 'merged' : 'closed'}`);
-    return { status: 'closed', issue: issueNumber };
-  } else {
-    log(`Issue #${issueNumber} was already closed or could not be closed`);
-    return { status: 'already_closed', issue: issueNumber };
-  }
-}
-
 const server = http.createServer((req, res) => {
+  if (req.url === '/health' && req.method === 'GET') {
+    const result: HealthCheckResult = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      checks: {},
+      warnings: [],
+      errors: [],
+    };
+
+    result.checks.environmentVariables = checkEnvironmentVariables();
+    result.checks.gitRepository = checkGitRepository();
+    result.checks.claudeCodeCLI = checkClaudeCodeCLI();
+    result.checks.gitHubCLI = checkGitHubCLI();
+    result.checks.directoryStructure = checkDirectoryStructure();
+
+    for (const [checkName, checkResult] of Object.entries(result.checks)) {
+      if (checkResult.error) {
+        result.errors.push(`${checkName}: ${checkResult.error}`);
+      }
+      if (checkResult.warning) {
+        result.warnings.push(`${checkName}: ${checkResult.warning}`);
+      }
+      if (!checkResult.success) {
+        result.success = false;
+      }
+    }
+
+    jsonResponse(res, 200, result as unknown as Record<string, unknown>);
+    return;
+  }
+
   if (req.url !== '/webhook') {
     jsonResponse(res, 404, { error: 'not found' });
     return;
@@ -168,6 +144,64 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Handle issue comment events (human comments trigger workflows)
+    if (event === 'issue_comment') {
+      const action = (body.action as string) || '';
+      if (action !== 'created') {
+        log(`Ignored issue_comment action: ${action}`);
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      const comment = body.comment as Record<string, unknown> | undefined;
+      const commentBody = (comment?.body as string) || '';
+      const issue = body.issue as Record<string, unknown> | undefined;
+      const issueNumber = issue?.number as number | undefined;
+
+      if (issueNumber == null) {
+        log('No issue number found in issue_comment payload');
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      log(`Checking comment on issue #${issueNumber}: "${truncateText(commentBody, 100)}"`);
+
+      if (!isActionableComment(commentBody)) {
+        log(`Ignored comment on issue #${issueNumber}: missing "## Take action" directive`);
+        jsonResponse(res, 200, { status: 'ignored' });
+        return;
+      }
+
+      log(`Actionable comment on issue #${issueNumber}: contains "## Take action" directive`);
+
+      // Check if workflow is already running — respond quickly, handle async
+      isAdwRunningForIssue(issueNumber)
+        .then((running) => {
+          if (running) {
+            log(`ADW workflow already running for issue #${issueNumber}, deferring comment`);
+            return;
+          }
+
+          log(`Human comment on issue #${issueNumber}, triggering ADW workflow`);
+          return classifyIssueForTrigger(issueNumber).then((classification) => {
+            const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
+            log(
+              `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
+              'success'
+            );
+            const adwIdArgs = classification.adwId ? [classification.adwId] : [];
+            spawnDetached('npx', ['tsx', workflowScript, String(issueNumber), ...adwIdArgs, '--issue-type', classification.issueType]);
+          });
+        })
+        .catch((error) => {
+          log(`Error handling comment on issue #${issueNumber}: ${error}`, 'error');
+          spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
+        });
+
+      jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
+      return;
+    }
+
     // Handle pull_request events (for closing linked issues when PR is closed/merged)
     if (event === 'pull_request') {
       const action = (body.action as string) || '';
@@ -196,39 +230,49 @@ const server = http.createServer((req, res) => {
     }
 
     const action = (body.action as string) || '';
-    if (action !== 'opened') {
-      log(`Ignored issues action: ${action}`);
-      jsonResponse(res, 200, { status: 'ignored' });
-      return;
-    }
-
     const issue = (body.issue as Record<string, unknown> | undefined);
     const issueNumber = issue?.number as number | undefined;
+
     if (issueNumber == null) {
       log('No issue number found in payload');
       jsonResponse(res, 200, { status: 'ignored' });
       return;
     }
 
-    log(`New issue #${issueNumber} detected, classifying and triggering ADW workflow`);
+    if (action === 'closed') {
+      log(`Issue #${issueNumber} closed, removing associated worktrees`);
+      const removed = removeWorktreesForIssue(issueNumber);
+      log(`Removed ${removed} worktree(s) for issue #${issueNumber}`, 'success');
+      jsonResponse(res, 200, { status: 'worktrees_cleaned', issue: issueNumber, removed });
+      return;
+    }
 
-    // Classify the issue and spawn the appropriate workflow asynchronously
-    // Respond quickly to avoid GitHub timeout
-    classifyIssueForTrigger(issueNumber)
-      .then((classification) => {
-        const workflowScript = getWorkflowScript(classification.issueType);
-        log(
-          `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
-          'success'
-        );
-        spawnDetached('npx', ['tsx', workflowScript, String(issueNumber)]);
-      })
-      .catch((error) => {
-        log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');
-        spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
-      });
+    if (action === 'opened') {
+      log(`New issue #${issueNumber} detected, classifying and triggering ADW workflow`);
 
-    jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
+      // Classify the issue and spawn the appropriate workflow asynchronously
+      // Respond quickly to avoid GitHub timeout
+      classifyIssueForTrigger(issueNumber)
+        .then((classification) => {
+          const workflowScript = getWorkflowScript(classification.issueType, classification.adwCommand);
+          log(
+            `Issue #${issueNumber} classified as ${classification.issueType}, spawning ${workflowScript}`,
+            'success'
+          );
+          const adwIdArgs = classification.adwId ? [classification.adwId] : [];
+          spawnDetached('npx', ['tsx', workflowScript, String(issueNumber), ...adwIdArgs, '--issue-type', classification.issueType]);
+        })
+        .catch((error) => {
+          log(`Error classifying issue #${issueNumber}: ${error}, defaulting to adwPlanBuildTest.tsx`, 'error');
+          spawnDetached('npx', ['tsx', 'adws/adwPlanBuildTest.tsx', String(issueNumber)]);
+        });
+
+      jsonResponse(res, 200, { status: 'processing', issue: issueNumber });
+      return;
+    }
+
+    log(`Ignored issues action: ${action}`);
+    jsonResponse(res, 200, { status: 'ignored' });
   });
 });
 

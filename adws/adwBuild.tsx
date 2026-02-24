@@ -2,7 +2,7 @@
 /**
  * ADW Build - AI Developer Workflow Implementation Phase
  *
- * Usage: npx tsx adws/adwBuild.tsx <github-issue-number> [adw-id]
+ * Usage: npx tsx adws/adwBuild.tsx <github-issueNumber> [adw-id]
  *
  * Workflow:
  * 1. Fetch GitHub issue details
@@ -23,21 +23,22 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   log,
+  setLogAdwId,
   generateAdwId,
   ensureLogsDirectory,
   IssueClassSlashCommand,
-  commitPrefixMap,
   AgentStateManager,
   AgentState,
   shouldExecuteStage,
   hasUncommittedChanges,
   getNextStage,
+  persistTokenCounts,
 } from './core';
 import {
   fetchGitHubIssue,
-  commitChanges,
   postWorkflowComment,
   WorkflowContext,
   detectRecoveryState,
@@ -46,87 +47,16 @@ import {
 } from './github';
 import {
   runBuildAgent,
+  runCommitAgent,
   getPlanFilePath,
   planFileExists,
   ProgressCallback,
   ProgressInfo,
 } from './agents';
+import { parseArguments, printBuildSummary } from './adwBuildHelpers';
 
-/**
- * Prints usage information and exits.
- */
-function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwBuild.tsx <github-issue-number> [adw-id] [--cwd <path>]');
-  console.error('');
-  console.error('Options:');
-  console.error('  --cwd <path>       Working directory for git operations (worktree path)');
-  console.error('');
-  console.error('Prerequisites:');
-  console.error('  - Must be on a feature/bugfix/chore branch');
-  console.error('  - Plan file must exist at specs/issue-{number}.md');
-  console.error('');
-  console.error('Environment Requirements:');
-  console.error('  ANTHROPIC_API_KEY  - Anthropic API key');
-  console.error('  CLAUDE_CODE_PATH   - Path to Claude CLI (default: /usr/local/bin/claude)');
-  console.error('  GITHUB_PAT         - (Optional) GitHub Personal Access Token');
-  process.exit(1);
-}
-
-/**
- * Parses and validates command line arguments.
- */
-function parseArguments(args: string[]): { issueNumber: number; providedAdwId: string | null; cwd: string | null } {
-  if (args.length < 1) {
-    printUsageAndExit();
-  }
-
-  // Parse --cwd option
-  let cwd: string | null = null;
-  const cwdIndex = args.indexOf('--cwd');
-  if (cwdIndex !== -1 && args[cwdIndex + 1]) {
-    cwd = args[cwdIndex + 1];
-    args.splice(cwdIndex, 2);
-  }
-
-  const issueNumber = parseInt(args[0], 10);
-  if (isNaN(issueNumber)) {
-    console.error(`Invalid issue number: ${args[0]}`);
-    process.exit(1);
-  }
-
-  const providedAdwId = args[1] || null;
-
-  return { issueNumber, providedAdwId, cwd };
-}
-
-/**
- * Prints the build phase summary.
- */
-function printBuildSummary(
-  issueNumber: number,
-  issueTitle: string,
-  branchName: string,
-  logsDir: string,
-  prUrl: string,
-  costUsd: number
-): void {
-  log('===================================', 'info');
-  log('ADW Build workflow completed!', 'success');
-  log(`Issue: #${issueNumber} - ${issueTitle}`, 'info');
-  log(`Branch: ${branchName}`, 'info');
-
-  if (prUrl) {
-    log(`PR: ${prUrl}`, 'info');
-  }
-
-  log(`Logs: ${logsDir}`, 'info');
-
-  if (costUsd > 0) {
-    log(`Cost: $${costUsd.toFixed(4)}`, 'info');
-  }
-
-  log('===================================', 'info');
-}
+// Re-export for any external consumers
+export { printUsageAndExit, parseArguments, printBuildSummary } from './adwBuildHelpers';
 
 /**
  * Main build workflow.
@@ -147,7 +77,8 @@ async function main(): Promise<void> {
   log(`Fetched issue: ${issue.title}`, 'success');
 
   // Step 2: Determine ADW ID
-  const adwId = providedAdwId || generateAdwId();
+  const adwId = providedAdwId || generateAdwId(issue.title);
+  setLogAdwId(adwId);
   const logsDir = ensureLogsDirectory(adwId);
   log(`ADW ID: ${adwId}`, 'info');
   log(`Logs: ${logsDir}`, 'info');
@@ -156,20 +87,21 @@ async function main(): Promise<void> {
   const branchName = getCurrentBranch(cwd || undefined);
   log(`Current branch: ${branchName}`, 'info');
 
-  const planPath = getPlanFilePath(issueNumber);
-  if (!planFileExists(issueNumber)) {
+  const planPath = getPlanFilePath(issueNumber, cwd || undefined);
+  if (!planFileExists(issueNumber, cwd || undefined)) {
     log(`Plan file not found: ${planPath}`, 'error');
     log('Run adwPlan.tsx first to generate the plan.', 'error');
     process.exit(1);
   }
 
   // Read plan content
+  const fullPlanPath = cwd ? path.join(cwd, planPath) : planPath;
   let planContent: string;
   try {
-    planContent = fs.readFileSync(planPath, 'utf-8');
-    log(`Plan loaded from: ${planPath}`, 'success');
+    planContent = fs.readFileSync(fullPlanPath, 'utf-8');
+    log(`Plan loaded from: ${fullPlanPath}`, 'success');
   } catch (error) {
-    log(`Cannot read plan file at ${planPath}: ${error}`, 'error');
+    log(`Cannot read plan file at ${fullPlanPath}: ${error}`, 'error');
     process.exit(1);
   }
 
@@ -288,6 +220,7 @@ async function main(): Promise<void> {
 
       ctx.buildOutput = buildResult.output;
       buildCostUsd = buildResult.totalCostUsd || 0;
+      persistTokenCounts(orchestratorStatePath, buildCostUsd, buildResult.modelUsage ?? {});
       postWorkflowComment(issueNumber, 'implemented', ctx);
     } else {
       log('Skipping Build Agent (already completed)', 'info');
@@ -296,7 +229,7 @@ async function main(): Promise<void> {
     // Step 6: Commit implementation
     if (shouldExecuteStage('implementation_committing', recoveryState)) {
       postWorkflowComment(issueNumber, 'implementation_committing', ctx);
-      commitChanges(`${commitPrefixMap[issueType]} implement #${issueNumber} - ${issue.title}`, cwd || undefined);
+      await runCommitAgent('build-orchestrator', issueType, JSON.stringify(issue), logsDir, undefined, cwd || undefined);
     } else {
       log('Skipping implementation commit (already completed)', 'info');
     }

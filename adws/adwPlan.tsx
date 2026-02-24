@@ -2,7 +2,7 @@
 /**
  * ADW Plan - AI Developer Workflow Planning Phase
  *
- * Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>] [--issue-type <type>]
+ * Usage: npx tsx adws/adwPlan.tsx <github-issueNumber> [adw-id] [--cwd <path>] [--issue-type <type>]
  *
  * Workflow:
  * 1. Initialize: fetch issue, classify type, setup worktree, initialize state, detect recovery
@@ -15,7 +15,7 @@
  * - GITHUB_PAT: (Optional) GitHub Personal Access Token
  */
 
-import { generateAdwId, type IssueClassSlashCommand } from './core';
+import { type IssueClassSlashCommand, persistTokenCounts } from './core';
 import {
   initializeWorkflow,
   executePlanPhase,
@@ -27,7 +27,7 @@ import {
  * Prints usage information and exits.
  */
 function printUsageAndExit(): never {
-  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issue-number> [adw-id] [--cwd <path>] [--issue-type <type>]');
+  console.error('Usage: npx tsx adws/adwPlan.tsx <github-issueNumber> [adw-id] [--cwd <path>] [--issue-type <type>]');
   console.error('');
   console.error('Options:');
   console.error('  --cwd <path>         Working directory for git operations (worktree path)');
@@ -94,7 +94,7 @@ function parseArguments(args: string[]): {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const { issueNumber, providedAdwId, cwd, providedIssueType } = parseArguments(args);
-  const adwId = providedAdwId || generateAdwId();
+  const adwId = providedAdwId || null;
 
   const config = await initializeWorkflow(issueNumber, adwId, 'plan-orchestrator', {
     cwd: cwd || undefined,
@@ -103,7 +103,8 @@ async function main(): Promise<void> {
 
   try {
     const planResult = await executePlanPhase(config);
-    completeWorkflow(config, planResult.costUsd);
+    persistTokenCounts(config.orchestratorStatePath, planResult.costUsd, planResult.modelUsage);
+    await completeWorkflow(config, planResult.costUsd, undefined, planResult.modelUsage);
   } catch (error) {
     handleWorkflowError(config, error);
   }

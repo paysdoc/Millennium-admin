@@ -18,7 +18,7 @@ Create a new plan at `specs/issue-{issueNumber}-plan.md` (where `{issueNumber}` 
 - Use the plan format below to create the plan.
 - Research the codebase and put together a plan to accomplish the review.
 - IMPORTANT: Replace every <placeholder> in the `Plan Format` with the requested value. Add as much detail as needed to accomplish the review.
-- Use your reasoning model: THINK HARD about the plan and the steps to accomplish the review.
+- Consider the plan and the steps to accomplish the review.
 - Respect requested files in the `Relevant Files` section.
 - Start your research by reading the `README.md` file and the coding guidelines in `/guidelines`.
 - `adws/*.tsx` contain node tsx single file typescript scripts. So if you want to run them use `npx tsx <script_name>`.

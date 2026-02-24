@@ -13,6 +13,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AGENTS_STATE_DIR } from './config';
 import { AgentIdentifier, AgentState, AgentExecutionState } from './dataTypes';
+import {
+  isProcessAlive as _isProcessAlive,
+  createExecutionState as _createExecutionState,
+  completeExecution as _completeExecution,
+  findOrchestratorStatePath as _findOrchestratorStatePath,
+  isAgentProcessRunning as _isAgentProcessRunning,
+} from './stateHelpers';
 
 /**
  * State file names used by the state manager.
@@ -200,40 +207,6 @@ export class AgentStateManager {
   }
 
   /**
-   * Creates an initial execution state.
-   *
-   * @param status - The initial status (defaults to 'running')
-   * @returns A new AgentExecutionState object
-   */
-  static createExecutionState(status: AgentExecutionState['status'] = 'running'): AgentExecutionState {
-    return {
-      status,
-      startedAt: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Updates execution state to mark completion.
-   *
-   * @param execution - The existing execution state
-   * @param success - Whether the execution was successful
-   * @param errorMessage - Optional error message if failed
-   * @returns Updated execution state
-   */
-  static completeExecution(
-    execution: AgentExecutionState,
-    success: boolean,
-    errorMessage?: string
-  ): AgentExecutionState {
-    return {
-      ...execution,
-      status: success ? 'completed' : 'failed',
-      completedAt: new Date().toISOString(),
-      errorMessage: success ? undefined : errorMessage,
-    };
-  }
-
-  /**
    * Gets the state directory path without creating it.
    * Useful for reading state.
    *
@@ -263,6 +236,13 @@ export class AgentStateManager {
     const stateFile = path.join(statePath, STATE_FILE);
     return fs.existsSync(stateFile);
   }
+
+  // Delegate to standalone functions from stateHelpers.ts
+  static isProcessAlive = _isProcessAlive;
+  static createExecutionState = _createExecutionState;
+  static completeExecution = _completeExecution;
+  static findOrchestratorStatePath = _findOrchestratorStatePath;
+  static isAgentProcessRunning = _isAgentProcessRunning;
 }
 
 // Export utility functions for convenience
@@ -272,3 +252,4 @@ export const readAgentState = AgentStateManager.readState;
 export const appendAgentLog = AgentStateManager.appendLog;
 export const writeAgentRawOutput = AgentStateManager.writeRawOutput;
 export const readParentAgentState = AgentStateManager.readParentState;
+export { isProcessAlive, findOrchestratorStatePath, isAgentProcessRunning } from './stateHelpers';

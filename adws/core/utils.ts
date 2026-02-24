@@ -9,10 +9,21 @@ import { AgentIdentifier } from './dataTypes';
 
 /**
  * Generates a unique ADW session identifier.
- * Format: adw-{timestamp}-{random}
+ * When a summary is provided, format: {slugified-summary}-{random}
+ * When no summary is provided, falls back to: {timestamp}-{random}
+ *
+ * Note: The `adw-` prefix is NOT included here because the branch name format
+ * template already adds `adw-` before the adwId (e.g., `<issueClass>-issue-<N>-adw-<adwId>-<name>`).
  */
-export function generateAdwId(): string {
-  return `adw-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+export function generateAdwId(summary?: string): string {
+  const random = Math.random().toString(36).substring(2, 8);
+  if (summary) {
+    const slug = slugify(summary).substring(0, 20).replace(/-$/, '');
+    if (slug) {
+      return `${slug}-${random}`;
+    }
+  }
+  return `${Date.now()}-${random}`;
 }
 
 /**
@@ -41,14 +52,34 @@ const COLORS = {
   reset: '\x1b[0m'
 };
 
+/** Module-level adwId for log output. */
+let _logAdwId: string | undefined;
+
+/** Sets the adwId included in all subsequent log lines. */
+export function setLogAdwId(adwId: string): void {
+  _logAdwId = adwId;
+}
+
+/** Returns the current adwId used by the logger, or undefined if not set. */
+export function getLogAdwId(): string | undefined {
+  return _logAdwId;
+}
+
+/** Resets the logger adwId to undefined. Intended for test isolation only. */
+export function resetLogAdwId(): void {
+  _logAdwId = undefined;
+}
+
 /**
  * Logs a message with timestamp and emoji prefix.
+ * When an adwId has been set via setLogAdwId(), it is included after the timestamp.
  * Error messages are displayed in red.
  */
 export function log(message: string, level: LogLevel = 'info'): void {
   const timestamp = new Date().toISOString();
   const prefix = LOG_PREFIXES[level];
-  const text = `${prefix} [${timestamp}] ${message}`;
+  const adwIdSegment = _logAdwId ? ` [${_logAdwId}]` : '';
+  const text = `${prefix} [${timestamp}]${adwIdSegment} ${message}`;
   if (level === 'error') {
     console.log(`${COLORS.red}${text}${COLORS.reset}`);
   } else {

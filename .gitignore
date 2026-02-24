@@ -24,9 +24,7 @@
 healthcheck.json*
 
 # debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.log*
 
 # local env files
 .env*.local
@@ -41,6 +39,15 @@ next-env.d.ts
 # cursor hooks logs
 .cursor/logs/
 .cursor/mcp.json
+
+# supabase
+supabase/.temp/
+supabase/.branches/
+
+# e2e test artifacts
+/e2e-results/
+e2e-results.json
+/test-results/
 
 // environment
 .env

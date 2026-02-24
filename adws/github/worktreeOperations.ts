@@ -8,7 +8,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { log } from '../core';
+import { log, type IssueClassSlashCommand, branchPrefixMap } from '../core';
 import { getDefaultBranch } from './gitOperations';
 
 /**
@@ -28,7 +28,7 @@ export interface BranchCheckoutStatus {
  * @returns A safe directory name derived from the branch name
  */
 function sanitizeBranchName(branchName: string): string {
-  return branchName.replace(/[/\\:*?"<>|]/g, '-');
+  return branchName.replace(/[/\\:*?"<>|`]/g, '-');
 }
 
 /**
@@ -71,8 +71,8 @@ export function getMainRepoPath(): string {
 }
 
 /**
- * Copies the .env file from the main repository to the worktree.
- * This is necessary because .env is in .gitignore and won't be included in worktrees.
+ * Copies the .env and .env.local files from the main repository to the worktree.
+ * This is necessary because these files are in .gitignore and won't be included in worktrees.
  *
  * @param worktreePath - The absolute path to the worktree
  */
@@ -87,6 +87,16 @@ export function copyEnvToWorktree(worktreePath: string): void {
       log(`Copied .env file to worktree at ${worktreePath}`, 'info');
     } else {
       log(`No .env file found in main repository at ${mainRepoPath}, skipping copy`, 'info');
+    }
+
+    const sourceEnvLocalPath = path.join(mainRepoPath, '.env.local');
+    const destEnvLocalPath = path.join(worktreePath, '.env.local');
+
+    if (fs.existsSync(sourceEnvLocalPath)) {
+      fs.copyFileSync(sourceEnvLocalPath, destEnvLocalPath);
+      log(`Copied .env.local file to worktree at ${worktreePath}`, 'info');
+    } else {
+      log(`No .env.local file found in main repository at ${mainRepoPath}, skipping copy`, 'info');
     }
   } catch (error) {
     log(`Warning: Failed to copy .env to worktree: ${error}`, 'info');
@@ -167,7 +177,7 @@ export function freeBranchFromMainRepo(branchName: string): void {
 
       // Push the branch
       try {
-        execSync(`git push -u origin ${branchName}`, { stdio: 'pipe', cwd: mainRepoPath });
+        execSync(`git push -u origin "${branchName}"`, { stdio: 'pipe', cwd: mainRepoPath });
         log(`Pushed branch '${branchName}' to origin`, 'success');
       } catch (pushError) {
         log(`Warning: Could not push branch to origin: ${pushError}`, 'info');
@@ -176,7 +186,7 @@ export function freeBranchFromMainRepo(branchName: string): void {
 
     // Switch to default branch and pull latest changes
     const defaultBranch = getDefaultBranch();
-    execSync(`git checkout ${defaultBranch} && git pull`, { stdio: 'pipe', cwd: mainRepoPath });
+    execSync(`git checkout "${defaultBranch}" && git pull`, { stdio: 'pipe', cwd: mainRepoPath });
     log(`Switched main repository to '${defaultBranch}' and pulled latest changes`, 'success');
   } catch (error) {
     throw new Error(`Failed to free branch '${branchName}' from main repository: ${error}`);
@@ -251,185 +261,53 @@ export function listWorktrees(): string[] {
 }
 
 /**
- * Creates a new worktree for the given branch.
- * If baseBranch is provided, creates the worktree starting from that branch.
- *
- * @param branchName - The name of the branch to checkout in the worktree
- * @param baseBranch - Optional base branch to create the worktree from
- * @returns The absolute path to the created worktree
- * @throws Error if worktree creation fails
+ * Result of finding a worktree by issue type and number.
  */
-export function createWorktree(branchName: string, baseBranch?: string): string {
-  const worktreePath = getWorktreePath(branchName);
-  const worktreesDir = getWorktreesDir();
-
-  // Ensure worktrees directory exists
-  if (!fs.existsSync(worktreesDir)) {
-    fs.mkdirSync(worktreesDir, { recursive: true });
-  }
-
-  try {
-    // Check if the branch exists remotely or locally
-    let branchExists = false;
-    try {
-      execSync(`git rev-parse --verify ${branchName}`, { stdio: 'pipe' });
-      branchExists = true;
-    } catch {
-      // Branch doesn't exist locally, check remote
-      try {
-        execSync(`git rev-parse --verify origin/${branchName}`, { stdio: 'pipe' });
-        branchExists = true;
-      } catch {
-        branchExists = false;
-      }
-    }
-
-    if (branchExists) {
-      // Check if branch is checked out elsewhere before attempting worktree add
-      const checkoutStatus = isBranchCheckedOutElsewhere(branchName);
-
-      if (checkoutStatus.checkedOut) {
-        if (checkoutStatus.isMainRepo) {
-          // Branch is checked out in main repo, free it first
-          log(`Branch '${branchName}' is checked out in main repository, freeing it...`, 'info');
-          freeBranchFromMainRepo(branchName);
-        } else if (checkoutStatus.path) {
-          // Branch is checked out in another worktree, reuse that worktree
-          log(
-            `Branch '${branchName}' is already checked out at ${checkoutStatus.path}, reusing existing worktree`,
-            'info'
-          );
-          return checkoutStatus.path;
-        }
-      }
-
-      // Branch exists, create worktree for existing branch
-      execSync(`git worktree add "${worktreePath}" ${branchName}`, { stdio: 'pipe' });
-      log(`Created worktree for existing branch '${branchName}' at ${worktreePath}`, 'success');
-    } else if (baseBranch) {
-      // Branch doesn't exist, create worktree with new branch from base
-      execSync(`git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`, { stdio: 'pipe' });
-      log(`Created worktree with new branch '${branchName}' from '${baseBranch}' at ${worktreePath}`, 'success');
-    } else {
-      // No base branch provided and branch doesn't exist
-      throw new Error(`Branch '${branchName}' does not exist and no base branch was provided`);
-    }
-
-    return worktreePath;
-  } catch (error) {
-    throw new Error(`Failed to create worktree for branch '${branchName}': ${error}`);
-  }
+export interface WorktreeForIssueResult {
+  worktreePath: string;
+  branchName: string;
 }
 
 /**
- * Creates a worktree and a new branch in one operation.
- * The new branch is created from the current HEAD of the repository.
+ * Finds an existing worktree matching the given issue type and number.
+ * Searches worktrees in `.worktrees/` whose directory name starts with
+ * `{prefix}-issue-{issueNumber}-`, returning the path and branch name
+ * of the first match.
  *
- * @param branchName - The name of the new branch to create
- * @param baseBranch - Optional base branch to create the new branch from (defaults to HEAD)
- * @returns The absolute path to the created worktree
- * @throws Error if worktree creation fails
+ * @param issueType - The issue classification slash command (e.g., '/feature')
+ * @param issueNumber - The GitHub issue number
+ * @returns The matching worktree path and branch name, or null if not found
  */
-export function createWorktreeForNewBranch(branchName: string, baseBranch?: string): string {
-  const worktreePath = getWorktreePath(branchName);
-  const worktreesDir = getWorktreesDir();
-
-  // Ensure worktrees directory exists
-  if (!fs.existsSync(worktreesDir)) {
-    fs.mkdirSync(worktreesDir, { recursive: true });
-  }
-
+export function findWorktreeForIssue(
+  issueType: IssueClassSlashCommand,
+  issueNumber: number,
+): WorktreeForIssueResult | null {
   try {
-    const base = baseBranch || 'HEAD';
-    execSync(`git worktree add -b ${branchName} "${worktreePath}" ${base}`, { stdio: 'pipe' });
-    log(`Created worktree with new branch '${branchName}' at ${worktreePath}`, 'success');
-    return worktreePath;
-  } catch (error) {
-    throw new Error(`Failed to create worktree with new branch '${branchName}': ${error}`);
-  }
-}
-
-/**
- * Removes a worktree for the given branch.
- *
- * @param branchName - The name of the branch whose worktree should be removed
- * @returns True if the worktree was successfully removed, false if it didn't exist
- */
-export function removeWorktree(branchName: string): boolean {
-  const worktreePath = getWorktreePath(branchName);
-
-  try {
-    // First try to remove the worktree using git command
-    execSync(`git worktree remove "${worktreePath}" --force`, { stdio: 'pipe' });
-    log(`Removed worktree for branch '${branchName}' at ${worktreePath}`, 'success');
-    return true;
-  } catch (error) {
-    // Check if the worktree directory exists but git doesn't track it
-    if (fs.existsSync(worktreePath)) {
-      try {
-        // Prune stale worktree entries first
-        execSync('git worktree prune', { stdio: 'pipe' });
-        // Then try to remove the directory manually
-        fs.rmSync(worktreePath, { recursive: true, force: true });
-        log(`Removed orphaned worktree directory at ${worktreePath}`, 'info');
-        return true;
-      } catch (cleanupError) {
-        log(`Failed to cleanup worktree directory at ${worktreePath}: ${cleanupError}`, 'error');
-        return false;
-      }
-    }
-
-    // Worktree doesn't exist
-    log(`Worktree for branch '${branchName}' does not exist at ${worktreePath}`, 'info');
-    return false;
-  }
-}
-
-/**
- * Gets the existing worktree path for a branch if it exists.
- *
- * @param branchName - The name of the branch to look up
- * @returns The worktree path if it exists, null otherwise
- */
-export function getWorktreeForBranch(branchName: string): string | null {
-  try {
+    const prefix = branchPrefixMap[issueType];
+    const pattern = new RegExp('^' + prefix + '-issue-' + issueNumber + '-');
     const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
-    const expectedWorktreePath = getWorktreePath(branchName);
-
-    // Parse worktree list output to find matching worktree
     const lines = output.split('\n');
+
     let currentWorktreePath: string | null = null;
+    let currentBranch: string | null = null;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
+    for (const line of lines) {
       if (line.startsWith('worktree ')) {
         currentWorktreePath = line.substring('worktree '.length);
-        // Check if this is the expected path
-        if (currentWorktreePath === expectedWorktreePath) {
-          return expectedWorktreePath;
+        currentBranch = null;
+      } else if (line.startsWith('branch ')) {
+        currentBranch = line.substring('branch '.length).replace('refs/heads/', '');
+      } else if (line === '' && currentWorktreePath && currentBranch) {
+        if (currentWorktreePath.includes('.worktrees/')) {
+          const dirName = path.basename(currentWorktreePath);
+          if (pattern.test(dirName)) {
+            log(`Found existing worktree for ${issueType} issue #${issueNumber} at ${currentWorktreePath}`, 'info');
+            return { worktreePath: currentWorktreePath, branchName: currentBranch };
+          }
         }
+        currentWorktreePath = null;
+        currentBranch = null;
       }
-
-      // Also check by branch name to find worktrees at unexpected paths
-      if (line.startsWith('branch ') && currentWorktreePath) {
-        const branchRef = line.substring('branch '.length);
-        const checkedOutBranch = branchRef.replace('refs/heads/', '');
-
-        if (checkedOutBranch === branchName && currentWorktreePath.includes('.worktrees')) {
-          log(
-            `Found worktree for branch '${branchName}' at unexpected path ${currentWorktreePath}`,
-            'info'
-          );
-          return currentWorktreePath;
-        }
-      }
-    }
-
-    // Also check if the directory exists even if git doesn't track it
-    if (fs.existsSync(expectedWorktreePath)) {
-      log(`Found orphaned worktree directory at ${expectedWorktreePath}, will attempt to reuse`, 'info');
-      return expectedWorktreePath;
     }
 
     return null;
@@ -438,24 +316,17 @@ export function getWorktreeForBranch(branchName: string): string | null {
   }
 }
 
-/**
- * Ensures a worktree exists for the given branch, creating it if necessary.
- * If the worktree already exists, logs a warning and returns the existing path.
- *
- * @param branchName - The name of the branch
- * @param baseBranch - Optional base branch to create the worktree from (for new branches)
- * @returns The absolute path to the worktree
- */
-export function ensureWorktree(branchName: string, baseBranch?: string): string {
-  const existingPath = getWorktreeForBranch(branchName);
+// Re-export creation functions
+export {
+  createWorktree,
+  createWorktreeForNewBranch,
+  ensureWorktree,
+  getWorktreeForBranch,
+} from './worktreeCreation';
 
-  if (existingPath) {
-    log(`Worktree for branch '${branchName}' already exists at ${existingPath}, reusing`, 'info');
-    copyEnvToWorktree(existingPath);
-    return existingPath;
-  }
-
-  const worktreePath = createWorktree(branchName, baseBranch);
-  copyEnvToWorktree(worktreePath);
-  return worktreePath;
-}
+// Re-export cleanup functions
+export {
+  killProcessesInDirectory,
+  removeWorktree,
+  removeWorktreesForIssue,
+} from './worktreeCleanup';

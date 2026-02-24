@@ -1,8 +1,3 @@
----
-name: prime
-description: Prime the project for development by understanding the codebase and project structure
----
-
 # Prime
 > Execute the following sections to understand the codebase then summarize your understanding.
 
@@ -11,3 +6,5 @@ git ls-files
 
 ## Read
 README.md
+adws/README.md
+.claude/commands/conditional_docs.md - this is a guide for you to determine which documentation to read based on the upcoming task.

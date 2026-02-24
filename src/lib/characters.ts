@@ -1,5 +1,6 @@
-import { getSupabaseClient, getSupabaseStorageUrl } from './supabase'
+import { getSupabaseServiceClient, getSupabaseStorageUrl } from './supabase'
 import { isTableNotFoundError } from './schema'
+import { handleDatabaseError } from './errors'
 import {
   Character,
   CharacterRow,
@@ -14,7 +15,7 @@ import {
  * Maps database rows to the application Character interface.
  */
 export async function fetchAllCharacters(): Promise<Character[]> {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseServiceClient()
 
   try {
     const { data, error } = await supabase
@@ -38,12 +39,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
       (character) => ({ ...character, image_link: getSupabaseStorageUrl(character.image_link) })
     )
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
-    }
-    throw new Error(
-      `Failed to fetch characters: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+    handleDatabaseError(err, 'fetch characters')
   }
 }
 
@@ -52,7 +48,7 @@ export async function fetchAllCharacters(): Promise<Character[]> {
  * Returns null if the character is not found.
  */
 export async function fetchCharacterById(id: string): Promise<Character | null> {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseServiceClient()
 
   try {
     const { data, error } = await supabase
@@ -84,21 +80,76 @@ export async function fetchCharacterById(id: string): Promise<Character | null> 
     const character = mapCharacterRowToCharacter(data as CharacterRow)
     return { ...character, image_link: getSupabaseStorageUrl(character.image_link) }
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Failed to fetch')) {
-      throw err
+    handleDatabaseError(err, 'fetch character')
+  }
+}
+
+/**
+ * Update a character in the database.
+ * Accepts a partial Character object and updates the corresponding fields.
+ * Maps application `category` back to database `type` column.
+ */
+export async function updateCharacter(
+  id: string,
+  data: Partial<Omit<Character, 'id'>>
+): Promise<Character> {
+  const supabase = getSupabaseServiceClient()
+
+  // Map application fields to database fields
+  const updateData: Partial<CharacterRow> = {}
+  if (data.name !== undefined) updateData.name = data.name
+  if (data.first_names !== undefined) updateData.first_names = data.first_names
+  if (data.birth_date !== undefined) updateData.birth_date = data.birth_date
+  if (data.death_date !== undefined) updateData.death_date = data.death_date
+  if (data.biography !== undefined) updateData.biography = data.biography
+  if (data.category !== undefined) updateData.type = data.category
+  if (data.link !== undefined) updateData.link = data.link
+  if (data.image_link !== undefined) updateData.image_link = data.image_link
+
+  try {
+    const { data: updatedData, error } = await supabase
+      .from('character')
+      .update(updateData)
+      .eq('id', id)
+      .select(
+        'id, name, first_names, birth_date, death_date, biography, type, link, image_link'
+      )
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.error('Supabase update returned no rows (PGRST116):', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          characterId: id,
+        })
+        throw new Error('Character not found')
+      }
+      console.error('Supabase update error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        characterId: id,
+      })
+      throw new Error(`Failed to update character: ${error.message}`)
     }
-    throw new Error(
-      `Failed to fetch character: ${err instanceof Error ? err.message : 'Unknown error'}`
-    )
+
+    if (!updatedData) {
+      throw new Error('Character not found')
+    }
+
+    return mapCharacterRowToCharacter(updatedData as CharacterRow)
+  } catch (err) {
+    handleDatabaseError(err, 'update character')
   }
 }
 
 export function groupCharactersByCategory(
   characters: Character[]
 ): CharactersByCategory {
-  const grouped = new Map<CategoryKey, Character[]>()
-
-  for (const category of CATEGORY_ORDER) {
+  return CATEGORY_ORDER.reduce((grouped, category) => {
     const categoryCharacters = characters
       .filter((char) => char.category === category)
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -106,7 +157,7 @@ export function groupCharactersByCategory(
     if (categoryCharacters.length > 0) {
       grouped.set(category, categoryCharacters)
     }
-  }
 
-  return grouped
+    return grouped
+  }, new Map<CategoryKey, Character[]>())
 }
