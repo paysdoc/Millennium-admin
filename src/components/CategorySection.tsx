@@ -4,15 +4,17 @@ import { Character, CategoryKey } from '@/types/character'
 interface CategorySectionProps {
   category: CategoryKey
   characters: Character[]
+  categoryName?: string
 }
 
 export default function CategorySection({
   category,
   characters,
+  categoryName,
 }: CategorySectionProps) {
   return (
     <section className="category-section" id={`category-${category}`}>
-      <h2 className="category-heading">Category {category}</h2>
+      <h2 className="category-heading">{categoryName ?? category}</h2>
       <ul className="character-list">
         {characters.map((character) => (
           <li key={character.id} className="character-item">

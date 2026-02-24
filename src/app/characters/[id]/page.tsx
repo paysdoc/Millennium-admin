@@ -6,6 +6,7 @@ import CharacterImage from '@/components/CharacterImage'
 import ConnectionsTable from '@/components/ConnectionsTable'
 import { fetchCharacterById, fetchAllCharacters } from '@/lib/characters'
 import { fetchConnectionsByCharacter } from '@/lib/connections'
+import { fetchAllCategoryNames, buildCategoryNameMap } from '@/lib/categories'
 import { getSupabaseStorageUrl } from '@/lib/supabase'
 
 interface CharacterPageProps {
@@ -15,11 +16,15 @@ interface CharacterPageProps {
 export default async function CharacterPage({ params }: CharacterPageProps) {
   const { id } = await params
 
-  const [character, connections, allCharacters] = await Promise.all([
+  const [character, connections, allCharacters, categoryNames] = await Promise.all([
     fetchCharacterById(id),
     fetchConnectionsByCharacter(id),
     fetchAllCharacters(),
+    fetchAllCategoryNames(),
   ])
+
+  const categoryNameMap = buildCategoryNameMap(categoryNames)
+  const categoryNamesRecord = Object.fromEntries(categoryNameMap)
 
   if (!character) {
     return (
@@ -57,7 +62,7 @@ export default async function CharacterPage({ params }: CharacterPageProps) {
               <h2 className="section-heading">Character Information</h2>
               <div className="character-info-section">
                 <div className="character-info-left">
-                  <EditableCharacterDetails character={character} />
+                  <EditableCharacterDetails character={character} categoryNames={categoryNamesRecord} />
                 </div>
                 <div className="character-info-right">
                   <CharacterImage

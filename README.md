@@ -75,6 +75,48 @@ npm run supabase:stop
 - The Supabase Studio UI is available at [http://127.0.0.1:54323](http://127.0.0.1:54323) for visual database management.
 - Switching back to production requires updating `.env` with the hosted Supabase credentials — no code changes needed.
 
+## Database Migrations
+
+[Knex.js](https://knexjs.org/) is used for database schema migrations that connect directly to the Supabase PostgreSQL database.
+
+The `DATABASE_URL` environment variable must be set. For local development with the Supabase CLI, it defaults to `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+
+### Run migrations
+
+```bash
+npm run knex:migrate
+```
+
+### Create a new migration
+
+```bash
+npm run knex:migrate:make -- <migration_name>
+```
+
+### Roll back the last migration
+
+```bash
+npm run knex:migrate:rollback
+```
+
+### Seed the database
+
+```bash
+npm run knex:seed
+```
+
+### After `supabase db reset`
+
+When resetting the local Supabase database, Knex-managed tables are dropped. Re-apply them:
+
+```bash
+npm run knex:migrate && npm run knex:seed
+```
+
+### Deployment
+
+Migrations run automatically during Vercel deployments via the `buildCommand` in `vercel.json`. The `knex migrate:latest` command is idempotent and only applies unapplied migrations.
+
 ## Project Structure
 
 - `src/` - Application source code
@@ -89,9 +131,9 @@ npm run supabase:stop
   - `components/` - Reusable React components
     - `CategorySection.tsx`, `CharacterDetails.tsx`, `CharacterImage.tsx`, `ConnectionsTable.tsx`, `EditableCharacterDetails.tsx`, `EditableField.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
   - `lib/` - Utility libraries
-    - `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
+    - `categories.ts`, `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
   - `types/` - TypeScript type definitions
-    - `character.ts`, `connection.ts`, `database.ts`
+    - `categoryName.ts`, `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
   - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
@@ -102,9 +144,12 @@ npm run supabase:stop
   - Workflow orchestrators: `adwPlanBuildTestReview.tsx`, `adwPlanBuild.tsx`, `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPrReview.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
   - `workflowPhases.ts` - Phase definitions
 - `scripts/` - Utility scripts (Supabase sync, config sync)
+- `knex/` - Knex.js database migrations and seeds
+  - `migrations/` - Schema migration files
+  - `seeds/` - Seed data files
 - `supabase/` - Local Supabase configuration
   - `config.toml` - Supabase CLI config
-  - `migrations/` - Database migrations
+  - `migrations/` - Supabase CLI migrations
   - `seed.sql` - Seed data
 - `e2e-tests/` - End-to-end test specifications
 - `e2e-screenshots/` - E2E test screenshots
