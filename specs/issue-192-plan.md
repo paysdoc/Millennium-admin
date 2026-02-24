@@ -1,87 +1,87 @@
-# PR-Review: Fix knex migration deployment and validate all tests
+# PR-Review: Fix knex migration CI/CD connection, uncommitted files, and validate tests
 
 ## PR-Review Description
-PR #197 (`chore-issue-192-add-category-name-table`) has five review comments from paysdoc that need to be addressed:
+PR #197 (`chore-issue-192-add-category-name-table`) has six review comments from paysdoc that need to be addressed:
 
-1. **"There are uncommitted files in the local worktree. Fix that"** — RESOLVED. Git status is clean with no uncommitted files.
+1. **"There are uncommitted files in the local worktree. Fix that"** — Git status shows `.claude/commands/review.md` is modified but not committed. This must be committed or discarded.
 
-2. **"Manually disabled some tests. Rerun all the tests"** — PARTIALLY RESOLVED. The e2e tests now have runtime `test.skip(true, ...)` availability guards (added by PR #204 commits `204bfdf`, `cbdc7bf`) that gracefully skip when Supabase/app server is unavailable — these are NOT manually disabled tests. However, all unit tests still need to be re-run to confirm zero regressions.
+2. **"Manually disabled some tests. Rerun all the tests"** — The e2e tests have runtime `test.skip(true, ...)` availability guards (added by PR #204). These are NOT manually disabled tests — they gracefully skip when Supabase/app server is unavailable. All unit tests must be re-run to confirm zero regressions.
 
 3. **"Deployment fails due to knex migration error" (TypeScript loading)** — RESOLVED. The `package.json` npm scripts now use `NODE_OPTIONS='--import tsx'` to preload tsx before knex runs, fixing the "Failed to load external module" errors.
 
-4. **"Another problem with the knex migration" (ECONNREFUSED 127.0.0.1:54322)** — UNRESOLVED. The `knexfile.ts` falls back to `postgresql://postgres:postgres@127.0.0.1:54322/postgres` (local Supabase) when `DATABASE_URL` is not set, which doesn't exist in the CI environment. The deploy.yml currently references `secrets.DATABASE_URL` which is not configured as a GitHub Secret.
+4. **"Another problem with the knex migration" (ECONNREFUSED 127.0.0.1:54322)** — The `knexfile.ts` fell back to `postgresql://postgres:postgres@127.0.0.1:54322/postgres` (local Supabase) because `DATABASE_URL` was not available in CI. This was subsequently addressed by adding `vercel env pull` to the deploy.yml, but a new error emerged (see comment 6).
 
-5. **"The env var, DATABASE_URL, is not valid. Please retrieve SUPABASE_URL and SUPABASE_SERVICE_KEY from Vercel and use that for knex migrations"** — UNRESOLVED. The reviewer explicitly says `DATABASE_URL` is not valid and that the deployment should use env vars pulled from Vercel (the single source of truth for credentials, per the README).
+5. **"The env var, DATABASE_URL, is not valid. Please retrieve SUPABASE_URL and SUPABASE_SERVICE_KEY from Vercel and use that for knex migrations"** — The reviewer explicitly states that DATABASE_URL is not a valid env var for this project. The knex migration must be restructured to use SUPABASE_URL and SUPABASE_SERVICE_KEY (which are already available in Vercel) instead.
 
-Comments 4 and 5 are related: the core problem is that the deployment pipeline uses a `DATABASE_URL` GitHub Secret that doesn't exist, and the fallback connects to a local Supabase instance that isn't available in CI. The solution is to align with the project's existing pattern of using `vercel env pull` to retrieve credentials from Vercel at runtime (same pattern used in `sync-supabase.yml`).
+6. **"ENETUNREACH IPv6 error during knex migrate"** — After adding `vercel env pull`, the knex migration still fails because the DATABASE_URL (if set in Vercel) resolves to an IPv6 address that GitHub Actions runners cannot reach (`connect ENETUNREACH 2a05:d018:...`). This confirms that DATABASE_URL is not a viable approach. The connection must be constructed from SUPABASE_URL and SUPABASE_SERVICE_KEY.
+
+The core problem across comments 4-6: the knex migration in CI/CD needs a PostgreSQL connection to the remote Supabase database, but DATABASE_URL either doesn't exist or fails with IPv6. The reviewer's directive is to use SUPABASE_URL and SUPABASE_SERVICE_KEY from Vercel instead.
 
 ## Summary of Original Implementation Plan
-The original plan (`specs/issue-192-adw-unknown-sdlc_planner-add-category-name-table.md`) specifies creating a `category_name` database table to store the mapping between single-letter category codes (R, S, P, I, M, N, A, B, C, D, T) and their display names. It includes Knex.js migrations, seeds, Supabase migrations, a `fetchCategoryNames` lib function, TypeScript types, component updates (`CategorySection`, `TableOfContents`, `page.tsx`), deployment pipeline updates, and unit tests. The plan used `DATABASE_URL` as a GitHub Secret for the knex migration step in `deploy.yml`.
+The original plan (`specs/issue-192-adw-unknown-sdlc_planner-add-category-name-table.md`) specifies creating a `category_name` database table to store the mapping between single-letter category codes (R, S, P, I, M, N, A, B, C, D, T) and their display names. It includes Knex.js migrations, seeds, Supabase migrations, a `fetchCategoryNames` lib function, TypeScript types, component updates (`CategorySection`, `TableOfContents`, `page.tsx`), deployment pipeline updates, and unit tests. The original plan used `DATABASE_URL` as a GitHub Secret for the knex migration step in `deploy.yml` — this is the approach the reviewer has rejected.
 
 ## Relevant Files
 Use these files to resolve the review:
 
-- **`.github/workflows/deploy.yml`** (lines 49-57, 121-129, 171-179) — Contains the "Run Knex migrations" step in all three deployment jobs (`deploy-preview`, `deploy-staging`, `deploy-production`). Currently references `secrets.DATABASE_URL` which is not configured. Must be updated to use `vercel env pull` to retrieve env vars from Vercel (including `DATABASE_URL`) before running migrations, following the same pattern established in `sync-supabase.yml`.
-- **`knexfile.ts`** — Knex configuration that falls back to `127.0.0.1:54322` when `DATABASE_URL` is not set. The local fallback is correct for local dev but causes ECONNREFUSED in CI. No changes needed to this file — the fix is in the deploy pipeline to ensure `DATABASE_URL` is available from Vercel env pull.
-- **`.env.sample`** (line 29-32) — Documents `DATABASE_URL` as a standalone env var. Must be updated to clarify that `DATABASE_URL` is managed through Vercel (not as a separate GitHub Secret), consistent with the "Vercel is single source of truth" principle documented in the README.
+- **`knexfile.ts`** — Knex configuration. Currently uses `DATABASE_URL` env var with fallback to local Supabase. Must be updated to construct the PostgreSQL connection from `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` when `DATABASE_URL` is not available.
+- **`.github/workflows/deploy.yml`** (lines 60-67, 131-138, 181-188) — Contains the "Run Knex migrations" step in all three deployment jobs. Currently checks for `DATABASE_URL` from `vercel env pull`. Must be updated to check for `SUPABASE_URL` instead and pass the correct env vars to knex.
+- **`.env.sample`** (lines 29-32) — Documents `DATABASE_URL`. Must be updated to reflect that knex migrations use `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in CI/CD, and `DATABASE_URL` is only for local development convenience.
+- **`.claude/commands/review.md`** — Modified but uncommitted. Must be committed to resolve the "uncommitted files" review comment.
 - **`src/__tests__/categoryNames.test.ts`** — Unit tests for the categoryNames library functions. Must be re-run to confirm they pass.
+- **`package.json`** — Contains knex npm scripts. May need updates if the migration command changes.
 
 ## Step by Step Tasks
 IMPORTANT: Execute every step in order, top to bottom.
 
-### Step 1: Restructure deploy.yml to use `vercel env pull` before knex migrations
-- In `.github/workflows/deploy.yml`, all three deployment jobs (`deploy-preview`, `deploy-staging`, `deploy-production`) must be restructured to install Vercel CLI, link the project, and pull env vars from Vercel BEFORE running knex migrations.
-- Move the "Install Vercel CLI", "Link Vercel project" steps to run immediately after "Install dependencies" (before the knex migration step).
-- Add a new "Pull Vercel Environment Variables" step using `vercel env pull` to fetch env vars into a `.env.vercel` file. Source these vars before running knex migrations.
-- This follows the exact same pattern established in `.github/workflows/sync-supabase.yml` (lines 31-42).
+### Step 1: Commit uncommitted files
+- Run `git status` to confirm the uncommitted file is `.claude/commands/review.md`
+- Stage and commit the file with an appropriate message
+- This resolves the "uncommitted files in the local worktree" review comment
 
-**For `deploy-preview` job**, reorder and update steps as follows (after "Install dependencies"):
+### Step 2: Update `knexfile.ts` to construct connection from Supabase env vars
+- Modify `knexfile.ts` to build the PostgreSQL connection URL from `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` when `DATABASE_URL` is not available
+- The connection resolution order should be:
+  1. `DATABASE_URL` if set (for backward compatibility and local dev convenience)
+  2. Construct from `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` if both are set
+  3. Fall back to local Supabase (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) for local dev
+- To construct the PostgreSQL connection from Supabase env vars:
+  - Extract the project ref from `SUPABASE_URL` (e.g., `https://abcdef123.supabase.co` → `abcdef123`)
+  - Use the Supabase connection pooler format with the service role key as the password: `postgresql://postgres.{ref}:{SUPABASE_SERVICE_KEY}@aws-0-us-east-1.pooler.supabase.com:6543/postgres`
+  - The connection pooler uses IPv4, which resolves the ENETUNREACH IPv6 error from comment 6
+- Add a helper function `buildConnectionUrl()` that encapsulates this logic
+- Keep the knexfile clean and readable per coding guidelines
+
+### Step 3: Update `deploy.yml` knex migration steps
+- In all three deployment jobs (`deploy-preview`, `deploy-staging`, `deploy-production`), update the "Run Knex migrations" step to check for `SUPABASE_URL` instead of `DATABASE_URL`:
 
 ```yaml
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Link Vercel project
-        run: |
-          mkdir -p .vercel
-          echo '{"orgId":"'"$VERCEL_ORG_ID"'","projectId":"'"$VERCEL_PROJECT_ID"'"}' > .vercel/project.json
-
-      - name: Pull Vercel Environment Information
-        run: vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Run Knex migrations
-        run: |
-          set -a && source .env.vercel && set +a
-          if [ -n "$DATABASE_URL" ]; then
-            npm run knex:migrate
-          else
-            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
-          fi
-
-      - name: Build Project Artifacts
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+- name: Run Knex migrations
+  run: |
+    set -a && source .env.vercel && set +a
+    if [ -n "$SUPABASE_URL" ]; then
+      npm run knex:migrate
+    else
+      echo "Skipping Knex migrations: SUPABASE_URL not configured in Vercel"
+    fi
 ```
 
-- Remove the duplicate "Install Vercel CLI" and "Link Vercel project" steps that currently appear later in the job (since they've been moved earlier).
-- Remove the separate `vercel pull` step (replaced by `vercel env pull`).
-- Remove `env: DATABASE_URL: ${{ secrets.DATABASE_URL }}` from the knex migration step (no longer using GitHub Secrets for this).
+- The `knexfile.ts` (updated in Step 2) handles constructing the connection from the sourced env vars
+- No need to set `DATABASE_URL` explicitly — the knexfile constructs it from `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
 
-**For `deploy-staging` job**, apply the same reordering. Use `--environment=preview` for `vercel env pull` (staging uses preview environment in Vercel).
-
-**For `deploy-production` job**, apply the same reordering. Use `--environment=production` for `vercel env pull`.
-
-### Step 2: Update `.env.sample` to clarify DATABASE_URL management
-- Update the `DATABASE_URL` section in `.env.sample` to clarify that for CI/CD, this value is managed through Vercel (pulled via `vercel env pull`):
+### Step 4: Update `.env.sample` to reflect new connection approach
+- Update the `DATABASE_URL` section to clarify the new connection approach:
 
 ```
 # Knex.js database migrations
-# For LOCAL development: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-# For CI/CD: managed through Vercel env vars (pulled via `vercel env pull`)
+# For LOCAL development: set DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+#   or leave empty to use the default local Supabase connection
+# For CI/CD: knexfile.ts constructs the connection from SUPABASE_URL and SUPABASE_SERVICE_KEY
+#   (pulled via `vercel env pull`). No separate DATABASE_URL needed.
 DATABASE_URL=
 ```
 
-### Step 3: Run all validation commands
-- Run all validation commands to verify the review is resolved with zero regressions.
+### Step 5: Run all validation commands
+- Run all tests, linter, and build to confirm zero regressions and that the review is fully resolved
 
 ## Validation Commands
 Execute every command to validate the review is complete with zero regressions.
@@ -91,7 +91,8 @@ Execute every command to validate the review is complete with zero regressions.
 - `npm test` - Run tests to validate the review is complete with zero regressions
 
 ## Notes
-- **Vercel env var setup required**: `DATABASE_URL` must be added as an environment variable in the Vercel Dashboard (Project Settings > Environment Variables) for both Production and Preview environments. The value should be the Supabase Postgres connection string from the Supabase Dashboard (Settings > Database > Connection string). This is a one-time manual setup step.
-- **Why not GitHub Secrets**: The project's README explicitly states "Vercel is the single source of truth for Supabase credentials." Using `vercel env pull` is consistent with the pattern already used in `sync-supabase.yml` and eliminates credential duplication across GitHub Secrets and Vercel.
+- **Connection pooler format**: The Supabase connection pooler URL format is `postgresql://postgres.{ref}:{password}@aws-0-{region}.pooler.supabase.com:6543/postgres`. The exact region (e.g., `us-east-1`) may need to be determined during implementation by checking the Supabase dashboard or testing with `vercel env pull` locally. If the region cannot be reliably determined from `SUPABASE_URL`, an additional env var (`SUPABASE_REGION` or `SUPABASE_DB_PASSWORD`) may need to be added to Vercel.
+- **Service key as password**: Supabase's Supavisor connection pooler supports JWT authentication, which means the `SUPABASE_SERVICE_KEY` (a JWT token) can be used as the password. If this does not work during implementation, a separate `SUPABASE_DB_PASSWORD` env var will need to be added to Vercel, and the plan should be adjusted accordingly.
 - **E2E test.skip() calls are intentional**: The `test.skip(true, ...)` calls in e2e test files (`character-edit.spec.ts`, `character-detail.spec.ts`, `character-image-display.spec.ts`) are runtime availability guards added by PR #204 (commits `204bfdf`, `cbdc7bf`). They gracefully skip tests when the application server or Supabase is unavailable — they are NOT manually disabled tests and should NOT be removed.
-- **Local development unchanged**: The `knexfile.ts` local fallback (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) remains correct for local development with `supabase start`. No changes needed to `knexfile.ts`.
+- **Vercel is the single source of truth**: Per the README's "Secrets Management" section, Vercel is the single source of truth for Supabase credentials. GitHub Secrets only stores Vercel access credentials (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`). This plan aligns with that principle by using `vercel env pull` to retrieve SUPABASE_URL and SUPABASE_SERVICE_KEY at CI/CD runtime.
+- **Local development unchanged**: The `knexfile.ts` local fallback (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) remains correct for local development with `supabase start`. Developers can also set `DATABASE_URL` in their `.env` for convenience.
