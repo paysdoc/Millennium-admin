@@ -54,6 +54,17 @@ jobs:
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push Supabase Migrations
+        run: |
+          vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          set -a && source .env.vercel && set +a
+          supabase db push --db-url "$SUPABASE_DB_POOLER_URL"
+
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
@@ -113,6 +124,17 @@ jobs:
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push Supabase Migrations
+        run: |
+          vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          set -a && source .env.vercel && set +a
+          supabase db push --db-url "$SUPABASE_DB_POOLER_URL"
+
       - name: Build Project Artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
@@ -149,6 +171,17 @@ jobs:
 
       - name: Pull Vercel Environment Information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push Supabase Migrations
+        run: |
+          vercel env pull .env.vercel --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          set -a && source .env.vercel && set +a
+          supabase db push --db-url "$SUPABASE_DB_POOLER_URL"
 
       - name: Build Project Artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}

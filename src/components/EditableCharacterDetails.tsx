@@ -6,6 +6,7 @@ import EditableField from './EditableField'
 
 interface EditableCharacterDetailsProps {
   character: Character
+  categoryNames?: Record<string, string>
   onSave?: (updated: Character) => void
 }
 
@@ -35,6 +36,7 @@ const EDITABLE_FIELDS: FieldConfig[] = [
 
 export default function EditableCharacterDetails({
   character,
+  categoryNames,
   onSave,
 }: EditableCharacterDetailsProps) {
   const originalData = useRef<EditableFields>({
@@ -115,6 +117,7 @@ export default function EditableCharacterDetails({
                 fieldName={fieldName}
                 {...(type ? { type } : {})}
                 {...(placeholder ? { placeholder } : {})}
+                {...(fieldName === 'category' && categoryNames ? { optionLabels: categoryNames } : {})}
               />
             </span>
           </div>

@@ -12,6 +12,7 @@ interface EditableFieldProps {
   fieldName: string
   type?: FieldType
   placeholder?: string
+  optionLabels?: Record<string, string>
 }
 
 export default function EditableField({
@@ -21,6 +22,7 @@ export default function EditableField({
   fieldName,
   type = 'text',
   placeholder = 'Click to edit',
+  optionLabels,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [localValue, setLocalValue] = useState(value ?? '')
@@ -101,7 +103,7 @@ export default function EditableField({
         >
           {CATEGORY_ORDER.map((cat) => (
             <option key={cat} value={cat}>
-              {cat}
+              {optionLabels?.[cat] ?? cat}
             </option>
           ))}
         </select>
@@ -125,6 +127,7 @@ export default function EditableField({
   }
 
   const displayValue = value ?? ''
+  const resolvedDisplayValue = optionLabels?.[displayValue] ?? displayValue
 
   return (
     <span
@@ -136,7 +139,7 @@ export default function EditableField({
       aria-label={`Edit ${label}`}
       data-field={fieldName}
     >
-      {displayValue || <span className="editable-field-placeholder">{placeholder}</span>}
+      {resolvedDisplayValue || <span className="editable-field-placeholder">{placeholder}</span>}
     </span>
   )
 }

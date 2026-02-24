@@ -3,15 +3,22 @@ import Footer from '@/components/Footer'
 import TableOfContents from '@/components/TableOfContents'
 import CategorySection from '@/components/CategorySection'
 import { fetchAllCharacters, groupCharactersByCategory } from '@/lib/characters'
+import { fetchAllCategoryNames, buildCategoryNameMap } from '@/lib/categories'
 import { CharactersByCategory } from '@/types/character'
+import { CategoryNameMap } from '@/types/categoryName'
 
 export default async function Home() {
   let groupedCharacters: CharactersByCategory
+  let categoryNameMap: CategoryNameMap = new Map()
   let error: string | null = null
 
   try {
-    const characters = await fetchAllCharacters()
+    const [characters, categoryNames] = await Promise.all([
+      fetchAllCharacters(),
+      fetchAllCategoryNames(),
+    ])
     groupedCharacters = groupCharactersByCategory(characters)
+    categoryNameMap = buildCategoryNameMap(categoryNames)
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load characters'
     groupedCharacters = new Map()
@@ -37,7 +44,7 @@ export default async function Home() {
             </div>
           ) : (
             <>
-              <TableOfContents categories={categories} />
+              <TableOfContents categories={categories} categoryNames={categoryNameMap} />
 
               <div className="overview-content">
                 {categories.map((category) => (
@@ -45,6 +52,7 @@ export default async function Home() {
                     key={category}
                     category={category}
                     characters={groupedCharacters.get(category) || []}
+                    categoryName={categoryNameMap.get(category)}
                   />
                 ))}
               </div>

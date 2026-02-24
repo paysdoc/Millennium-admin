@@ -89,9 +89,9 @@ npm run supabase:stop
   - `components/` - Reusable React components
     - `CategorySection.tsx`, `CharacterDetails.tsx`, `CharacterImage.tsx`, `ConnectionsTable.tsx`, `EditableCharacterDetails.tsx`, `EditableField.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
   - `lib/` - Utility libraries
-    - `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
+    - `categories.ts`, `characters.ts`, `connections.ts`, `errors.ts`, `schema.ts`, `supabase.ts`
   - `types/` - TypeScript type definitions
-    - `character.ts`, `connection.ts`, `database.ts`
+    - `categoryName.ts`, `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
 - `adws/` - AI Developer Workflow Scripts (TypeScript)
   - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
@@ -99,12 +99,13 @@ npm run supabase:stop
   - `github/` - Git/GitHub operations (git, worktree, PR, comments)
   - `triggers/` - Workflow triggers (webhook, cron)
   - `__tests__/` - ADWS unit tests
-  - Workflow orchestrators: `adwPlanBuildTestReview.tsx`, `adwPlanBuild.tsx`, `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPrReview.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
-  - `workflowPhases.ts` - Phase definitions
+  - `phases/` - Workflow phase implementations (plan, build, test, PR, review, document)
+  - Workflow orchestrators: `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPatch.tsx`, `adwDocument.tsx`, `adwPrReview.tsx`, `adwPlanBuild.tsx`, `adwPlanBuildTest.tsx`, `adwPlanBuildReview.tsx`, `adwPlanBuildTestReview.tsx`, `adwPlanBuildDocument.tsx`, `adwSdlc.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
+  - `adwBuildHelpers.ts`, `workflowPhases.ts` - Shared helpers and phase definitions
 - `scripts/` - Utility scripts (Supabase sync, config sync)
 - `supabase/` - Local Supabase configuration
   - `config.toml` - Supabase CLI config
-  - `migrations/` - Database migrations
+  - `migrations/` - Supabase CLI migrations
   - `seed.sql` - Seed data
 - `e2e-tests/` - End-to-end test specifications
 - `e2e-screenshots/` - E2E test screenshots
@@ -291,7 +292,7 @@ If you need to rollback a production deployment:
 
 ### Secrets Management
 
-Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments.
+Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments. `SUPABASE_DB_URL` is also configured in Vercel and used by the deploy workflow to push Supabase database migrations via `supabase db push` before each deployment.
 
 **GitHub Secrets** only stores Vercel access credentials:
 - `VERCEL_TOKEN` — API token for Vercel CLI

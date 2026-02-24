@@ -1,9 +1,10 @@
--- Create the character_images storage bucket (matches production)
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('character_images', 'character_images', true)
-ON CONFLICT (id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS category_name (
+  code VARCHAR(1) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Seed category_name table
 INSERT INTO category_name (code, name) VALUES
   ('R', 'Royalty'),
   ('S', 'Statesmen'),
