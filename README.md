@@ -131,7 +131,7 @@ Migrations run automatically during Vercel deployments via the `buildCommand` in
   - `components/` - Reusable React components
     - `CategorySection.tsx`, `CharacterDetails.tsx`, `CharacterImage.tsx`, `ConnectionsTable.tsx`, `EditableCharacterDetails.tsx`, `EditableField.tsx`, `Footer.tsx`, `Header.tsx`, `TableOfContents.tsx`
   - `lib/` - Utility libraries
-    - `categories.ts`, `characters.ts`, `connections.ts`, `schema.ts`, `supabase.ts`
+    - `categories.ts`, `characters.ts`, `connections.ts`, `errors.ts`, `schema.ts`, `supabase.ts`
   - `types/` - TypeScript type definitions
     - `categoryName.ts`, `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
@@ -141,8 +141,9 @@ Migrations run automatically during Vercel deployments via the `buildCommand` in
   - `github/` - Git/GitHub operations (git, worktree, PR, comments)
   - `triggers/` - Workflow triggers (webhook, cron)
   - `__tests__/` - ADWS unit tests
-  - Workflow orchestrators: `adwPlanBuildTestReview.tsx`, `adwPlanBuild.tsx`, `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPrReview.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
-  - `workflowPhases.ts` - Phase definitions
+  - `phases/` - Workflow phase implementations (plan, build, test, PR, review, document)
+  - Workflow orchestrators: `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPatch.tsx`, `adwDocument.tsx`, `adwPrReview.tsx`, `adwPlanBuild.tsx`, `adwPlanBuildTest.tsx`, `adwPlanBuildReview.tsx`, `adwPlanBuildTestReview.tsx`, `adwPlanBuildDocument.tsx`, `adwSdlc.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
+  - `adwBuildHelpers.ts`, `workflowPhases.ts` - Shared helpers and phase definitions
 - `scripts/` - Utility scripts (Supabase sync, config sync)
 - `knex/` - Knex.js database migrations and seeds
   - `migrations/` - Schema migration files
