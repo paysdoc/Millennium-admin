@@ -1,109 +1,106 @@
-# PR-Review: Fix Vercel deployment failure — migrate from Knex to Supabase CLI migration
+# PR-Review: Add `supabase db push` step to deploy.yml
 
 ## PR-Review Description
 
-The Vercel deployment fails during the build step because the `buildCommand` in `vercel.json` runs `npx knex migrate:latest --knexfile knexfile.js` before `npm run build`. Knex attempts a direct PostgreSQL connection to the Supabase database, but the host resolves to an IPv6 address (`2a05:d018:...`) that is unreachable from Vercel's build environment (`ENETUNREACH`).
+The PR review has three comments from the author (`paysdoc`), all related to the same issue: the Vercel deployment fails because the original implementation used Knex.js migrations that attempted a direct PostgreSQL connection during the Vercel build step. The connection fails with `ENETUNREACH` because Vercel's build runner cannot reach the Supabase database over IPv6.
 
-The root cause is architectural: Knex.js was added as a **second migration system** alongside the existing Supabase CLI migrations, introducing a build-time dependency on a direct database connection that Vercel's build runner cannot satisfy.
+A previous review cycle already migrated the schema from Knex to Supabase CLI migrations (`supabase/migrations/20260224200000_create_category_name.sql`) and removed all Knex infrastructure (dependencies, config, scripts, build command). However, the deployment pipeline still lacks a mechanism to apply the Supabase migration to the remote database during deploys.
 
-The fix is to **replace the Knex migration with a Supabase CLI migration**. The project already uses Supabase CLI for all other schema management (`supabase/migrations/`). The `category_name` table migration and seed data should be moved there. This eliminates the need for a database connection during the Vercel build, removes the duplicate migration system, and keeps the project consistent.
+The reviewer explicitly requests:
+1. **Add a `supabase db push` step to `deploy.yml`** — so that Supabase migrations are applied to the remote database as part of the CI/CD pipeline.
+2. **Any added env vars must come from the Vercel env** — following the existing pattern where Vercel is the single source of truth for credentials (pulled at runtime via `vercel env pull`).
+
+Additionally, a few stale Knex references remain in non-critical files that should be cleaned up.
 
 ## Summary of Original Implementation Plan
 
-The original plan (`specs/issue-207-adw-set-up-category-name-bvy2fq-sdlc_planner-add-category-name-table.md`) specified a three-phase approach to add a `category_name` table: (1) install Knex.js and configure it to connect to Supabase PostgreSQL, (2) create migration/seed files and a data access layer (`src/lib/categories.ts`), and (3) integrate category names into UI components and the Vercel deployment pipeline. The Knex migration creates columns `code CHAR(1) PRIMARY KEY`, `name VARCHAR(100) NOT NULL`, `created_at TIMESTAMPTZ`, and `updated_at TIMESTAMPTZ`, seeded with 11 category mappings (R=Royalty, S=Statesmen, etc.). The `vercel.json` buildCommand was modified to run `npx knex migrate:latest` before `npm run build`.
+The original plan (`specs/issue-207-adw-set-up-category-name-bvy2fq-sdlc_planner-add-category-name-table.md`) specified a three-phase approach to add a `category_name` table: (1) install Knex.js and configure it to connect to Supabase PostgreSQL via `DATABASE_URL`, (2) create migration/seed files and a data access layer (`src/lib/categories.ts`), and (3) integrate category names into UI components and the Vercel deployment pipeline. The Knex migration creates columns `code CHAR(1) PRIMARY KEY`, `name VARCHAR(100) NOT NULL`, `created_at TIMESTAMPTZ`, and `updated_at TIMESTAMPTZ`, seeded with 11 category mappings (R=Royalty, S=Statesmen, etc.). A subsequent review cycle migrated from Knex to Supabase CLI migrations, removing all Knex infrastructure and creating `supabase/migrations/20260224200000_create_category_name.sql` instead.
 
 ## Relevant Files
-
 Use these files to resolve the review:
 
-- **`vercel.json`** — Contains the failing `buildCommand` that runs Knex migration before build. Must revert to `npm run build`.
-- **`knex/migrations/20260224100000_create_category_name.js`** — Knex migration file to be removed (replaced by Supabase CLI migration).
-- **`knex/seeds/01_category_names.js`** — Knex seed file to be removed (seed data moves to Supabase migration and seed.sql).
-- **`knexfile.js`** — Knex configuration file to be removed.
-- **`supabase/migrations/`** — Destination for the new Supabase SQL migration file.
-- **`supabase/seed.sql`** — Must be updated to include category name seed data for local `supabase db reset`.
-- **`package.json`** — Remove `knex` and `pg` dependencies and Knex npm scripts.
-- **`.env.sample`** — Remove `DATABASE_URL` variable (only used by Knex).
-- **`README.md`** — Remove the "Database Migrations" Knex section and update project structure references.
-
-### New Files
-
-- **`supabase/migrations/<timestamp>_create_category_name.sql`** — New Supabase SQL migration that creates the `category_name` table and inserts seed data.
+- **`.github/workflows/deploy.yml`** — The deployment workflow. Needs a `supabase db push` step added to each deploy job (deploy-preview, deploy-staging, deploy-production) so that Supabase migrations are applied to the remote database before the Vercel build.
+- **`.github/workflows/sync-supabase.yml`** — Reference for the existing pattern of pulling Vercel env vars and sourcing them in CI. Used as a template for the new `supabase db push` step.
+- **`.env.sample`** — Needs `SUPABASE_DB_URL` documented so developers and the deployment pipeline know to configure this Vercel env var.
+- **`README.md`** — Needs updated deployment documentation to reflect that Supabase migrations are pushed via `supabase db push` in CI/CD, and that `SUPABASE_DB_URL` must be configured in Vercel.
+- **`e2e-tests/test_category_names.md`** — Contains a stale Knex reference in prerequisites (line 8) that must be updated to reference Supabase CLI commands.
+- **`src/types/categoryName.ts`** — Contains a stale Knex reference in a JSDoc comment (line 3) that must be updated to reference Supabase migrations.
+- **`supabase/migrations/20260224200000_create_category_name.sql`** — The existing Supabase migration that `supabase db push` will apply. No changes needed, listed for reference.
 
 ## Step by Step Tasks
+IMPORTANT: Execute every step in order, top to bottom.
 
-### 1. Create Supabase SQL migration for `category_name` table
+### 1. Add `SUPABASE_DB_URL` to `.env.sample`
 
-- Create a new migration file in `supabase/migrations/` with the next sequential timestamp (e.g., `20260224200000_create_category_name.sql`).
-- The migration must create the `category_name` table with the same schema as the Knex migration:
-  ```sql
-  CREATE TABLE IF NOT EXISTS category_name (
-    code VARCHAR(1) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-  );
+- Add a `SUPABASE_DB_URL` entry to `.env.sample` in the Supabase section, after the existing `SUPABASE_SERVICE_KEY` line.
+- Include a comment explaining it is the direct PostgreSQL connection string used by `supabase db push` in CI/CD.
+- Format:
   ```
-- Include the seed data directly in the migration using `INSERT ... ON CONFLICT DO NOTHING` so it is applied on both local and production databases:
-  ```sql
-  INSERT INTO category_name (code, name) VALUES
-    ('R', 'Royalty'),
-    ('S', 'Statesmen'),
-    ('P', 'Philosophers'),
-    ('I', 'Inventors'),
-    ('M', 'Mathematical Scientists'),
-    ('N', 'Natural Scientists'),
-    ('A', 'Artists'),
-    ('B', 'Builders'),
-    ('C', 'Composers'),
-    ('D', 'Dramatists'),
-    ('T', 'Towns')
-  ON CONFLICT (code) DO NOTHING;
+  # Direct PostgreSQL connection string for Supabase CLI (supabase db push)
+  # For LOCAL development: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+  # For CI/CD: configured in Vercel Dashboard (Project Settings > Database > Connection string, URI format)
+  SUPABASE_DB_URL=
   ```
 
-### 2. Update `supabase/seed.sql` with category name seed data
+### 2. Add `supabase db push` step to the `deploy-preview` job in `deploy.yml`
 
-- Append seed data for the `category_name` table so that `supabase db reset` restores category names during local development.
-- Use `INSERT ... ON CONFLICT (code) DO NOTHING` for idempotency.
+- In the `deploy-preview` job, add the following steps **after** the "Pull Vercel Environment Information" step and **before** the "Build Project Artifacts" step:
+  1. **Install Supabase CLI**: `npm install -g supabase@latest`
+  2. **Pull Vercel env vars to a file**: `vercel env pull .env.vercel --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}`
+  3. **Run `supabase db push`**:
+     ```bash
+     set -a && source .env.vercel && set +a
+     npx supabase db push --db-url "$SUPABASE_DB_URL"
+     ```
+- This ensures migrations are applied to the preview Supabase database before the Vercel build.
 
-### 3. Revert `vercel.json` buildCommand
+### 3. Add `supabase db push` step to the `deploy-staging` job in `deploy.yml`
 
-- Change `buildCommand` from `"npx knex migrate:latest --knexfile knexfile.js && npm run build"` back to `"npm run build"`.
-- This eliminates the build-time database connection that causes the `ENETUNREACH` error.
+- Apply the same pattern as Step 2 to the `deploy-staging` job.
+- Insert after "Pull Vercel Environment Information" and before "Build Project Artifacts".
+- Use `--environment=preview` (staging uses the preview environment in Vercel).
 
-### 4. Remove Knex migration and seed files
+### 4. Add `supabase db push` step to the `deploy-production` job in `deploy.yml`
 
-- Delete `knex/migrations/20260224100000_create_category_name.js`.
-- Delete `knex/seeds/01_category_names.js`.
-- Delete the `knex/migrations/` and `knex/seeds/` directories if empty.
-- Delete the `knex/` directory.
+- Apply the same pattern as Step 2 to the `deploy-production` job.
+- Insert after "Pull Vercel Environment Information" and before "Build Project Artifacts".
+- Use `--environment=production` to pull the production `SUPABASE_DB_URL`.
 
-### 5. Remove `knexfile.js`
+### 5. Fix stale Knex reference in `e2e-tests/test_category_names.md`
 
-- Delete `knexfile.js` from the project root.
+- On line 8, replace:
+  ```
+  - Knex migrations and seeds have been applied (`npm run knex:migrate && npm run knex:seed`)
+  ```
+  with:
+  ```
+  - Supabase database has been reset with migrations and seeds (`npm run supabase:reset`)
+  ```
 
-### 6. Remove Knex dependencies and scripts from `package.json`
+### 6. Fix stale Knex reference in `src/types/categoryName.ts`
 
-- Remove the following npm scripts: `knex:migrate`, `knex:migrate:rollback`, `knex:seed`, `knex:migrate:make`.
-- Remove `knex` and `pg` from `dependencies`. Keep `dotenv` as it is used by `adws/core/config.ts`.
-- Run `npm install` to regenerate `package-lock.json`.
+- On line 3, replace:
+  ```
+  * This matches the actual SQL schema managed by Knex migrations.
+  ```
+  with:
+  ```
+  * This matches the actual SQL schema managed by Supabase migrations.
+  ```
 
-### 7. Remove `DATABASE_URL` from `.env.sample`
+### 7. Update `README.md` deployment and secrets documentation
 
-- Remove the `DATABASE_URL` variable and its associated comments from `.env.sample`. This variable was only used by Knex.
+- In the **Secrets Management** section (near the bottom of the README), add `SUPABASE_DB_URL` to the list of Vercel-managed env vars. Update the description to mention that `SUPABASE_DB_URL` is used by the deploy workflow to push Supabase migrations.
+- Example addition after the `SUPABASE_SERVICE_KEY` mention:
+  ```
+  `SUPABASE_DB_URL` is also configured in Vercel and used by the deploy workflow to push Supabase database migrations via `supabase db push` before each deployment.
+  ```
 
-### 8. Update `README.md`
-
-- Remove the entire "Database Migrations" section (lines 79–118) that documents Knex usage.
-- Update the "Project Structure" section to remove references to `knex/` and `knexfile.js`.
-- Update the "Deployment" subsection under "Project Structure" to remove the note about Knex migrations running on Vercel.
-
-### 9. Run validation commands
+### 8. Run validation commands
 
 - Run all validation commands to confirm zero regressions.
 
 ## Validation Commands
-
 Execute every command to validate the review is complete with zero regressions.
 
 - `npm run lint` - Run linter to check for code quality issues
@@ -112,9 +109,7 @@ Execute every command to validate the review is complete with zero regressions.
 
 ## Notes
 
-- **No changes to `src/lib/categories.ts`**: The data access layer queries the `category_name` table via the Supabase client, not Knex. The table name and column names remain identical, so no code changes are needed.
-- **No changes to UI components**: Components consume category data via `src/lib/categories.ts`, which is unaffected.
-- **No changes to `src/types/categoryName.ts` or `src/types/database.ts`**: Type definitions reference the table shape, not the migration tool.
-- **Production migration**: After merging, run `supabase db push` against the hosted Supabase project to apply the new migration to production. This is the standard Supabase workflow and matches how the initial schema was deployed.
-- **Knex lock table cleanup**: If the Knex migration was previously partially applied (creating `knex_migrations` and `knex_migrations_lock` tables), these orphan tables can be dropped manually from the production database. This is optional and non-urgent.
-- **Unit tests in `src/__tests__/categories.test.ts`**: These test the `buildCategoryNameMap()` pure function, not the migration tool. They remain valid and should pass without changes.
+- **`SUPABASE_DB_URL` must be added to Vercel**: The direct PostgreSQL connection string (e.g., `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres`) must be configured in the Vercel Dashboard for both Production and Preview environments. This is available in the Supabase Dashboard under Project Settings > Database > Connection string (URI format). Use the "Session mode" connection string (port 5432).
+- **`supabase db push` is idempotent**: It only applies migrations that haven't been applied yet, tracked via Supabase's internal `schema_migrations` table. Running it when there are no new migrations is a safe no-op.
+- **Pattern follows `sync-supabase.yml`**: The approach of pulling Vercel env vars and sourcing them matches the existing pattern in `.github/workflows/sync-supabase.yml`, keeping the CI/CD pipeline consistent.
+- **No changes to application code**: The data access layer (`src/lib/categories.ts`), UI components, and tests are unaffected. Only the CI/CD pipeline and documentation are updated.

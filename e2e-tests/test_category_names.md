@@ -5,7 +5,7 @@ Validate that full category names (e.g., "Royalty", "Statesmen") are displayed i
 
 ## Prerequisites
 - Local Supabase is running (`npm run supabase:start`)
-- Knex migrations and seeds have been applied (`npm run knex:migrate && npm run knex:seed`)
+- Supabase database has been reset with migrations and seeds (`npm run supabase:reset`)
 - Application is running locally (`npm run dev`)
 
 ## Test Steps

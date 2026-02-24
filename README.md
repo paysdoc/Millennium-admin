@@ -292,7 +292,7 @@ If you need to rollback a production deployment:
 
 ### Secrets Management
 
-Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments.
+Vercel is the single source of truth for Supabase credentials. Environment variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`) are configured in the Vercel Dashboard for both Production and Preview environments. `SUPABASE_DB_URL` is also configured in Vercel and used by the deploy workflow to push Supabase database migrations via `supabase db push` before each deployment.
 
 **GitHub Secrets** only stores Vercel access credentials:
 - `VERCEL_TOKEN` — API token for Vercel CLI

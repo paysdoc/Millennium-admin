@@ -1,6 +1,6 @@
 /**
  * Raw database row from the `category_name` table.
- * This matches the actual SQL schema managed by Knex migrations.
+ * This matches the actual SQL schema managed by Supabase migrations.
  */
 export interface CategoryNameRow {
   code: string
