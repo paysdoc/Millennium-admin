@@ -60,10 +60,10 @@ jobs:
       - name: Run Knex migrations
         run: |
           set -a && source .env.vercel && set +a
-          if [ -n "$DATABASE_URL" ]; then
+          if [ -n "$SUPABASE_URL" ]; then
             npm run knex:migrate
           else
-            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+            echo "Skipping Knex migrations: SUPABASE_URL not configured in Vercel"
           fi
 
       - name: Build Project Artifacts
@@ -131,10 +131,10 @@ jobs:
       - name: Run Knex migrations
         run: |
           set -a && source .env.vercel && set +a
-          if [ -n "$DATABASE_URL" ]; then
+          if [ -n "$SUPABASE_URL" ]; then
             npm run knex:migrate
           else
-            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+            echo "Skipping Knex migrations: SUPABASE_URL not configured in Vercel"
           fi
 
       - name: Build Project Artifacts
@@ -180,10 +180,10 @@ jobs:
       - name: Run Knex migrations
         run: |
           set -a && source .env.vercel && set +a
-          if [ -n "$DATABASE_URL" ]; then
+          if [ -n "$SUPABASE_URL" ]; then
             npm run knex:migrate
           else
-            echo "Skipping Knex migrations: DATABASE_URL not configured in Vercel"
+            echo "Skipping Knex migrations: SUPABASE_URL not configured in Vercel"
           fi
 
       - name: Build Project Artifacts
