@@ -93,15 +93,6 @@ npm run supabase:stop
   - `types/` - TypeScript type definitions
     - `categoryName.ts`, `character.ts`, `connection.ts`, `database.ts`
   - `__tests__/` - Application tests
-- `adws/` - AI Developer Workflow Scripts (TypeScript)
-  - `agents/` - Agent implementations (build, plan, test, claude, git, patch, review)
-  - `core/` - Core utilities (state, config, data types, orchestrator, issue classifier)
-  - `github/` - Git/GitHub operations (git, worktree, PR, comments)
-  - `triggers/` - Workflow triggers (webhook, cron)
-  - `__tests__/` - ADWS unit tests
-  - `phases/` - Workflow phase implementations (plan, build, test, PR, review, document)
-  - Workflow orchestrators: `adwPlan.tsx`, `adwBuild.tsx`, `adwTest.tsx`, `adwPatch.tsx`, `adwDocument.tsx`, `adwPrReview.tsx`, `adwPlanBuild.tsx`, `adwPlanBuildTest.tsx`, `adwPlanBuildReview.tsx`, `adwPlanBuildTestReview.tsx`, `adwPlanBuildDocument.tsx`, `adwSdlc.tsx`, `adwClearComments.tsx`, `healthCheck.tsx`
-  - `adwBuildHelpers.ts`, `workflowPhases.ts` - Shared helpers and phase definitions
 - `scripts/` - Utility scripts (Supabase sync, config sync)
 - `supabase/` - Local Supabase configuration
   - `config.toml` - Supabase CLI config
@@ -111,7 +102,6 @@ npm run supabase:stop
 - `e2e-screenshots/` - E2E test screenshots
 - `guidelines/` - Coding guidelines
 - `specs/` - Issue implementation plans
-- `.claude/` - Claude Code configuration (commands, hooks, settings)
 - `.github/workflows/` - CI/CD pipeline
 
 ## Features
