@@ -19,8 +19,8 @@ Validate that full category names (e.g., "Royalty", "Statesmen") are displayed i
 ### 2. Home Page — Table of Contents
 1. On the home page, locate the Table of Contents section
 2. Take a screenshot of the table of contents
-3. Verify that the TOC entries display full category names (e.g., "1 Royalty" instead of "1 Category R")
-4. Each TOC entry should show the index followed by the full category name
+3. Verify that the TOC entries display full category names (e.g., "Royalty" instead of "Category R")
+4. Each TOC entry should show the full category name without a numeric prefix
 
 ### 3. Character Detail Page — Category Display
 1. Click on a character link from the home page
